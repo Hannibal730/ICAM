@@ -164,7 +164,7 @@ def prepare_data(run_cfg, train_cfg, model_cfg):
             full_test_dataset = CustomImageDataset(csv_file=dataset_cfg.paths['test_csv'], img_dir=dataset_cfg.paths['test_img_dir'], transform=valid_test_transform)
             class_names = full_train_dataset.classes
         elif dataset_cfg.type == 'image_folder':
-            logging.info(f"'{dataset_cfg.paths['img_folder']}' 경로에서 데이터를 불러와 훈련/테스트셋으로 분할합니다.")
+            logging.info(f"'{dataset_cfg.paths['img_folder']}' 경로의 데이터를 훈련/테스트셋으로 분할합니다.")
             
             # [수정] 데이터 분할의 일관성을 보장하기 위해, transform이 없는 단일 데이터셋을 먼저 생성합니다.
             base_dataset = ImageFolderWithPaths(root=dataset_cfg.paths['img_folder'], transform=None) # transform=None

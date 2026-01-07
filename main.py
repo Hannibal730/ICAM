@@ -4,7 +4,7 @@ import torch
 import numpy as np
 import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import Subset
+from torch.utils.data import Subset, DataLoader
 import torch.nn.functional as F
 from sklearn.metrics import precision_score, recall_score, f1_score
 from types import SimpleNamespace
@@ -39,6 +39,13 @@ try:
     import onnxruntime
 except ImportError:
     onnxruntime = None
+
+# [추가] Static Quantization을 위한 라이브러리 임포트
+try:
+    from torch.ao.quantization import quantize_fx, get_default_qconfig_mapping
+except ImportError:
+    quantize_fx = None
+    get_default_qconfig_mapping = None
 
 from onnx_utils import evaluate_onnx, measure_onnx_performance, measure_model_flops
 
@@ -132,14 +139,14 @@ def measure_cpu_peak_memory_during_inference(session, data_loader, device):
     peak_mem = mem_before
 
     # Warm-up (10회)
-    logging.info("ONNX CPU 메모리 측정을 위한 예열(warm-up)을 시작합니다 (단일 샘플 x 10회)...")
+    logging.info("ONNX CPU 메모리 측정을 위한 예열(warm-up)을 시작합니다 (단일 샘플 x 10회).")
     for _ in range(10):
         session.run(None, {input_name: single_dummy_input_np})
         # 예열 중에도 메모리 피크를 측정
         peak_mem = max(peak_mem, process.memory_info().rss / (1024 * 1024))
 
     logging.info("="*50)
-    logging.info("ONNX 모델 추론 중 CPU 최대 메모리 사용량 측정을 시작합니다 (단일 샘플 x 100회 반복)...")
+    logging.info("ONNX 모델 추론 중 CPU 최대 메모리 사용량 측정을 시작합니다 (단일 샘플 x 100회 반복).")
     
     # 실제 측정 (100회 반복)
     num_iterations = 100
@@ -517,22 +524,70 @@ def inference(run_cfg, model_cfg, model, data_loader, device, run_dir_path, time
 
     if use_int8:
         logging.info("="*50)
-        logging.info("INT8 Dynamic Quantization(동적 양자화)을 적용합니다... (CPU 전용)")
-        logging.info("="*50)
+        logging.info("INT8 Static Quantization (Post-Training Quantization)을 적용합니다. (CPU 전용)")
+        
         if device.type != 'cpu':
             logging.warning("INT8 양자화는 PyTorch에서 CPU 추론에 최적화되어 있습니다. 디바이스를 CPU로 변경합니다.")
             device = torch.device('cpu')
             model = model.to(device)
             single_dummy_input = single_dummy_input.to(device)
         
-        # PyTorch의 동적 양자화 적용 (Linear 레이어 대상)
-        model = torch.quantization.quantize_dynamic(model, {torch.nn.Linear}, dtype=torch.qint8)
+        # [수정] Dynamic Quantization -> Static Quantization (FX Graph Mode) 변경
+        # 논문 실험용으로는 Conv 레이어까지 양자화되는 Static 방식이 적합합니다.
+        if quantize_fx:
+            try:
+                # 1. 설정 준비 (x86: 'fbgemm', ARM: 'qnnpack')
+                # [수정] 수동 QConfig 설정이 일부 연산자(FixedQParams)와 충돌하여 경고를 발생시키므로,
+                # PyTorch 권장 기본 설정(get_default_qconfig_mapping)으로 복귀하되,
+                # reduce_range 관련 경고만 필터링하여 로그를 깔끔하게 유지합니다.
+                import warnings
+                warnings.filterwarnings("ignore", message=".*reduce_range will be deprecated.*")
+                qconfig_mapping = get_default_qconfig_mapping('fbgemm')
+                
+                # 2. 모델 준비 (Prepare)
+                model.eval()
+                prepared_model = quantize_fx.prepare_fx(model, qconfig_mapping, example_inputs=single_dummy_input)
+                
+                # 3. Calibration (보정): 실제 데이터 일부를 통과시켜 Activation 범위 측정
+                # SCI 논문 실험용으로 256개 정도의 샘플을 사용하는 것이 통계적으로 안정적입니다.
+                calib_samples = getattr(run_cfg, 'int8_calib_samples', 256)
+                logging.info(f"Static Quantization을 위한 Calibration을 진행합니다 ({calib_samples} 샘플, Random Sampling with Seed).")
+                
+                # [수정] 재현성을 위해 시드 고정 후 Random Sampling
+                seed = getattr(run_cfg, 'global_seed', 42)
+                if seed is None: seed = 42
+                
+                g = torch.Generator()
+                g.manual_seed(seed)
+                
+                dataset = data_loader.dataset
+                total_len = len(dataset)
+                num_samples = min(calib_samples, total_len)
+                indices = torch.randperm(total_len, generator=g)[:num_samples].tolist()
+                
+                calib_subset = Subset(dataset, indices)
+                calib_loader = DataLoader(calib_subset, batch_size=data_loader.batch_size, shuffle=False, num_workers=getattr(data_loader, 'num_workers', 0), collate_fn=getattr(data_loader, 'collate_fn', None), pin_memory=getattr(data_loader, 'pin_memory', False))
+
+                with torch.no_grad():
+                    for calib_images, _, _ in calib_loader:
+                        prepared_model(calib_images.to('cpu'))
+                
+                # 4. 변환 (Convert)
+                model = quantize_fx.convert_fx(prepared_model)
+                logging.info("Static Quantization 완료. (Conv2d, Linear 등 전체 레이어 양자화됨)")
+            except Exception as e:
+                logging.error(f"Static Quantization 적용 중 오류 발생: {e}")
+                logging.warning("기존 Dynamic Quantization으로 대체합니다.")
+                model = torch.quantization.quantize_dynamic(model, {torch.nn.Linear}, dtype=torch.qint8)
+        else:
+            logging.warning("torch.ao.quantization.quantize_fx를 사용할 수 없습니다. Dynamic Quantization을 적용합니다.")
+            model = torch.quantization.quantize_dynamic(model, {torch.nn.Linear}, dtype=torch.qint8)
     
     elif use_fp16:
         if device.type == 'cuda':
             logging.info("="*50)
-            logging.info("FP16(Half Precision)을 적용합니다... (CUDA)")
-            logging.info("="*50)
+            logging.info("FP16(Half Precision)을 적용합니다. (CUDA)")
+            
             model.half()
             single_dummy_input = single_dummy_input.half()
         else:
@@ -541,7 +596,8 @@ def inference(run_cfg, model_cfg, model, data_loader, device, run_dir_path, time
 
     # --- 샘플 당 Forward Pass 시간 및 메모리 사용량 측정 ---
     avg_inference_time_per_sample = 0.0
-    logging.info("GPU 캐시를 비우고 측정을 시작합니다...")
+    logging.info("="*50)
+    logging.info("GPU 캐시를 비우고 측정을 시작합니다.")
     if device.type == 'cuda' and torch.cuda.is_available():
         torch.cuda.empty_cache()
         torch.cuda.reset_peak_memory_stats(device)
@@ -741,7 +797,7 @@ def inference(run_cfg, model_cfg, model, data_loader, device, run_dir_path, time
             logging.warning("INT8 양자화 또는 FP16 추론 모드에서는 ONNX 변환 및 평가를 지원하지 않습니다. ONNX 평가를 건너뜁니다.")
         else:
             logging.info("="*50)
-            logging.info("ONNX 변환 및 평가를 시작합니다...")
+            logging.info("ONNX 변환 및 평가를 시작합니다.")
             onnx_path = os.path.join(save_dir, f'model_{timestamp}.onnx')
             try:
                 # 모델을 CPU로 이동하여 ONNX로 변환 (일반적으로 더 안정적)

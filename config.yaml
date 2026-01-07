@@ -20,6 +20,7 @@ run:
   # 추론 시 양자화 옵션 (동시 사용 불가)
   use_fp16_inference: false # true: FP16(Half Precision) 추론 사용 (CUDA 권장)
   use_int8_inference: false # true: INT8 동적 양자화 추론 사용 (CPU 권장)
+  int8_calib_samples: 256 # INT8 정적 양자화(Static Quantization) 시 Calibration에 사용할 샘플 수
 
   # 로그를 콘솔에 출력하고 파일로 저장
   show_log: true # false: 모든 로깅 비활성화.
