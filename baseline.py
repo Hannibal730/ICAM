@@ -43,6 +43,14 @@ try:
 except ImportError:
     onnxruntime = None
 
+# [수정] torch_pruning을 전역 스코프에서 import하여 모든 함수에서 접근 가능하게 함
+try:
+    from timm.layers import BatchNormAct2d
+    import torch_pruning as tp
+except ImportError:
+    BatchNormAct2d = None
+    tp = None
+
 from plot import plot_and_save_train_val_accuracy_graph, plot_and_save_val_accuracy_graph, plot_and_save_confusion_matrix, plot_and_save_f1_normal_graph, plot_and_save_loss_graph, plot_and_save_lr_graph, plot_and_save_compiled_graph
 
 # =============================================================================
@@ -57,7 +65,8 @@ def setup_logging(run_cfg, data_dir_name, baseline_model_name, baseline_cfg):
     lightweight_option_names = []
     pruning_options = [
         'use_l1_pruning', 'use_l2_pruning', 'use_fpgm_pruning',
-        'use_lamp_pruning', 'use_slimming_pruning', 'use_taylor_pruning'
+        'use_lamp_pruning', 'use_slimming_pruning', 'use_taylor_pruning',
+        'use_wanda_pruning'
     ]
     for option in pruning_options:
         if getattr(baseline_cfg, option, False):
@@ -311,6 +320,8 @@ def evaluate(run_cfg, model, data_loader, device, criterion, loss_function_name,
     with torch.no_grad():
         for images, labels, _ in progress_bar:
             images, labels = images.to(device), labels.to(device)
+            if getattr(run_cfg, 'use_fp16_active', False):
+                images = images.half()
 
             outputs = model(images)
             
@@ -587,6 +598,34 @@ def inference(run_cfg, model_cfg, model, data_loader, device, run_dir_path, time
     dummy_input = measure_model_flops(model, device, data_loader)
     single_dummy_input = dummy_input[0].unsqueeze(0) if dummy_input.shape[0] > 1 else dummy_input
 
+    # --- 양자화(Quantization) 적용 ---
+    use_fp16 = getattr(run_cfg, 'use_fp16', False)
+    use_int8 = getattr(run_cfg, 'use_int8', False)
+
+    if use_int8:
+        if use_fp16:
+            logging.warning("use_int8과 use_fp16이 동시에 설정되었습니다. INT8을 우선 적용하며, FP16은 무시됩니다.")
+            use_fp16 = False
+        
+        logging.info("INT8 Dynamic Quantization(동적 양자화)을 적용합니다... (CPU 전용)")
+        if device.type != 'cpu':
+            logging.warning("INT8 양자화는 PyTorch에서 CPU 추론에 최적화되어 있습니다. 디바이스를 CPU로 변경합니다.")
+            device = torch.device('cpu')
+            model = model.to(device)
+            single_dummy_input = single_dummy_input.to(device)
+        
+        # PyTorch의 동적 양자화 적용 (Linear 레이어 대상)
+        model = torch.quantization.quantize_dynamic(model, {torch.nn.Linear}, dtype=torch.qint8)
+    
+    elif use_fp16:
+        if device.type == 'cuda':
+            logging.info("FP16(Half Precision)을 적용합니다... (CUDA)")
+            model.half()
+            single_dummy_input = single_dummy_input.half()
+        else:
+            logging.warning("FP16은 CUDA 디바이스에서만 지원됩니다. CPU에서는 무시됩니다.")
+            use_fp16 = False
+
     # --- 샘플 당 Forward Pass 시간 및 메모리 사용량 측정 ---
     avg_inference_time_per_sample = 0.0
     logging.info("GPU 캐시를 비우고, 단일 샘플에 대한 Forward Pass 시간 및 최대 GPU 메모리 사용량 측정을 시작합니다...")
@@ -661,6 +700,8 @@ def inference(run_cfg, model_cfg, model, data_loader, device, run_dir_path, time
         with torch.no_grad():
             for images, _, filenames in progress_bar:
                 images = images.to(device)
+                if use_fp16:
+                    images = images.half()
                 outputs = model(images)
                 probabilities = torch.nn.functional.softmax(outputs, dim=1)
                 confidences, predicted_indices = torch.max(probabilities, 1)
@@ -682,7 +723,10 @@ def inference(run_cfg, model_cfg, model, data_loader, device, run_dir_path, time
         else:
             criterion = nn.CrossEntropyLoss()
 
+        # evaluate 함수에 use_fp16 상태 전달
+        run_cfg.use_fp16_active = use_fp16
         eval_results = evaluate(run_cfg, model, data_loader, device, criterion, loss_function_name, desc=f"[{mode_name}]", class_names=class_names, log_class_metrics=True)
+        del run_cfg.use_fp16_active
         final_acc = eval_results['accuracy']
 
         if eval_results['labels'] and eval_results['preds']:
@@ -722,15 +766,264 @@ def inference(run_cfg, model_cfg, model, data_loader, device, run_dir_path, time
 
     return final_acc
 
+# [수정] inference 함수 등 외부에서 호출할 수 있도록 Pruning 관련 함수들을 전역 스코프로 이동
+def run_torch_pruning(model, baseline_cfg, model_cfg, device, train_loader=None, criterion=None):
+    """torch-pruning 라이브러리를 사용하여 DepGraph 기반 Pruning을 수행합니다."""
+    if tp is None:
+        logging.error("DepGraph Pruning을 사용하려면 'torch-pruning' 라이브러리를 설치해야 합니다. (pip install torch-pruning)")
+        return model
+    
+    # [추가] Wanda (Pruning by Weights and Activations, ICLR 2024) Importance 구현
+    # Wanda는 가중치 크기(|W|)와 입력 활성화 값의 노름(||X||)의 곱을 중요도로 사용합니다.
+    # tp가 None이 아님을 확인한 후 정의합니다.
+    class WandaImportance(tp.importance.Importance):
+        def __init__(self, group_reduction="mean", normalizer=None):
+            self.group_reduction = group_reduction
+            self.normalizer = normalizer
+            self.input_norms = {}
+
+        def _hook(self, module, input, output):
+            # 입력 텐서의 채널별 L2 Norm을 계산하여 저장합니다.
+            x = input[0]
+            if isinstance(module, nn.Linear):
+                # x: [Batch, In] or [Batch, Tokens, In]
+                if x.dim() == 2:
+                    norm = x.norm(p=2, dim=0)
+                else:
+                    norm = x.flatten(0, 1).norm(p=2, dim=0)
+                self.input_norms[module] = norm
+            elif isinstance(module, nn.Conv2d):
+                # x: [Batch, In, H, W] -> [Batch*H*W, In] -> Norm over dim 0
+                norm = x.transpose(0, 1).flatten(1).norm(p=2, dim=1)
+                self.input_norms[module] = norm
+
+        def __call__(self, group, ch_groups=1):
+            group_imp = []
+            for dep, idxs in group:
+                module = dep.target.module
+                pruning_fn = dep.handler
+                if module not in self.input_norms: continue
+                
+                inp_norm = self.input_norms[module] # [In]
+                layer_weight = module.weight # [Out, In, ...]
+
+                # Pruning Output Channels (dim 0) 인 경우에만 Wanda Score 계산
+                if pruning_fn in [tp.pruner.function.prune_conv_out_channels, tp.pruner.function.prune_linear_out_channels]:
+                    if isinstance(module, nn.Linear):
+                        w_weighted = layer_weight.abs() * inp_norm.view(1, -1)
+                    elif isinstance(module, nn.Conv2d):
+                        w_weighted = layer_weight.abs() * inp_norm.view(1, -1, 1, 1)
+                    
+                    # 해당 필터/뉴런의 전체 중요도 합 (L1-like aggregation)
+                    imp = w_weighted.flatten(1).sum(dim=1)
+                    group_imp.append(imp[idxs])
+            
+            if len(group_imp) == 0: return None
+            return torch.stack(group_imp).sum(dim=0)
+
+    pruning_sparsity = getattr(baseline_cfg, 'pruning_sparsity', 0.5)
+    dummy_input = torch.randn(1, 3, model_cfg.img_size, model_cfg.img_size).to(device)
+
+    # --- Pruning 전략 선택 ---
+    pruner_class = None
+    pruner_kwargs = {}
+    if getattr(baseline_cfg, 'use_l1_pruning', False):
+        logging.info("torch-pruning을 사용한 L1 Norm Pruning을 시작합니다...")
+        imp = tp.importance.MagnitudeImportance(p=1)
+        pruner_class = tp.pruner.MagnitudePruner
+        pruner_kwargs = {'importance': imp, 'pruning_ratio': pruning_sparsity}
+    elif getattr(baseline_cfg, 'use_l2_pruning', False):
+        logging.info("torch-pruning을 사용한 L2 Norm Pruning을 시작합니다...")
+        imp = tp.importance.MagnitudeImportance(p=2)
+        pruner_class = tp.pruner.MagnitudePruner
+        pruner_kwargs = {'importance': imp, 'pruning_ratio': pruning_sparsity}
+    elif getattr(baseline_cfg, 'use_lamp_pruning', False):
+        logging.info("LAMP Pruning을 시작합니다...")
+        imp = tp.importance.LAMPImportance(p=2, group_reduction="mean")
+        pruner_class = tp.pruner.MagnitudePruner
+        pruner_kwargs = {'importance': imp, 'pruning_ratio': pruning_sparsity}
+    elif getattr(baseline_cfg, 'use_slimming_pruning', False):
+        logging.info("Network Slimming (BN-Scale) Pruning을 시작합니다...")
+        imp = tp.importance.BNScaleImportance()
+        pruner_class = tp.pruner.BNScalePruner
+        pruner_kwargs = {'importance': imp, 'pruning_ratio': pruning_sparsity}
+    elif getattr(baseline_cfg, 'use_taylor_pruning', False):
+        logging.info("Group Taylor Pruning을 시작합니다...")
+        imp = tp.importance.TaylorImportance()
+        if train_loader is None or criterion is None:
+            logging.error("Taylor Pruning을 사용하려면 train_loader와 criterion이 필요합니다.")
+            return model
+        model.zero_grad()
+        logging.info("Taylor 중요도 계산을 위해 샘플 배치에 대한 그래디언트를 계산합니다...")
+        images, labels, _ = next(iter(train_loader))
+        images, labels = images.to(device), labels.to(device)
+        output = model(images)
+        loss = criterion(output, labels)
+        loss.backward()
+        pruner_class = tp.pruner.MagnitudePruner
+        pruner_kwargs = {'importance': imp, 'pruning_ratio': pruning_sparsity}
+    elif getattr(baseline_cfg, 'use_fpgm_pruning', False):
+        logging.info("FPGM Pruning을 시작합니다...")
+        imp = tp.importance.FPGMImportance(p=2)
+        pruner_class = tp.pruner.MagnitudePruner
+        pruner_kwargs = {'importance': imp, 'pruning_ratio': pruning_sparsity}
+    elif getattr(baseline_cfg, 'use_wanda_pruning', False):
+        logging.info("Wanda (Pruning by Weights and Activations, ICLR 2024) Pruning을 시작합니다...")
+        if train_loader is None:
+            logging.error("Wanda Pruning을 사용하려면 Calibration을 위한 train_loader가 필요합니다.")
+            return model
+        imp = WandaImportance()
+        logging.info("Wanda 중요도 계산을 위해 Calibration(1 배치)을 수행합니다...")
+        model.eval()
+        hooks = []
+        for m in model.modules():
+            if isinstance(m, (nn.Linear, nn.Conv2d)):
+                hooks.append(m.register_forward_hook(imp._hook))
+        with torch.no_grad():
+            images, _, _ = next(iter(train_loader))
+            model(images.to(device))
+        for h in hooks: h.remove()
+        pruner_class = tp.pruner.MagnitudePruner
+        pruner_kwargs = {'importance': imp, 'pruning_ratio': pruning_sparsity}
+    else:
+        logging.warning("활성화된 torch-pruning 기법이 없습니다.")
+        return model
+
+    ignored_layers = []
+    last_layer = None
+    if hasattr(model, 'fc'):
+        last_layer = model.fc
+    elif hasattr(model, 'classifier') and isinstance(model.classifier, nn.Sequential):
+        last_layer = model.classifier[-1]
+    elif hasattr(model, 'classifier'):
+        last_layer = model.classifier
+    elif hasattr(model, 'head'):
+        last_layer = model.head
+    
+    if last_layer:
+        ignored_layers.append(last_layer)
+        logging.info(f"분류 레이어 '{type(last_layer).__name__}'을(를) Pruning 대상에서 제외합니다.")
+
+    is_vit_family = 'vit' in getattr(baseline_cfg, 'model_name', '') or 'deit' in getattr(baseline_cfg, 'model_name', '') or 'swin' in getattr(baseline_cfg, 'model_name', '')
+    if is_vit_family:
+        for name, module in model.named_modules():
+            if isinstance(module, nn.Linear) and 'qkv' in name:
+                ignored_layers.append(module)
+        logging.info(f"ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.")
+
+    pruner = pruner_class(
+        model,
+        dummy_input,
+        ignored_layers=ignored_layers,
+        **pruner_kwargs
+    )
+
+    if getattr(baseline_cfg, 'use_taylor_pruning', False):
+        pruner.step(interactive=False)
+    else:
+        pruner.step()
+    logging.info(f"torch-pruning 완료. 모델 구조가 희소도({pruning_sparsity})에 맞춰 변경되었습니다.")
+    logging.info("="*50)
+    return model
+
+def find_sparsity_for_target_flops(model, baseline_cfg, model_cfg, device, train_loader, criterion):
+    """이진 탐색을 사용하여 목표 FLOPs에 가장 가까운 pruning_sparsity를 찾습니다."""
+    target_gflops = getattr(baseline_cfg, 'pruning_flops_target', 0.0)
+    if target_gflops <= 0:
+        return getattr(baseline_cfg, 'pruning_sparsity', 0.5)
+
+    logging.info("="*80)
+    logging.info(f"목표 FLOPs ({target_gflops:.4f} GFLOPs)에 맞는 최적의 Pruning 희소도를 탐색합니다...")
+
+    original_macs, _ = profile(model, inputs=(torch.randn(1, 3, model_cfg.img_size, model_cfg.img_size).to(device),), verbose=False)
+    original_gflops = original_macs * 2 / 1e9
+    logging.info(f"원본 모델 FLOPs: {original_gflops:.4f} GFLOPs")
+
+    low_sparsity, high_sparsity = 0.0, 0.99
+    best_sparsity = 0.0
+    min_flops_diff = float('inf')
+    original_model = copy.deepcopy(model)
+    dummy_input = torch.randn(1, 3, model_cfg.img_size, model_cfg.img_size).to(device)
+
+    for i in range(100):
+        current_sparsity = (low_sparsity + high_sparsity) / 2
+        temp_model = copy.deepcopy(original_model)
+        temp_baseline_cfg = copy.deepcopy(baseline_cfg)
+        temp_baseline_cfg.pruning_sparsity = current_sparsity
+        
+        try:
+            pruned_temp_model = run_torch_pruning(temp_model, temp_baseline_cfg, model_cfg, device, train_loader=train_loader, criterion=criterion)
+            macs, _ = profile(pruned_temp_model, inputs=(dummy_input,), verbose=False)
+            current_gflops = macs * 2 / 1e9
+            flops_diff = abs(current_gflops - target_gflops)
+            reduction_ratio = (1 - current_gflops / original_gflops) * 100
+            logging.info(f"  [탐색 {i+1:2d}] 희소도: {current_sparsity:.4f} -> FLOPs: {current_gflops:.4f} GFLOPs (감소율: {reduction_ratio:.2f}%)")
+
+            if flops_diff < min_flops_diff:
+                min_flops_diff = flops_diff
+                best_sparsity = current_sparsity
+
+            if current_gflops > target_gflops:
+                low_sparsity = current_sparsity
+            else:
+                high_sparsity = current_sparsity
+        except Exception as e:
+            logging.warning(f"  [탐색 {i+1:2d}] 희소도 {current_sparsity:.4f} 적용 중 오류 발생: {e}. 이 희소도는 건너뜁니다.")
+            low_sparsity = current_sparsity
+
+    logging.info(f"탐색 완료. 목표 FLOPs({target_gflops:.4f})에 가장 근접한 최적 희소도는 {best_sparsity:.4f} 입니다.")
+    logging.info("="*80)
+    return best_sparsity
+
+def find_sparsity_for_target_params(model, baseline_cfg, model_cfg, device, train_loader, criterion):
+    """이진 탐색을 사용하여 목표 파라미터 수에 가장 가까운 pruning_sparsity를 찾습니다."""
+    target_m_params = getattr(baseline_cfg, 'pruning_params_target', 0.0)
+    if target_m_params <= 0:
+        return getattr(baseline_cfg, 'pruning_sparsity', 0.5)
+
+    logging.info("="*80)
+    logging.info(f"목표 파라미터 수 ({target_m_params:.4f}M)에 맞는 최적의 Pruning 희소도를 탐색합니다...")
+
+    original_params = sum(p.numel() for p in model.parameters())
+    original_m_params = original_params / 1e6
+    logging.info(f"원본 모델 파라미터: {original_m_params:.4f}M")
+
+    low_sparsity, high_sparsity = 0.0, 0.99
+    best_sparsity = 0.0
+    min_params_diff = float('inf')
+    original_model = copy.deepcopy(model)
+
+    for i in range(100):
+        current_sparsity = (low_sparsity + high_sparsity) / 2
+        temp_model = copy.deepcopy(original_model)
+        temp_baseline_cfg = copy.deepcopy(baseline_cfg)
+        temp_baseline_cfg.pruning_sparsity = current_sparsity
+        
+        try:
+            pruned_temp_model = run_torch_pruning(temp_model, temp_baseline_cfg, model_cfg, device, train_loader=train_loader, criterion=criterion)
+            current_params = sum(p.numel() for p in pruned_temp_model.parameters())
+            current_m_params = current_params / 1e6
+            params_diff = abs(current_m_params - target_m_params)
+            reduction_ratio = (1 - current_params / original_params) * 100
+            logging.info(f"  [탐색 {i+1:2d}] 희소도: {current_sparsity:.4f} -> 파라미터: {current_m_params:.4f}M (감소율: {reduction_ratio:.2f}%)")
+
+            if params_diff < min_params_diff:
+                min_params_diff = params_diff
+                best_sparsity = current_sparsity
+
+            if current_m_params > target_m_params:
+                low_sparsity = current_sparsity
+            else:
+                high_sparsity = current_sparsity
+        except Exception as e:
+            logging.warning(f"  [탐색 {i+1:2d}] 희소도 {current_sparsity:.4f} 적용 중 오류 발생: {e}. 이 희소도는 건너뜁니다.")
+            low_sparsity = current_sparsity
+
+    logging.info(f"탐색 완료. 목표 파라미터 수({target_m_params:.4f}M)에 가장 근접한 최적 희소도는 {best_sparsity:.4f} 입니다.")
+    logging.info("="*80)
+    return best_sparsity
+
 def main():
-    # =============================================================================
-    # [해결] timm의 복합 레이어를 분리하기 위해 타입을 import합니다.
-    try:
-        from timm.layers import BatchNormAct2d
-        import torch_pruning as tp
-    except ImportError:
-        BatchNormAct2d = None
-        tp = None
     """메인 실행 함수"""
     parser = argparse.ArgumentParser(description="YAML 설정을 이용한 Baseline 모델 분류기")
     parser.add_argument('--config', type=str, default='config.yaml', help="설정 파일 경로. 기본값: 'config.yaml'")
@@ -822,237 +1115,9 @@ def main():
                     getattr(baseline_cfg, 'use_lamp_pruning', False) or \
                     getattr(baseline_cfg, 'use_depgraph_pruning', False) or \
                     getattr(baseline_cfg, 'use_taylor_pruning', False) or \
-                    getattr(baseline_cfg, 'use_slimming_pruning', False)
-
-    def run_torch_pruning(model, baseline_cfg, model_cfg, device, train_loader=None, criterion=None):
-        """torch-pruning 라이브러리를 사용하여 DepGraph 기반 Pruning을 수행합니다."""
-        if tp is None:
-            logging.error("DepGraph Pruning을 사용하려면 'torch-pruning' 라이브러리를 설치해야 합니다. (pip install torch-pruning)")
-            return model
-        
-        pruning_sparsity = getattr(baseline_cfg, 'pruning_sparsity', 0.5)
-        dummy_input = torch.randn(1, 3, model_cfg.img_size, model_cfg.img_size).to(device)
-
-        # --- Pruning 전략 선택 ---
-        pruner_class = None
-        pruner_kwargs = {}
-        if getattr(baseline_cfg, 'use_l1_pruning', False):
-            logging.info("torch-pruning을 사용한 L1 Norm Pruning을 시작합니다...")
-            imp = tp.importance.MagnitudeImportance(p=1)
-            pruner_class = tp.pruner.MagnitudePruner
-            pruner_kwargs = {'importance': imp, 'pruning_ratio': pruning_sparsity}
-        elif getattr(baseline_cfg, 'use_l2_pruning', False):
-            logging.info("torch-pruning을 사용한 L2 Norm Pruning을 시작합니다...")
-            imp = tp.importance.MagnitudeImportance(p=2)
-            pruner_class = tp.pruner.MagnitudePruner
-            pruner_kwargs = {'importance': imp, 'pruning_ratio': pruning_sparsity}
-        elif getattr(baseline_cfg, 'use_lamp_pruning', False):
-            logging.info("LAMP Pruning을 시작합니다...")
-            # LAMP는 중요도 계산에 더 많은 반복이 필요할 수 있습니다.
-            imp = tp.importance.LAMPImportance(p=2, group_reduction="mean")
-            pruner_class = tp.pruner.MagnitudePruner
-            pruner_kwargs = {'importance': imp, 'pruning_ratio': pruning_sparsity}
-        elif getattr(baseline_cfg, 'use_slimming_pruning', False):
-            logging.info("Network Slimming (BN-Scale) Pruning을 시작합니다...")
-            imp = tp.importance.BNScaleImportance()
-            pruner_class = tp.pruner.BNScalePruner
-            pruner_kwargs = {'importance': imp, 'pruning_ratio': pruning_sparsity}
-        elif getattr(baseline_cfg, 'use_taylor_pruning', False):
-            logging.info("Group Taylor Pruning을 시작합니다...")
-            # Taylor Pruning은 그래디언트 기반 중요도를 사용합니다.
-            imp = tp.importance.TaylorImportance()
-            # 중요도 계산을 위해 그래디언트가 필요하므로, 데이터로더에서 샘플 배치를 가져와 forward/backward pass를 수행합니다.
-            if train_loader is None or criterion is None:
-                logging.error("Taylor Pruning을 사용하려면 train_loader와 criterion이 필요합니다.")
-                return model
-            
-            # 그래디언트 계산 전, 모델의 기존 그래디언트를 초기화합니다.
-            model.zero_grad()
-
-            logging.info("Taylor 중요도 계산을 위해 샘플 배치에 대한 그래디언트를 계산합니다...")
-            images, labels, _ = next(iter(train_loader))
-            images, labels = images.to(device), labels.to(device)
-            output = model(images)
-            loss = criterion(output, labels)
-            loss.backward()
-
-            pruner_class = tp.pruner.MagnitudePruner
-            pruner_kwargs = {'importance': imp, 'pruning_ratio': pruning_sparsity}
-        elif getattr(baseline_cfg, 'use_fpgm_pruning', False):
-            logging.info("FPGM Pruning을 시작합니다...")
-            # FPGM은 필터 간 기하학적 중앙값을 기반으로 중요도를 계산합니다.
-            imp = tp.importance.FPGMImportance(p=2) # L2-norm 기반 거리 계산이 일반적입니다.
-            pruner_class = tp.pruner.MagnitudePruner # FPGM도 중요도 기반 Pruner를 사용합니다.
-            pruner_kwargs = {'importance': imp, 'pruning_ratio': pruning_sparsity}
-        else:
-            logging.warning("활성화된 torch-pruning 기법이 없습니다.")
-            return model
-
-        # --- 무시할 레이어(Ignored Layers) 설정 ---
-        ignored_layers = []
-        last_layer = None
-        if hasattr(model, 'fc'):
-            last_layer = model.fc
-        elif hasattr(model, 'classifier') and isinstance(model.classifier, nn.Sequential):
-            last_layer = model.classifier[-1]
-        elif hasattr(model, 'classifier'):
-            last_layer = model.classifier
-        elif hasattr(model, 'head'):
-            last_layer = model.head
-        
-        if last_layer:
-            ignored_layers.append(last_layer)
-            logging.info(f"분류 레이어 '{type(last_layer).__name__}'을(를) Pruning 대상에서 제외합니다.")
-
-        # ViT 계열 모델의 qkv 레이어를 Pruning 대상에서 제외하여 구조적 오류 방지
-        is_vit_family = 'vit' in baseline_model_name or 'deit' in baseline_model_name or 'swin' in baseline_model_name
-        if is_vit_family:
-            for name, module in model.named_modules():
-                # timm ViT/DeiT/Swin 모델들은 attention 블록 내에 'qkv'라는 이름의 Linear 레이어를 가짐
-                if isinstance(module, nn.Linear) and 'qkv' in name:
-                    ignored_layers.append(module)
-            logging.info(f"ViT 계열 모델({baseline_model_name})의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.")
-
-        # --- Pruner 생성 및 실행 ---
-        pruner = pruner_class(
-            model,
-            dummy_input,
-            ignored_layers=ignored_layers,
-            **pruner_kwargs
-        )
-
-        # Taylor Pruning의 경우, step()에서 그래디언트를 사용합니다.
-        if getattr(baseline_cfg, 'use_taylor_pruning', False):
-            pruner.step(interactive=False)
-        else:
-            pruner.step()
-        logging.info(f"torch-pruning 완료. 모델 구조가 희소도({pruning_sparsity})에 맞춰 변경되었습니다.")
-        logging.info("="*50)
-        return model
-
-    def find_sparsity_for_target_flops(model, baseline_cfg, model_cfg, device, train_loader, criterion):
-        """이진 탐색을 사용하여 목표 FLOPs에 가장 가까운 pruning_sparsity를 찾습니다."""
-        target_gflops = getattr(baseline_cfg, 'pruning_flops_target', 0.0)
-        if target_gflops <= 0:
-            return getattr(baseline_cfg, 'pruning_sparsity', 0.5)
-
-        logging.info("="*80)
-        logging.info(f"목표 FLOPs ({target_gflops:.4f} GFLOPs)에 맞는 최적의 Pruning 희소도를 탐색합니다...")
-
-        # 원본 FLOPs 측정
-        original_macs, _ = profile(model, inputs=(torch.randn(1, 3, model_cfg.img_size, model_cfg.img_size).to(device),), verbose=False)
-        original_gflops = original_macs * 2 / 1e9
-        logging.info(f"원본 모델 FLOPs: {original_gflops:.4f} GFLOPs")
-
-
-        # 이진 탐색을 위한 초기값 설정
-        low_sparsity, high_sparsity = 0.0, 0.99
-        best_sparsity = 0.0
-        min_flops_diff = float('inf')
-        
-        # 원본 모델을 복사하여 탐색 과정에서 원본이 변경되지 않도록 함
-        original_model = copy.deepcopy(model)
-        dummy_input = torch.randn(1, 3, model_cfg.img_size, model_cfg.img_size).to(device)
-
-        # 이진 탐색 반복 (100회 정도면 충분한 정밀도 확보 가능)
-        for i in range(100):
-            current_sparsity = (low_sparsity + high_sparsity) / 2
-            
-            # 임시 모델에 현재 희소도로 Pruning 적용
-            temp_model = copy.deepcopy(original_model)
-            
-            # run_torch_pruning과 동일한 로직으로 Pruning을 시뮬레이션
-            # 단, 실제 모델을 변경하는 대신 FLOPs만 계산
-            temp_baseline_cfg = copy.deepcopy(baseline_cfg)
-            temp_baseline_cfg.pruning_sparsity = current_sparsity
-            
-            try:
-                pruned_temp_model = run_torch_pruning(temp_model, temp_baseline_cfg, model_cfg, device, train_loader=train_loader, criterion=criterion)
-                
-                # Pruning된 임시 모델의 FLOPs 계산
-                macs, _ = profile(pruned_temp_model, inputs=(dummy_input,), verbose=False)
-                current_gflops = macs * 2 / 1e9
-
-                flops_diff = abs(current_gflops - target_gflops)
-                reduction_ratio = (1 - current_gflops / original_gflops) * 100
-                logging.info(f"  [탐색 {i+1:2d}] 희소도: {current_sparsity:.4f} -> FLOPs: {current_gflops:.4f} GFLOPs (감소율: {reduction_ratio:.2f}%)")
-
-                # 최고 기록 갱신
-                if flops_diff < min_flops_diff:
-                    min_flops_diff = flops_diff
-                    best_sparsity = current_sparsity
-
-                # 이진 탐색 범위 조정
-                if current_gflops > target_gflops: # FLOPs가 목표보다 크면, 희소도를 높여야 함 (더 많이 제거)
-                    low_sparsity = current_sparsity
-                else: # FLOPs가 목표보다 작거나 같으면, 희소도를 낮춰야 함 (덜 제거)
-                    high_sparsity = current_sparsity
-            except Exception as e:
-                logging.warning(f"  [탐색 {i+1:2d}] 희소도 {current_sparsity:.4f} 적용 중 오류 발생: {e}. 이 희소도는 건너뜁니다.")
-                low_sparsity = current_sparsity # 오류 발생 시 해당 구간 탐색 회피
-
-        logging.info(f"탐색 완료. 목표 FLOPs({target_gflops:.4f})에 가장 근접한 최적 희소도는 {best_sparsity:.4f} 입니다.")
-        logging.info("="*80)
-        return best_sparsity
-
-    def find_sparsity_for_target_params(model, baseline_cfg, model_cfg, device, train_loader, criterion):
-        """이진 탐색을 사용하여 목표 파라미터 수에 가장 가까운 pruning_sparsity를 찾습니다."""
-        target_m_params = getattr(baseline_cfg, 'pruning_params_target', 0.0)
-        if target_m_params <= 0:
-            return getattr(baseline_cfg, 'pruning_sparsity', 0.5)
-
-        logging.info("="*80)
-        logging.info(f"목표 파라미터 수 ({target_m_params:.4f}M)에 맞는 최적의 Pruning 희소도를 탐색합니다...")
-
-        # 원본 파라미터 수 측정
-        original_params = sum(p.numel() for p in model.parameters())
-        original_m_params = original_params / 1e6
-        logging.info(f"원본 모델 파라미터: {original_m_params:.4f}M")
-
-
-        # 이진 탐색을 위한 초기값 설정
-        low_sparsity, high_sparsity = 0.0, 0.99
-        best_sparsity = 0.0
-        min_params_diff = float('inf')
-        
-        # 원본 모델을 복사하여 탐색 과정에서 원본이 변경되지 않도록 함
-        original_model = copy.deepcopy(model)
-
-        # 이진 탐색 반복 (100회 정도면 충분한 정밀도 확보 가능)
-        for i in range(100):
-            current_sparsity = (low_sparsity + high_sparsity) / 2
-            
-            temp_model = copy.deepcopy(original_model)
-            
-            temp_baseline_cfg = copy.deepcopy(baseline_cfg)
-            temp_baseline_cfg.pruning_sparsity = current_sparsity
-            
-            try:
-                pruned_temp_model = run_torch_pruning(temp_model, temp_baseline_cfg, model_cfg, device, train_loader=train_loader, criterion=criterion)
-                
-                current_params = sum(p.numel() for p in pruned_temp_model.parameters())
-                current_m_params = current_params / 1e6
-
-                params_diff = abs(current_m_params - target_m_params)
-                reduction_ratio = (1 - current_params / original_params) * 100
-                logging.info(f"  [탐색 {i+1:2d}] 희소도: {current_sparsity:.4f} -> 파라미터: {current_m_params:.4f}M (감소율: {reduction_ratio:.2f}%)")
-
-                if params_diff < min_params_diff:
-                    min_params_diff = params_diff
-                    best_sparsity = current_sparsity
-
-                if current_m_params > target_m_params: # 파라미터가 목표보다 많으면, 희소도를 높여야 함 (더 많이 제거)
-                    low_sparsity = current_sparsity
-                else: # 파라미터가 목표보다 적거나 같으면, 희소도를 낮춰야 함 (덜 제거)
-                    high_sparsity = current_sparsity
-            except Exception as e:
-                logging.warning(f"  [탐색 {i+1:2d}] 희소도 {current_sparsity:.4f} 적용 중 오류 발생: {e}. 이 희소도는 건너뜁니다.")
-                low_sparsity = current_sparsity # 오류 발생 시 해당 구간 탐색 회피
-
-        logging.info(f"탐색 완료. 목표 파라미터 수({target_m_params:.4f}M)에 가장 근접한 최적 희소도는 {best_sparsity:.4f} 입니다.")
-        logging.info("="*80)
-        return best_sparsity
-
+                    getattr(baseline_cfg, 'use_slimming_pruning', False) or \
+                    getattr(baseline_cfg, 'use_slimming_pruning', False) or \
+                    getattr(baseline_cfg, 'use_wanda_pruning', False)
     # --- 옵티마이저 및 스케줄러 생성 함수 ---
     def create_optimizer_and_scheduler(cfg, model):
         optimizer_name = getattr(cfg, 'optimizer', 'adamw').lower()
@@ -1155,7 +1220,9 @@ def main():
                                 getattr(baseline_cfg, 'use_fpgm_pruning', False) or \
                                 getattr(baseline_cfg, 'use_taylor_pruning', False) or \
                                 getattr(baseline_cfg, 'use_lamp_pruning', False) or \
-                                getattr(baseline_cfg, 'use_slimming_pruning', False)
+                                getattr(baseline_cfg, 'use_slimming_pruning', False) or \
+                                getattr(baseline_cfg, 'use_wanda_pruning', False) or \
+                                getattr(baseline_cfg, 'use_isomorphic_pruning', False)
 
             # Pruning 전 원본 모델의 FLOPs 측정
             original_macs, _ = profile(model, inputs=(torch.randn(1, 3, model_cfg.img_size, model_cfg.img_size).to(device),), verbose=False)
@@ -1168,7 +1235,7 @@ def main():
             if use_torch_pruning:
                 # torch-pruning 계열의 기법은 모델을 직접 수정합니다.
                 # Taylor Pruning은 그래디언트 계산을 위해 추가 정보가 필요합니다.
-                if getattr(baseline_cfg, 'use_taylor_pruning', False):
+                if getattr(baseline_cfg, 'use_taylor_pruning', False) or getattr(baseline_cfg, 'use_wanda_pruning', False):
                     # 임시 손실 함수 생성
                     loss_function_name = getattr(train_cfg, 'loss_function', 'CrossEntropyLoss').lower()
                     criterion = nn.CrossEntropyLoss() if loss_function_name != 'bcewithlogitsloss' else nn.BCEWithLogitsLoss() # type: ignore
@@ -1273,7 +1340,8 @@ def main():
                                         getattr(baseline_cfg, 'use_fpgm_pruning', False) or \
                                         getattr(baseline_cfg, 'use_taylor_pruning', False) or \
                                         getattr(baseline_cfg, 'use_lamp_pruning', False) or \
-                                        getattr(baseline_cfg, 'use_slimming_pruning', False)
+                                        getattr(baseline_cfg, 'use_slimming_pruning', False) or \
+                                        getattr(baseline_cfg, 'use_wanda_pruning', False)
             
             if use_pruning_in_inference:
                 logging.info("추론 모드: 훈련된 모델의 Pruning 구조를 재현합니다...")
