@@ -575,6 +575,11 @@ def inference(run_cfg, model_cfg, model, data_loader, device, run_dir_path, time
                 # 4. 변환 (Convert)
                 model = quantize_fx.convert_fx(prepared_model)
                 logging.info("Static Quantization 완료. (Conv2d, Linear 등 전체 레이어 양자화됨)")
+
+                # 양자화된 모델 저장
+                quantized_model_path = os.path.join(save_dir, f'best_model_int8.pth')
+                torch.save(model.state_dict(), quantized_model_path)
+                logging.info(f"INT8 양자화된 모델이 '{quantized_model_path}'에 저장되었습니다.")
             except Exception as e:
                 logging.error(f"Static Quantization 적용 중 오류 발생: {e}")
                 logging.warning("기존 Dynamic Quantization으로 대체합니다.")
@@ -590,6 +595,11 @@ def inference(run_cfg, model_cfg, model, data_loader, device, run_dir_path, time
             
             model.half()
             single_dummy_input = single_dummy_input.half()
+
+            # FP16 변환된 모델 저장
+            fp16_model_path = os.path.join(save_dir, f'best_model_fp16.pth')
+            torch.save(model.state_dict(), fp16_model_path)
+            logging.info(f"FP16 변환된 모델이 '{fp16_model_path}'에 저장되었습니다.")
         else:
             logging.warning("FP16은 CUDA 디바이스에서만 지원됩니다. CPU에서는 무시됩니다.")
             use_fp16 = False

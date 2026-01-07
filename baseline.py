@@ -263,7 +263,6 @@ def log_model_parameters(model):
     logging.info("모델 파라미터 수:")
     logging.info(f"  - 총 파라미터: {total_params:,} 개")
     logging.info(f"  - 학습 가능한 파라미터: {trainable_params:,} 개")
-    logging.info("="*50)
 
 # =============================================================================
 # ONNX CPU 메모리 측정 함수 (단일 샘플 방식)
@@ -639,6 +638,7 @@ def inference(run_cfg, model_cfg, model, data_loader, device, run_dir_path, time
                 # reduce_range 관련 경고만 필터링하여 로그를 깔끔하게 유지합니다.
                 import warnings
                 warnings.filterwarnings("ignore", message=".*reduce_range will be deprecated.*")
+                warnings.filterwarnings("ignore", message=".*does not reference an nn.Module.*")
                 qconfig_mapping = get_default_qconfig_mapping('fbgemm')
                 
                 # 2. 모델 준비 (Prepare)
@@ -650,7 +650,7 @@ def inference(run_cfg, model_cfg, model, data_loader, device, run_dir_path, time
                 calib_samples = getattr(run_cfg, 'int8_calib_samples', 256)
                 logging.info(f"Static Quantization을 위한 Calibration을 진행합니다 ({calib_samples} 샘플, Random Sampling with Seed).")
                 
-                # [수정] 재현성을 위해 시드 고정 후 Random Sampling
+                # 재현성을 위해 시드 고정 후 Random Sampling
                 seed = getattr(run_cfg, 'global_seed', 42)
                 if seed is None: seed = 42
                 
@@ -672,6 +672,11 @@ def inference(run_cfg, model_cfg, model, data_loader, device, run_dir_path, time
                 # 4. 변환 (Convert)
                 model = quantize_fx.convert_fx(prepared_model)
                 logging.info("Static Quantization 완료. (Conv2d, Linear 등 전체 레이어 양자화됨)")
+
+                # 양자화된 모델 저장
+                quantized_model_path = os.path.join(save_dir, f'best_model_int8.pth')
+                torch.save(model.state_dict(), quantized_model_path)
+                logging.info(f"INT8 양자화된 모델이 '{quantized_model_path}'에 저장되었습니다.")
             except Exception as e:
                 logging.error(f"Static Quantization 적용 중 오류 발생: {e}")
                 logging.warning("기존 Dynamic Quantization으로 대체합니다.")
@@ -687,6 +692,11 @@ def inference(run_cfg, model_cfg, model, data_loader, device, run_dir_path, time
             
             model.half()
             single_dummy_input = single_dummy_input.half()
+
+            # FP16 변환된 모델 저장
+            fp16_model_path = os.path.join(save_dir, f'best_model_fp16.pth')
+            torch.save(model.state_dict(), fp16_model_path)
+            logging.info(f"FP16 변환된 모델이 '{fp16_model_path}'에 저장되었습니다.")
         else:
             logging.warning("FP16은 CUDA 디바이스에서만 지원됩니다. CPU에서는 무시됩니다.")
             use_fp16 = False
@@ -1443,8 +1453,8 @@ def main():
                 # 여기서는 실행을 위해 임시 criterion을 생성합니다.
                 criterion = nn.CrossEntropyLoss()
                 model = run_torch_pruning(model, baseline_cfg, model_cfg, device, train_loader=train_loader, criterion=criterion)
+                log_model_parameters(model)
 
-            log_model_parameters(model)
             inference(run_cfg, model_cfg, model, test_loader, device, run_dir_path, timestamp, mode_name="Inference", class_names=class_names, output_dir=log_dir_path)
 
 
