@@ -160,6 +160,7 @@ def plot_and_save_confusion_matrix(y_true, y_pred, class_names, save_dir, timest
         plt.savefig(png_save_path)
         plt.savefig(pdf_save_path, bbox_inches='tight')
         plt.close()
+        logging.info("="*50)
         logging.info(f"혼동 행렬 저장 완료. '{png_save_path}' and '{pdf_save_path}'")
     except Exception as e:
         logging.error(f"혼동 행렬 생성 중 오류 발생: {e}")

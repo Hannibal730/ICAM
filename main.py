@@ -60,7 +60,7 @@ def setup_logging(run_cfg, data_dir_name):
         return '.', timestamp
 
     # 각 실행을 위한 고유한 디렉토리 생성
-    run_dir_name = f"run_{timestamp}"
+    run_dir_name = f"main_{timestamp}"
     run_dir_path = os.path.join("log", data_dir_name, run_dir_name)
     os.makedirs(run_dir_path, exist_ok=True)
     
@@ -301,6 +301,7 @@ def evaluate(run_cfg, model, data_loader, device, criterion, loss_function_name,
 
 def train(run_cfg, train_cfg, model, optimizer, scheduler, train_loader, valid_loader, device, run_dir_path, class_names, pos_weight):
     """모델 훈련 및 검증을 수행하고 최고 성능 모델을 저장합니다."""
+    logging.info("="*50)
     logging.info("train 모드를 시작합니다.")
     
     # 모델 저장 경로를 실행별 디렉토리로 설정
@@ -483,7 +484,8 @@ def inference(run_cfg, model_cfg, model, data_loader, device, run_dir_path, time
         except Exception as e:
             logging.error(f"ONNX 모델 평가 중 오류 발생: {e}")
         return None # ONNX 직접 평가 후 종료
-
+    
+    logging.info("="*50)
     logging.info(f"{mode_name} 모드를 시작합니다.")
     
     # 훈련 시 사용된 모델 경로를 불러옴
@@ -514,7 +516,9 @@ def inference(run_cfg, model_cfg, model, data_loader, device, run_dir_path, time
         raise ValueError("Conflicting quantization options: use_int8_inference and use_fp16_inference are both True.")
 
     if use_int8:
+        logging.info("="*50)
         logging.info("INT8 Dynamic Quantization(동적 양자화)을 적용합니다... (CPU 전용)")
+        logging.info("="*50)
         if device.type != 'cpu':
             logging.warning("INT8 양자화는 PyTorch에서 CPU 추론에 최적화되어 있습니다. 디바이스를 CPU로 변경합니다.")
             device = torch.device('cpu')
@@ -526,7 +530,9 @@ def inference(run_cfg, model_cfg, model, data_loader, device, run_dir_path, time
     
     elif use_fp16:
         if device.type == 'cuda':
+            logging.info("="*50)
             logging.info("FP16(Half Precision)을 적용합니다... (CUDA)")
+            logging.info("="*50)
             model.half()
             single_dummy_input = single_dummy_input.half()
         else:
@@ -535,7 +541,7 @@ def inference(run_cfg, model_cfg, model, data_loader, device, run_dir_path, time
 
     # --- 샘플 당 Forward Pass 시간 및 메모리 사용량 측정 ---
     avg_inference_time_per_sample = 0.0
-    logging.info("GPU 캐시를 비우고, 단일 샘플에 대한 Forward Pass 시간 및 최대 GPU 메모리 사용량 측정을 시작합니다...")
+    logging.info("GPU 캐시를 비우고 측정을 시작합니다...")
     if device.type == 'cuda' and torch.cuda.is_available():
         torch.cuda.empty_cache()
         torch.cuda.reset_peak_memory_stats(device)
@@ -620,9 +626,6 @@ def inference(run_cfg, model_cfg, model, data_loader, device, run_dir_path, time
         logging.info(f"샘플 당 평균 FPS (CPU): {avg_fps:.2f} FPS (std: {std_fps:.2f}) (1개 샘플 x {num_iterations}회 반복)")
 
     # 2. 테스트셋 성능 평가
-    logging.info("="*50)
-    logging.info("테스트 데이터셋에 대한 추론을 시작합니다...")
-    
     only_inference_mode = getattr(run_cfg, 'only_inference', False)
 
     if only_inference_mode:
@@ -734,35 +737,38 @@ def inference(run_cfg, model_cfg, model, data_loader, device, run_dir_path, time
     # --- ONNX 변환 및 평가 (config.yaml 설정에 따라) ---
     evaluate_onnx_flag = getattr(run_cfg, 'evaluate_onnx', False)
     if evaluate_onnx_flag and onnxruntime and dummy_input is not None:
-        logging.info("="*50)
-        logging.info("ONNX 변환 및 평가를 시작합니다...")
-        onnx_path = os.path.join(save_dir, f'model_{timestamp}.onnx')
-        try:
-            # 모델을 CPU로 이동하여 ONNX로 변환 (일반적으로 더 안정적)
-            model.to('cpu')
-            # --- ONNX 런타임 세션 옵션 설정 ---
-            sess_options = onnxruntime.SessionOptions()
-            sess_options.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_ENABLE_ALL
+        if use_int8 or use_fp16:
+            logging.warning("INT8 양자화 또는 FP16 추론 모드에서는 ONNX 변환 및 평가를 지원하지 않습니다. ONNX 평가를 건너뜁니다.")
+        else:
+            logging.info("="*50)
+            logging.info("ONNX 변환 및 평가를 시작합니다...")
+            onnx_path = os.path.join(save_dir, f'model_{timestamp}.onnx')
+            try:
+                # 모델을 CPU로 이동하여 ONNX로 변환 (일반적으로 더 안정적)
+                model.to('cpu')
+                # --- ONNX 런타임 세션 옵션 설정 ---
+                sess_options = onnxruntime.SessionOptions()
+                sess_options.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_ENABLE_ALL
 
-            torch.onnx.export(model, dummy_input.to('cpu'), onnx_path, 
-                                export_params=True, opset_version=14,
-                                do_constant_folding=True,
-                                input_names=['input'], output_names=['output'],
-                                dynamic_axes={'input': {0: 'batch_size'}, 'output': {0: 'batch_size'}})
-            model.to(device) # 모델을 원래 장치로 복원
+                torch.onnx.export(model, dummy_input.to('cpu'), onnx_path, 
+                                    export_params=True, opset_version=14,
+                                    do_constant_folding=True,
+                                    input_names=['input'], output_names=['output'],
+                                    dynamic_axes={'input': {0: 'batch_size'}, 'output': {0: 'batch_size'}})
+                model.to(device) # 모델을 원래 장치로 복원
 
-            # ONNX 파일 크기 로깅
-            onnx_file_size_bytes = os.path.getsize(onnx_path)
-            onnx_file_size_mb = onnx_file_size_bytes / (1024 * 1024)
-            logging.info(f"모델이 ONNX 형식으로 변환되어 '{onnx_path}'에 저장되었습니다. (크기: {onnx_file_size_mb:.2f} MB)")
+                # ONNX 파일 크기 로깅
+                onnx_file_size_bytes = os.path.getsize(onnx_path)
+                onnx_file_size_mb = onnx_file_size_bytes / (1024 * 1024)
+                logging.info(f"모델이 ONNX 형식으로 변환되어 '{onnx_path}'에 저장되었습니다. (크기: {onnx_file_size_mb:.2f} MB)")
 
-            # ONNX 런타임 세션 생성 및 평가
-            onnx_session = onnxruntime.InferenceSession(onnx_path, sess_options=sess_options)
-            measure_onnx_performance(onnx_session, dummy_input)
-            evaluate_onnx(run_cfg, onnx_session, data_loader, desc=f"[{mode_name} (ONNX)]", class_names=class_names, log_class_metrics=True)
+                # ONNX 런타임 세션 생성 및 평가
+                onnx_session = onnxruntime.InferenceSession(onnx_path, sess_options=sess_options)
+                measure_onnx_performance(onnx_session, dummy_input)
+                evaluate_onnx(run_cfg, onnx_session, data_loader, desc=f"[{mode_name} (ONNX)]", class_names=class_names, log_class_metrics=True)
 
-        except Exception as e:
-            logging.error(f"ONNX 변환 또는 평가 중 오류 발생: {e}")
+            except Exception as e:
+                logging.error(f"ONNX 변환 또는 평가 중 오류 발생: {e}")
 
     return final_acc
 
