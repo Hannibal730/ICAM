@@ -455,8 +455,11 @@ def train(run_cfg, train_cfg, model, optimizer, scheduler, train_loader, valid_l
         if not (use_warmup and epoch < warmup_epochs) and scheduler:
             scheduler.step() # Warmup 기간이 아닐 때 스케줄러 step 호출
 
-def inference(run_cfg, model_cfg, model, data_loader, device, run_dir_path, timestamp, mode_name="Inference", class_names=None):
+def inference(run_cfg, model_cfg, model, data_loader, device, run_dir_path, timestamp, mode_name="Inference", class_names=None, output_dir=None):
     """저장된 모델을 불러와 추론 시 GPU 메모리 사용량을 측정하고, 테스트셋 성능을 평가합니다."""
+    
+    # 결과 저장 경로 설정 (output_dir이 주어지면 그곳에, 아니면 run_dir_path에 저장)
+    save_dir = output_dir if output_dir else run_dir_path
     
     # --- ONNX 모델 직접 평가 분기 ---
     onnx_inference_path = getattr(run_cfg, 'onnx_inference_path', None)
@@ -658,7 +661,7 @@ def inference(run_cfg, model_cfg, model, data_loader, device, run_dir_path, time
             'confidence': all_confidences
         })
         results_df['confidence'] = results_df['confidence'].map('{:.4f}'.format) # 소수점 4자리까지 표시
-        result_csv_path = os.path.join(run_dir_path, f'inference_results_{timestamp}.csv')
+        result_csv_path = os.path.join(save_dir, f'inference_results_{timestamp}.csv')
         results_df.to_csv(result_csv_path, index=False, encoding='utf-8-sig')
         logging.info(f"추론 결과가 '{result_csv_path}'에 저장되었습니다.")
         final_acc = None # 정확도 없음
@@ -676,13 +679,13 @@ def inference(run_cfg, model_cfg, model, data_loader, device, run_dir_path, time
         # 단, 어텐션 맵 시각화를 위해 data_loader를 다시 순회해야 합니다.
         # 여기서는 기존 로직을 유지하고, 어텐션 맵 시각화 부분에서만 수정합니다.
         if eval_results['labels'] and eval_results['preds']:
-            plot_and_save_confusion_matrix(eval_results['labels'], eval_results['preds'], class_names, run_dir_path, timestamp)
+            plot_and_save_confusion_matrix(eval_results['labels'], eval_results['preds'], class_names, save_dir, timestamp)
 
     # 4. 어텐션 맵 시각화 (설정이 True인 경우)
     if model_cfg.save_attention:
         try:
             # 1. 어텐션 맵을 저장할 전용 폴더 생성
-            attn_save_dir = os.path.join(run_dir_path, f'attention_map_{timestamp}')
+            attn_save_dir = os.path.join(save_dir, f'attention_map_{timestamp}')
             os.makedirs(attn_save_dir, exist_ok=True)
 
             num_to_save = min(getattr(model_cfg, 'num_plot_attention', 10), len(data_loader.dataset))
@@ -733,7 +736,7 @@ def inference(run_cfg, model_cfg, model, data_loader, device, run_dir_path, time
     if evaluate_onnx_flag and onnxruntime and dummy_input is not None:
         logging.info("="*50)
         logging.info("ONNX 변환 및 평가를 시작합니다...")
-        onnx_path = os.path.join(run_dir_path, f'model_{timestamp}.onnx')
+        onnx_path = os.path.join(save_dir, f'model_{timestamp}.onnx')
         try:
             # 모델을 CPU로 이동하여 ONNX로 변환 (일반적으로 더 안정적)
             model.to('cpu')
@@ -816,7 +819,7 @@ def main():
         else:
             # ONNX 경로가 있으면 pth_inference_dir은 무시하고 현재 디렉토리를 임시로 사용합니다.
             run_dir_path = '.'
-        _, timestamp = setup_logging(run_cfg, data_dir_name)
+        log_dir_path, timestamp = setup_logging(run_cfg, data_dir_name)
     
     # --- 설정 파일 내용 로깅 ---
     config_str = yaml.dump(config, allow_unicode=True, default_flow_style=False, sort_keys=False)
@@ -955,7 +958,7 @@ def main():
             inference(run_cfg, model_cfg, None, test_loader, device, run_dir_path, timestamp, mode_name="Inference", class_names=class_names)
         else:
             # 모델 생성 후 파라미터 수 로깅
-            inference(run_cfg, model_cfg, model, test_loader, device, run_dir_path, timestamp, mode_name="Inference", class_names=class_names)
+            inference(run_cfg, model_cfg, model, test_loader, device, run_dir_path, timestamp, mode_name="Inference", class_names=class_names, output_dir=log_dir_path)
 
 
 # =============================================================================

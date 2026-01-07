@@ -544,8 +544,11 @@ def train(run_cfg, train_cfg, baseline_cfg, config, model, optimizer, scheduler,
         logging.warning(f"훈련 동안 성능 개선이 없어 Best 모델이 저장되지 않았습니다. 마지막 에포크의 모델을 '{model_path}'에 저장합니다.")
     return best_metric
 
-def inference(run_cfg, model_cfg, model, data_loader, device, run_dir_path, timestamp, mode_name="Inference", class_names=None):
+def inference(run_cfg, model_cfg, model, data_loader, device, run_dir_path, timestamp, mode_name="Inference", class_names=None, output_dir=None):
     """저장된 모델로 추론 및 성능 평가를 수행합니다."""
+    
+    # 결과 저장 경로 설정 (output_dir이 주어지면 그곳에, 아니면 run_dir_path에 저장)
+    save_dir = output_dir if output_dir else run_dir_path
     
     # --- ONNX 모델 직접 평가 분기 ---
     onnx_inference_path = getattr(run_cfg, 'onnx_inference_path', None)
@@ -712,7 +715,7 @@ def inference(run_cfg, model_cfg, model, data_loader, device, run_dir_path, time
         
         results_df = pd.DataFrame({'filename': all_filenames, 'prediction': all_predictions, 'confidence': all_confidences})
         results_df['confidence'] = results_df['confidence'].map('{:.4f}'.format)
-        result_csv_path = os.path.join(run_dir_path, f'inference_results_{timestamp}.csv')
+        result_csv_path = os.path.join(save_dir, f'inference_results_{timestamp}.csv')
         results_df.to_csv(result_csv_path, index=False, encoding='utf-8-sig')
         logging.info(f"추론 결과가 '{result_csv_path}'에 저장되었습니다.")
         final_acc = None
@@ -731,14 +734,14 @@ def inference(run_cfg, model_cfg, model, data_loader, device, run_dir_path, time
         final_acc = eval_results['accuracy']
 
         if eval_results['labels'] and eval_results['preds']:
-            plot_and_save_confusion_matrix(eval_results['labels'], eval_results['preds'], class_names, run_dir_path, timestamp)
+            plot_and_save_confusion_matrix(eval_results['labels'], eval_results['preds'], class_names, save_dir, timestamp)
     
     # --- ONNX 변환 및 평가 ---
     evaluate_onnx_flag = getattr(run_cfg, 'evaluate_onnx', False)
     if evaluate_onnx_flag and onnxruntime and dummy_input is not None:
         logging.info("="*50)
         logging.info("ONNX 변환 및 평가를 시작합니다...")
-        onnx_path = os.path.join(run_dir_path, f'model_{timestamp}.onnx')
+        onnx_path = os.path.join(save_dir, f'model_{timestamp}.onnx')
         try:
             # 모델을 CPU로 이동하여 ONNX로 변환 (일반적으로 더 안정적)
             model.to('cpu')
@@ -1103,7 +1106,7 @@ def main():
         else:
             # ONNX 경로가 있으면 pth_inference_dir은 무시하고 현재 디렉토리를 임시로 사용합니다.
             run_dir_path = '.'
-        _, timestamp, lightweight_option_names = setup_logging(run_cfg, data_dir_name, baseline_model_name, baseline_cfg)
+        log_dir_path, timestamp, lightweight_option_names = setup_logging(run_cfg, data_dir_name, baseline_model_name, baseline_cfg)
     
     config_str = yaml.dump(config, allow_unicode=True, default_flow_style=False, sort_keys=False)
     logging.info("="*50)
@@ -1377,7 +1380,7 @@ def main():
                 model = run_torch_pruning(model, baseline_cfg, model_cfg, device, train_loader=train_loader, criterion=criterion)
 
             log_model_parameters(model)
-            inference(run_cfg, model_cfg, model, test_loader, device, run_dir_path, timestamp, mode_name="Inference", class_names=class_names)
+            inference(run_cfg, model_cfg, model, test_loader, device, run_dir_path, timestamp, mode_name="Inference", class_names=class_names, output_dir=log_dir_path)
 
 
 if __name__ == '__main__':
