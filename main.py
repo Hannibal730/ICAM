@@ -37,9 +37,10 @@ except ImportError:
 
 try:
     import onnxruntime
-    from onnx_utils import evaluate_onnx, measure_onnx_performance, measure_model_flops
 except ImportError:
     onnxruntime = None
+
+from onnx_utils import evaluate_onnx, measure_onnx_performance, measure_model_flops
 
 from plot import plot_and_save_train_val_accuracy_graph, plot_and_save_val_accuracy_graph, plot_and_save_confusion_matrix, plot_and_save_attention_maps, plot_and_save_f1_normal_graph, plot_and_save_loss_graph, plot_and_save_lr_graph, plot_and_save_compiled_graph
 

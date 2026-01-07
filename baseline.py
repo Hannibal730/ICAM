@@ -39,9 +39,10 @@ except ImportError:
 
 try:
     import onnxruntime
-    from onnx_utils import evaluate_onnx, measure_onnx_performance, measure_model_flops
 except ImportError:
     onnxruntime = None
+
+from onnx_utils import evaluate_onnx, measure_onnx_performance, measure_model_flops
 
 # [수정] torch_pruning을 전역 스코프에서 import하여 모든 함수에서 접근 가능하게 함
 try:

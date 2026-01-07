@@ -18,11 +18,6 @@ except ImportError:
 
 def evaluate_onnx(run_cfg, onnx_session, data_loader, desc="Evaluating ONNX", class_names=None, log_class_metrics=False):
     """ONNX 모델을 평가하고 정확도, 정밀도, 재현율, F1 점수를 로깅합니다."""
-    # --- ONNX 런타임 세션 옵션 설정 ---
-    sess_options = onnxruntime.SessionOptions()
-    sess_options.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_ENABLE_ALL
-
-    """ONNX 모델을 평가하고 정확도, 정밀도, 재현율, F1 점수를 로깅합니다."""
     correct = 0
     total = 0
     all_preds = []
@@ -108,11 +103,6 @@ def measure_onnx_performance(onnx_session, dummy_input):
     logging.info("ONNX 런타임의 CPU 메모리 사용량 측정은 지원되지 않습니다.")
 
 def measure_model_flops(model, device, data_loader):
-    """모델의 연산량(FLOPs)을 측정합니다."""
-    # --- ONNX 런타임 세션 옵션 설정 ---
-    sess_options = onnxruntime.SessionOptions()
-    sess_options.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_ENABLE_ALL
-
     """모델의 연산량(FLOPs)을 측정합니다."""
     gflops_per_sample = 0.0
     try:
