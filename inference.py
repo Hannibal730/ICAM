@@ -9,7 +9,7 @@ from tqdm import tqdm
 from types import SimpleNamespace
 import numpy as np
 from torchvision import transforms
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Subset
 import torch.nn as nn
 import timm
 from torchvision import models as torchvision_models
@@ -29,11 +29,26 @@ try:
 except ImportError:
     tp = None
 
+# ONNX 관련 라이브러리
+try:
+    import onnxruntime
+    from onnxruntime.quantization import quantize_static, CalibrationDataReader, QuantType, QuantFormat
+    from onnxruntime.quantization.preprocess import quant_pre_process
+    import onnx
+    from onnxconverter_common import float16
+except ImportError:
+    onnxruntime = None
+    quantize_static = None
+    quant_pre_process = None
+    onnx = None
+    float16 = None
+
 # =============================================================================
 # 제안 모델 임포트
 # =============================================================================
 from models import Model as DecoderBackbone, PatchConvEncoder, Classifier, HybridModel
 from dataloader import prepare_data, InferenceImageDataset
+from onnx_utils import ONNXCalibrationDataReader, measure_cpu_peak_memory_during_inference
 
 def setup_logging(run_cfg, data_dir_name):
     """
@@ -272,6 +287,8 @@ def main():
     # Baseline & Pruning 관련 인자 추가
     parser.add_argument('--pruning_info', type=str, default=None, help='pruning_info.yaml 파일 경로 (선택)')
     parser.add_argument('--baseline_name', type=str, default=None, help='Baseline 모델 이름 (예: efficientnet_b0). pruning_info가 없을 때 필수.')
+    parser.add_argument('--use_int8', action='store_true', help='INT8 양자화 추론 사용 (ONNX)')
+    parser.add_argument('--use_fp16', action='store_true', help='FP16 양자화 추론 사용 (ONNX)')
     
     args = parser.parse_args()
 
@@ -285,6 +302,12 @@ def main():
     cfg = dict_to_namespace(config)
     run_cfg = cfg.run
     model_cfg = cfg.model
+
+    # CLI 인자로 양자화 설정 오버라이드
+    if args.use_int8:
+        run_cfg.use_int8_inference = True
+    if args.use_fp16:
+        run_cfg.use_fp16_inference = True
 
     # 2. 로깅 및 디렉토리 설정
     # img_dir의 폴더명을 데이터셋 이름으로 사용
@@ -414,28 +437,81 @@ def main():
     # --- 양자화(Quantization) 적용 ---
     use_fp16 = getattr(run_cfg, 'use_fp16_inference', False)
     use_int8 = getattr(run_cfg, 'use_int8_inference', False)
+    
+    # 더미 입력 생성 (ONNX 변환용)
+    dummy_input = torch.randn(1, 3, model_cfg.img_size, model_cfg.img_size).to(device)
+    single_dummy_input = dummy_input
 
     if use_int8 and use_fp16:
         logging.error("use_int8_inference과 use_fp16_inference이 동시에 설정되었습니다. 둘 중 하나만 True로 설정해주세요.")
         raise ValueError("Conflicting quantization options: use_int8_inference and use_fp16_inference are both True.")
 
+    onnx_session = None
+
     if use_int8:
-        logging.info("INT8 Dynamic Quantization(동적 양자화)을 적용합니다... (CPU 전용)")
-        if device.type != 'cpu':
-            logging.warning("INT8 양자화는 PyTorch에서 CPU 추론에 최적화되어 있습니다. 디바이스를 CPU로 변경합니다.")
-            device = torch.device('cpu')
-            model = model.to(device)
+        logging.info("INT8 Static Quantization (ONNX)을 적용합니다.")
+        if not onnxruntime:
+            logging.error("ONNX Runtime이 설치되지 않아 INT8 양자화를 수행할 수 없습니다.")
+            return
+
+        # 1. FP32 ONNX 변환
+        fp32_onnx_path = os.path.join(run_dir_path, 'model_fp32_for_quant.onnx')
+        model.to('cpu')
+        dummy_input_cpu = single_dummy_input.to('cpu')
         
-        # PyTorch의 동적 양자화 적용 (Linear 레이어 대상)
-        model = torch.quantization.quantize_dynamic(model, {torch.nn.Linear}, dtype=torch.qint8)
+        torch.onnx.export(model, dummy_input_cpu, fp32_onnx_path,
+                          export_params=True, opset_version=14,
+                          do_constant_folding=True,
+                          input_names=['input'], output_names=['output'],
+                          dynamic_axes={'input': {0: 'batch_size'}, 'output': {0: 'batch_size'}})
+        
+        # 2. Preprocess
+        preprocessed_onnx_path = os.path.join(run_dir_path, 'model_fp32_preprocessed.onnx')
+        quant_pre_process(fp32_onnx_path, preprocessed_onnx_path)
+        
+        # 3. Calibration
+        # InferenceImageDataset을 사용하여 Calibration 수행
+        calib_samples = getattr(run_cfg, 'int8_calib_samples', 256)
+        logging.info(f"Calibration 진행 ({calib_samples} samples)...")
+        
+        # 데이터셋에서 일부 샘플링
+        indices = torch.randperm(len(dataset))[:calib_samples].tolist()
+        calib_subset = Subset(dataset, indices)
+        calib_loader = DataLoader(calib_subset, batch_size=1, shuffle=False, num_workers=0)
+        
+        dr = ONNXCalibrationDataReader(calib_loader, input_name='input')
+        
+        # 4. Quantize
+        int8_onnx_path = os.path.join(run_dir_path, 'model_int8.onnx')
+        quantize_static(preprocessed_onnx_path, int8_onnx_path, dr, quant_format=QuantFormat.QDQ, per_channel=True, weight_type=QuantType.QInt8)
+        
+        # 5. Session Create
+        sess_options = onnxruntime.SessionOptions()
+        sess_options.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_ENABLE_ALL
+        onnx_session = onnxruntime.InferenceSession(int8_onnx_path, sess_options=sess_options, providers=['CPUExecutionProvider'])
     
     elif use_fp16:
-        if device.type == 'cuda':
-            logging.info("FP16(Half Precision)을 적용합니다... (CUDA)")
-            model.half()
-        else:
-            logging.warning("FP16은 CUDA 디바이스에서만 지원됩니다. CPU에서는 무시됩니다.")
-            use_fp16 = False
+        logging.info("FP16 Inference (ONNX)을 적용합니다.")
+        if not (onnxruntime and onnx and float16):
+            logging.error("ONNX 관련 라이브러리가 부족합니다.")
+            return
+
+        # 1. FP32 Export
+        fp32_onnx_path = os.path.join(run_dir_path, 'model_fp32_for_fp16.onnx')
+        model.to('cpu')
+        dummy_input_cpu = single_dummy_input.to('cpu')
+        torch.onnx.export(model, dummy_input_cpu, fp32_onnx_path, export_params=True, opset_version=13, do_constant_folding=True, input_names=['input'], output_names=['output'], dynamic_axes={'input': {0: 'batch_size'}, 'output': {0: 'batch_size'}})
+        
+        # 2. Convert to FP16
+        fp16_onnx_path = os.path.join(run_dir_path, 'model_fp16.onnx')
+        onnx_model = onnx.load(fp32_onnx_path)
+        fp16_model = float16.convert_float_to_float16(onnx_model, keep_io_types=True)
+        onnx.save(fp16_model, fp16_onnx_path)
+        
+        # 3. Session Create
+        sess_options = onnxruntime.SessionOptions()
+        sess_options.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_DISABLE_ALL
+        onnx_session = onnxruntime.InferenceSession(fp16_onnx_path, sess_options=sess_options, providers=['CPUExecutionProvider'])
 
     # 7. 추론 실행
     all_filenames = []
@@ -445,20 +521,48 @@ def main():
     logging.info("Starting inference loop...")
     progress_bar = tqdm(test_loader, desc="Inference", leave=False)
     
-    with torch.no_grad():
+    if onnx_session:
+        # ONNX Inference
+        input_name = onnx_session.get_inputs()[0].name
+        input_type = onnx_session.get_inputs()[0].type
+        
+        # CPU Memory Measurement
+        if device.type == 'cpu':
+             measure_cpu_peak_memory_during_inference(onnx_session, test_loader, device)
+
         for images, _, filenames in progress_bar:
-            images = images.to(device)
-            if use_fp16:
-                images = images.half()
-            outputs = model(images)
+            images_np = images.cpu().numpy()
+            if 'float16' in input_type:
+                images_np = images_np.astype(np.float16)
             
-            # Softmax로 확률 계산
-            probabilities = torch.nn.functional.softmax(outputs, dim=1)
-            confidences, predicted_indices = torch.max(probabilities, 1)
+            outputs = onnx_session.run(None, {input_name: images_np})[0]
+            
+            # Softmax & Argmax (numpy)
+            # exp(x - max(x)) for numerical stability
+            shift_x = outputs - np.max(outputs, axis=1, keepdims=True)
+            exps = np.exp(shift_x)
+            probs = exps / np.sum(exps, axis=1, keepdims=True)
+            
+            preds = np.argmax(probs, axis=1)
+            confs = np.max(probs, axis=1)
             
             all_filenames.extend(filenames)
-            all_predictions.extend([class_names[p] for p in predicted_indices.cpu().numpy()])
-            all_confidences.extend(confidences.cpu().numpy())
+            all_predictions.extend([class_names[p] for p in preds])
+            all_confidences.extend(confs)
+    else:
+        # PyTorch Inference (FP32)
+        with torch.no_grad():
+            for images, _, filenames in progress_bar:
+                images = images.to(device)
+                outputs = model(images)
+                
+                # Softmax로 확률 계산
+                probabilities = torch.nn.functional.softmax(outputs, dim=1)
+                confidences, predicted_indices = torch.max(probabilities, 1)
+                
+                all_filenames.extend(filenames)
+                all_predictions.extend([class_names[p] for p in predicted_indices.cpu().numpy()])
+                all_confidences.extend(confidences.cpu().numpy())
 
     # 8. 결과 CSV 저장
     results_df = pd.DataFrame({

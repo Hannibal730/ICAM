@@ -1,4 +1,4 @@
-# Sewer Binary Classification v7
+# Sewer Binary Classification v9
 
 ## 🚀 간단 추론 모듈 (`inference.py`)
 
@@ -22,6 +22,8 @@ python inference.py --img_dir "이미지_폴더_경로" --model "모델_파일_�
 *   `--baseline_name` (**선택**): 베이스라인을 사용할 때 지정하는 아키텍처 이름입니다. (예: `efficientnet_b0`, `xie2019`). **제안 모델이 아닌 경우 필수**로 입력해야 합니다.
 *   `--pruning_info` (**선택**): 가지치기(Pruning)가 적용된 모델을 추론할 때 필요한 `pruning_info.yaml` 파일의 경로입니다. 이 파일은 Pruning된 모델의 구조를 복원하는 데 사용됩니다. **Pruning된 모델인 경우 필수**입니다.
 *   `--config` (**선택 / 생략추천**): 모델 아키텍처 설정이 담긴 YAML 파일 경로입니다. 생략 시 코드 내장 기본 설정이 사용되기 때문에, 학습 시 사용한 설정을 그대로 적용하려면 생략하는 것이 좋습니다.
+*   `--use_int8` (**선택**): ONNX Runtime을 사용하여 **INT8 정적 양자화(Static Quantization)** 추론을 수행합니다. CPU 환경에서 추론 속도 향상을 위해 사용합니다. (FP16과 동시 사용 불가)
+*   `--use_fp16` (**선택**): ONNX Runtime을 사용하여 **FP16(Half Precision)** 추론을 수행합니다. (INT8과 동시 사용 불가)
 
 ---
 
