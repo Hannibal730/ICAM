@@ -426,11 +426,31 @@ def main():
         return
 
     logging.info(f"Loading weights from: {model_path}")
-    try:
-        model.load_state_dict(torch.load(model_path, map_location=device, weights_only=True))
-    except Exception as e:
-        logging.error(f"Failed to load model weights: {e}")
-        return
+
+    # 이미 ONNX 파일을 전달받는 경우: ONNX Runtime 세션으로 바로 로드하고
+    # PyTorch의 torch.load를 시도하지 않도록 분기 처리합니다.
+    model_ext = os.path.splitext(model_path)[1].lower()
+    skip_torch_load = False
+    if model_ext == '.onnx':
+        if not onnxruntime:
+            logging.error("ONNX Runtime이 설치되어 있지 않아 .onnx 파일을 직접 로드할 수 없습니다.")
+            return
+        try:
+            sess_options = onnxruntime.SessionOptions()
+            # 기본적으로 CPUExecutionProvider 사용 (환경에 따라 변경 가능)
+            onnx_session = onnxruntime.InferenceSession(model_path, sess_options=sess_options, providers=['CPUExecutionProvider'])
+            logging.info(f"Loaded ONNX model into ONNX Runtime session: {model_path}")
+            skip_torch_load = True
+        except Exception as e:
+            logging.error(f"Failed to create ONNX Runtime session from provided .onnx file: {e}")
+            return
+
+    if not skip_torch_load:
+        try:
+            model.load_state_dict(torch.load(model_path, map_location=device, weights_only=True))
+        except Exception as e:
+            logging.error(f"Failed to load model weights: {e}")
+            return
 
     model.eval()
 

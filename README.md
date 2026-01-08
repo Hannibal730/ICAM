@@ -32,7 +32,7 @@ python inference.py --img_dir "이미지_폴더_경로" --model "모델_파일_�
 #### 4.1. 제안 모델
 사용 인자 `--img_dir`, `--model`
 ```bash
-python inference.py --img_dir "./data/samples" --model "./pretrained/proposed_model/best_model.pth"
+python inference.py --img_dir "./data/samples" --model "./pretrained/proposed_model/original/best_model.pth"
 ```
 ---
 #### 4.2. 원본 베이스라인
@@ -142,6 +142,52 @@ python inference.py --img_dir "./data/samples" --model "./pretrained/baselines/o
   ```
 
 ---
+
+#### 4.5. `.pth` → ONNX 변환 후 INT8/FP16 적용 예시 (플래그 사용)
+`.pth` 파일을 입력으로 주고 스크립트 내부에서 ONNX로 변환하여 INT8 또는 FP16 추론을 수행하려면 `--use_int8` 또는 `--use_fp16` 플래그를 함께 사용합니다. (두 플래그는 동시에 사용 불가)
+
+- 제안 모델 (`.pth` → INT8 변환 후 추론)
+```bash
+python inference.py --img_dir "./data/samples" --model "./pretrained/proposed_model/original/best_model.pth" --use_int8
+```
+
+- 제안 모델 (`.pth` → FP16 변환 후 추론)
+```bash
+python inference.py --img_dir "./data/samples" --model "./pretrained/proposed_model/original/best_model.pth" --use_fp16
+```
+
+- 베이스라인 모델 예시 (`.pth` → INT8, 모델명 명시)
+```bash
+python inference.py --img_dir "./data/samples" --model "./pretrained/baselines/original/efficientnet_b0/best_model.pth" --baseline_name "efficientnet_b0" --use_int8
+```
+
+- 베이스라인 모델 예시 (`.pth` → FP16, 모델명 명시)
+```bash
+python inference.py --img_dir "./data/samples" --model "./pretrained/baselines/original/deit_tiny/best_model.pth" --baseline_name "deit_tiny" --use_fp16
+```
+
+#### 4.6. ONNX Runtime 직접 사용 예시 (플래그 생략)
+이미 FP16/INT8로 변환되어 있는 `.onnx` 파일을 입력으로 주어 ONNX Runtime으로 바로 추론할 때는 `--use_int8`/`--use_fp16` 플래그를 사용하지 마십시오. (`--model`에 `.onnx` 경로만 전달하면 스크립트가 자동으로 ONNX Runtime 세션을 생성합니다.)
+
+- 제안 모델 (이미 변환된 INT8 ONNX)
+```bash
+python inference.py --img_dir "./data/samples" --model "./pretrained/proposed_model/int8/best_model_int8.onnx"
+```
+
+- 제안 모델 (이미 변환된 FP16 ONNX)
+```bash
+python inference.py --img_dir "./data/samples" --model "./pretrained/proposed_model/fp16/best_model_fp16.onnx"
+```
+
+- 베이스라인 모델 예시 (이미 변환된 INT8 ONNX, 모델명 명시)
+```bash
+python inference.py --img_dir "./data/samples" --model "./pretrained/baselines/int8/efficientnet_b0/best_model_int8.onnx" --baseline_name "efficientnet_b0"
+```
+
+- 베이스라인 모델 예시 (이미 변환된 FP16 ONNX, 모델명 명시)
+```bash
+python inference.py --img_dir "./data/samples" --model "./pretrained/baselines/fp16/deit_tiny/best_model_fp16.onnx" --baseline_name "deit_tiny"
+```
 
 #### 5. 테스트용 샘플
 - **./data/samples**: 아래 두 종류의 샘플을 합친 500장
