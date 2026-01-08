@@ -7,7 +7,7 @@ run:
   mode: 'inference' # 실행 모드. 'train': 모델 훈련, 'inference': 모델 추론 및 성능 평가
   
 #   pth_inference_dir: './pretrained/proposed_model'   # 추론 모드에서 사용할 .pth 모델이 포함된 디렉토리의 경로
-  pth_inference_dir: './pretrained/baselines/original/efficientnet_b0'   # 추론 모드에서 사용할 .pth 모델이 포함된 디렉토리의 경로
+  pth_inference_dir: './pretrained/baselines/original/mobile_vit_xxs'   # 추론 모드에서 사용할 .pth 모델이 포함된 디렉토리의 경로
   pth_best_name: 'best_model.pth' # .pth 모델의 파일 이름 또는 추론 시 불러올 모델의 파일 이름.
   evaluate_onnx: true # true: 훈련/추론 시 ONNX를 생성하고 성능을 평가합니다. (이미 각 pth 파일폴더에 생성 후 저장해뒀습니다.)
 
@@ -171,7 +171,7 @@ model:
 baseline:
   # 사용할 baseline 모델의 이름을 지정합니다.
   # 사용 가능한 옵션: 'efficientnet_b0', 'mobilenet_v4_s', 'xie2019', 'deit_tiny', 'mobile_vit_xxs'
-  model_name: 'efficientnet_b0'
+  model_name: 'mobile_vit_xxs'
 
   # --- 경량화 옵션 ---
 #   use_l1_pruning: True       # L1 Norm Pruning 적용 여부

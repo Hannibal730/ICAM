@@ -1,4 +1,5 @@
 import logging
+import os
 import time
 import numpy as np
 import torch
@@ -7,9 +8,16 @@ from tqdm import tqdm
 from sklearn.metrics import precision_score, recall_score, f1_score
 
 try:
+    import psutil
+except ImportError:
+    psutil = None
+
+try:
     import onnxruntime
+    from onnxruntime.quantization import CalibrationDataReader
 except ImportError:
     onnxruntime = None
+    CalibrationDataReader = object
 
 try:
     from thop import profile
@@ -26,10 +34,16 @@ def evaluate_onnx(run_cfg, onnx_session, data_loader, desc="Evaluating ONNX", cl
     show_log = getattr(run_cfg, 'show_log', True)
     progress_bar = tqdm(data_loader, desc=desc, leave=False, disable=not show_log)
 
-    input_name = onnx_session.get_inputs()[0].name
+    input_info = onnx_session.get_inputs()[0]
+    input_name = input_info.name
+    input_type = input_info.type # 예: 'tensor(float)' or 'tensor(float16)'
 
     for images, labels, _ in progress_bar:
         images_np = images.cpu().numpy()
+        # 모델이 FP16 입력을 기대하면 형변환 수행
+        if 'float16' in input_type:
+            images_np = images_np.astype(np.float16)
+            
         outputs = onnx_session.run(None, {input_name: images_np})[0]
         predicted = np.argmax(outputs, axis=1)
 
@@ -72,9 +86,15 @@ def measure_onnx_performance(onnx_session, dummy_input):
     """ONNX 모델의 Forward Pass 시간 및 메모리 사용량을 측정합니다."""
     logging.info("ONNX 런타임의 샘플 당 Forward Pass 시간 측정을 시작합니다...")
     
-    input_name = onnx_session.get_inputs()[0].name
+    input_info = onnx_session.get_inputs()[0]
+    input_name = input_info.name
+    input_type = input_info.type
+
     # 배치 입력에서 첫 번째 이미지만을 사용하여 단일 샘플 추론 시간을 측정합니다.
     single_dummy_input_np = dummy_input[0].unsqueeze(0).cpu().numpy()
+
+    if 'float16' in input_type:
+        single_dummy_input_np = single_dummy_input_np.astype(np.float16)
 
     # CPU 시간 측정을 위한 예열(warm-up)
     for _ in range(10):
@@ -102,6 +122,56 @@ def measure_onnx_performance(onnx_session, dummy_input):
     logging.info(f"샘플 당 평균 FPS (ONNX, CPU): {avg_fps:.2f} FPS (std: {std_fps:.2f}) (1개 샘플 x {num_iterations}회 반복)")
     logging.info("ONNX 런타임의 CPU 메모리 사용량 측정은 지원되지 않습니다.")
 
+def measure_cpu_peak_memory_during_inference(session, data_loader, device):
+    """ONNX 모델 추론 중 CPU 최대 메모리 사용량(RSS)을 단일 샘플 기준으로 측정합니다."""
+    if not psutil:
+        logging.warning("CPU 메모리 사용량을 측정하려면 'pip install psutil'을 실행해주세요.")
+        return
+
+    process = psutil.Process(os.getpid())
+    
+    try:
+        # 데이터 로더에서 단일 샘플을 가져옵니다.
+        dummy_input, _, _ = next(iter(data_loader))
+        single_dummy_input_np = dummy_input[0].unsqueeze(0).cpu().numpy()
+        input_info = session.get_inputs()[0]
+        input_name = input_info.name
+        input_type = input_info.type
+        
+        # FP16 입력 대응
+        if 'float16' in input_type:
+            single_dummy_input_np = single_dummy_input_np.astype(np.float16)
+            
+    except Exception as e:
+        logging.error(f"ONNX 메모리 측정을 위한 더미 데이터 생성 중 오류 발생: {e}")
+        return
+
+    # 기준 메모리를 추론 실행 전에 측정
+    mem_before = process.memory_info().rss / (1024 * 1024) # MB
+    logging.info(f"ONNX 추론 실행 전 기본 CPU 메모리: {mem_before:.2f} MB")
+    peak_mem = mem_before
+
+    # Warm-up (10회)
+    logging.info("ONNX CPU 메모리 측정을 위한 예열(warm-up)을 시작합니다 (단일 샘플 x 10회).")
+    for _ in range(10):
+        session.run(None, {input_name: single_dummy_input_np})
+        # 예열 중에도 메모리 피크를 측정
+        peak_mem = max(peak_mem, process.memory_info().rss / (1024 * 1024))
+
+    logging.info("="*50)
+    logging.info("ONNX 모델 추론 중 CPU 최대 메모리 사용량 측정을 시작합니다 (단일 샘플 x 100회 반복).")
+    
+    # 실제 측정 (100회 반복)
+    num_iterations = 100
+    for _ in range(num_iterations):
+        session.run(None, {input_name: single_dummy_input_np})
+        peak_mem = max(peak_mem, process.memory_info().rss / (1024 * 1024))
+
+    logging.info(f"  - 추론 전 기본 CPU 메모리: {mem_before:.2f} MB")
+    logging.info(f"  - 추론 중 최대 CPU 메모리 (Peak): {peak_mem:.2f} MB")
+    logging.info(f"  - 추론으로 인한 순수 메모리 증가량: {(peak_mem - mem_before):.2f} MB")
+    logging.info("="*50)
+
 def measure_model_flops(model, device, data_loader):
     """모델의 연산량(FLOPs)을 측정합니다."""
     gflops_per_sample = 0.0
@@ -127,3 +197,25 @@ def measure_model_flops(model, device, data_loader):
     except Exception as e:
         logging.error(f"FLOPS 측정 중 오류 발생: {e}")
         return None
+
+# =============================================================================
+# [추가] ONNX Static Quantization을 위한 Data Reader 클래스
+# =============================================================================
+class ONNXCalibrationDataReader(CalibrationDataReader):
+    def __init__(self, data_loader, input_name):
+        self.data_loader = data_loader
+        self.iter = iter(data_loader)
+        self.input_name = input_name
+
+    def get_next(self):
+        try:
+            batch = next(self.iter)
+            # data_loader가 (images, labels, filenames)를 반환한다고 가정
+            images, _, _ = batch
+            # ONNX Runtime은 numpy array를 기대합니다.
+            return {self.input_name: images.numpy()}
+        except StopIteration:
+            return None
+    
+    def rewind(self):
+        self.iter = iter(self.data_loader)
