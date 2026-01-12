@@ -841,7 +841,7 @@ def main():
 
     # SimpleNamespace를 사용하여 딕셔너리처럼 접근 가능하게 변환
     run_cfg = SimpleNamespace(**config['run'])
-    train_cfg = SimpleNamespace(**config['training_run'])
+    train_cfg = SimpleNamespace(**config['training_main'])
     model_cfg = SimpleNamespace(**config['model'])
     # 중첩된 scheduler_params 딕셔너리를 SimpleNamespace로 변환
     if hasattr(train_cfg, 'scheduler_params') and isinstance(train_cfg.scheduler_params, dict):
