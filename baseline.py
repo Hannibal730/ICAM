@@ -398,21 +398,6 @@ def train(run_cfg, train_cfg, baseline_cfg, config, model, optimizer, scheduler,
         logging.info(f"Best metric을 초기값({best_metric})으로 설정합니다.")
     is_best_saved = False # 베스트 모델이 저장되었는지 확인하는 플래그
 
-    # --- Warmup 설정 ---
-    warmup_cfg = getattr(train_cfg, 'warmup', None)
-    use_warmup = warmup_cfg and getattr(warmup_cfg, 'enabled', False)
-    if use_warmup:
-        warmup_epochs = getattr(warmup_cfg, 'epochs', 0)
-        warmup_start_lr = getattr(warmup_cfg, 'start_lr', 0.0)
-        warmup_end_lr = train_cfg.lr # Warmup 종료 LR은 메인 LR로 설정
-        logging.info(f"Warmup 활성화: {warmup_epochs} 에포크 동안 LR을 {warmup_start_lr}에서 {warmup_end_lr}로 선형 증가시킵니다.")
-        # Warmup 기간 동안에는 스케줄러를 비활성화합니다.
-        original_scheduler_step = scheduler.step if scheduler else lambda: None
-        if scheduler:
-            scheduler.step = lambda: None # type: ignore
-    else:
-        warmup_epochs = 0 # Warmup 사용 안 할 시 epochs 0으로 설정
-        original_scheduler_step = None # 사용 안 함
 
     for epoch in range(train_cfg.epochs):
         logging.info("-" * 50)
@@ -424,16 +409,6 @@ def train(run_cfg, train_cfg, baseline_cfg, config, model, optimizer, scheduler,
         correct = 0
         total = 0
         
-        # --- Warmup LR 조정 ---
-        if use_warmup and epoch < warmup_epochs:
-            if warmup_epochs > 1:
-                lr_step = (warmup_end_lr - warmup_start_lr) / (warmup_epochs - 1)
-                current_lr = warmup_start_lr + epoch * lr_step
-            else: # warmup_epochs가 1인 경우
-                current_lr = warmup_end_lr
-            for param_group in optimizer.param_groups:
-                param_group['lr'] = current_lr
-
         # 에포크 시작 시 Learning Rate 로깅
         current_lr = optimizer.param_groups[0]['lr']
         logging.info(f"[LR]    [{epoch + 1 + epoch_offset}/{train_cfg.epochs + epoch_offset}] | Learning Rate: {current_lr:.6f}")
@@ -503,14 +478,8 @@ def train(run_cfg, train_cfg, baseline_cfg, config, model, optimizer, scheduler,
             is_best_saved = True
             logging.info(f"[Best Model Saved] ({criterion_name}: {best_metric:.4f}) -> '{model_path}'")
         
-        # Warmup 기간이 끝난 후에만 원래 스케줄러를 사용합니다.
-        if use_warmup and original_scheduler_step and epoch == warmup_epochs - 1:
-            logging.info(f"Warmup 종료. 에포크 {epoch + 2}부터 기존 스케줄러를 활성화합니다.")
-            if scheduler:
-                scheduler.step = original_scheduler_step # 원래 스케줄러 step 함수 복원
-        
-        if scheduler and not (use_warmup and epoch < warmup_epochs):
-            scheduler.step() # Warmup 기간이 아닐 때 스케줄러 step 호출
+        if scheduler:
+            scheduler.step()
     
     # 만약 훈련 동안 한 번도 best model이 저장되지 않았다면(e.g., loss가 계속 nan), 마지막 모델이라도 저장합니다.
     if not is_best_saved:
@@ -1157,15 +1126,11 @@ def main():
     # 중첩된 scheduler_params 딕셔너리를 SimpleNamespace로 변환
     if hasattr(train_cfg, 'scheduler_params') and isinstance(train_cfg.scheduler_params, dict):
         train_cfg.scheduler_params = SimpleNamespace(**train_cfg.scheduler_params)
-    if hasattr(train_cfg, 'warmup') and isinstance(train_cfg.warmup, dict):
-        train_cfg.warmup = SimpleNamespace(**train_cfg.warmup)
     run_cfg.dataset = SimpleNamespace(**run_cfg.dataset)
     
     # Fine-tuning 설정도 동일하게 변환
     if hasattr(finetune_cfg, 'scheduler_params') and isinstance(finetune_cfg.scheduler_params, dict):
         finetune_cfg.scheduler_params = SimpleNamespace(**finetune_cfg.scheduler_params)
-    if hasattr(finetune_cfg, 'warmup') and isinstance(finetune_cfg.warmup, dict):
-        finetune_cfg.warmup = SimpleNamespace(**finetune_cfg.warmup)
     # --- 전역 시드 고정 ---
     global_seed = getattr(run_cfg, 'global_seed', None)
     if global_seed is not None:

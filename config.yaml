@@ -7,11 +7,13 @@ run:
   mode: 'inference' # 실행 모드. 'train': 모델 훈련, 'inference': 모델 추론 및 성능 평가
   
 #   pth_inference_dir: './pretrained/proposed_model'   # 추론 모드에서 사용할 .pth 모델이 포함된 디렉토리의 경로
-  pth_inference_dir: './pretrained/baselines/original/mobile_vit_xxs'   # 추론 모드에서 사용할 .pth 모델이 포함된 디렉토리의 경로
+#   pth_inference_dir: './pretrained/baselines/original/mobile_vit_xxs'   # 추론 모드에서 사용할 .pth 모델이 포함된 디렉토리의 경로
+  pth_inference_dir: './log/Sewer-ML/main_20260113_041514'   # 추론 모드에서 사용할 .pth 모델이 포함된 디렉토리의 경로  
   pth_best_name: 'best_model.pth' # .pth 모델의 파일 이름 또는 추론 시 불러올 모델의 파일 이름.
   evaluate_onnx: true # true: 훈련/추론 시 ONNX를 생성하고 성능을 평가합니다. (이미 각 pth 파일폴더에 생성 후 저장해뒀습니다.)
 
   # .onnx 파일 경로를 지정하면, inference 모드에서 PyTorch 모델 평가/변환을 건너뛰고 해당 ONNX 모델을 직접 평가합니다.
+  # onnx_inference_path: 예: './log/Sewer-TAPNEW/run_20251201_095258/model_20251201_095320.onnx' # 평가할 ONNX 파일 경로
   # onnx_inference_path: 예: './log/Sewer-TAPNEW/run_20251201_095258/model_20251201_095320.onnx' # 평가할 ONNX 파일 경로
   
   # 정답 레이블이 없는 이미지에 대하여 추론만 수행하게 하는 옵션
@@ -19,17 +21,18 @@ run:
   only_inference: false # false: 정답 레이블과 비교하여 성능 평가.
   
   # 추론 시 양자화 옵션 (동시 사용 불가)
-  use_fp16_inference: false # true: FP16(Half Precision) 추론 사용 (CUDA 권장)
+#   use_fp16_inference: true # true: FP16(Half Precision) 추론 사용 (CUDA 권장)
   use_int8_inference: true # true: INT8 동적 양자화 추론 사용 (CPU 권장)
-  int8_calib_samples: 256 # INT8 정적 양자화(Static Quantization) 시 Calibration에 사용할 샘플 수
+  int8_calib_samples: 1024 # INT8 정적 양자화(Static Quantization) 시 Calibration에 사용할 샘플 수
+  int8_calibration_method: 'Entropy' # Calibration 방법. 옵션: 'Entropy', 'MinMax', 'Percentile'
 
   # 로그를 콘솔에 출력하고 파일로 저장
   show_log: true # false: 모든 로깅 비활성화.
   
   # --- 데이터셋 설정 ---
   dataset:
-    name: 'Sewer-TAP' # 생성할 폴더 이름 지정
-    type: 'image_folder'
+    name: 'Sewer-ML' # 생성할 폴더 이름 지정
+    type: 'csv'
     train_split_ratio: 0.8 # 'image_folder' 타입일 때 사용할 훈련 데이터 비율 (나머지는 테스트/검증 데이터가 됨)
 
     # 데이터셋 경로 설정
@@ -46,7 +49,7 @@ run:
       # /home/user/workspace/disk/nvme1/data/Sewer/Sewer-TAP
       # /home/user/workspace/disk/nvme1/data/Sewer/Sewer-TAPNEW
       # img_folder: '/home/pi/Desktop/tap_new/data'
-      img_folder: '/home/user/workspace/disk/nvme1/data/Sewer/Sewer-TAPNEW'
+#       img_folder: '/home/user/workspace/disk/nvme1/data/Sewer/Sewer-TAPNEW'
       # img_folder: '/home/user/workspace/CHOI/Sewer-TAPNEW/data' # 5090서버 임시 데이터
       # img_folder: '/home/cau/workspace/data/Sewer/Sewer-TAPNEW' # 동국대 블랙월 서버
 
@@ -62,7 +65,7 @@ run:
 # =============================================================================
 training_main:
   epochs: 90                 
-  batch_size: 16                
+  batch_size: 256                
   pre_trained: false             # true: ImageNet 사전 훈련 가중치 사용, false: 무작위 초기화 가중치 사용
   optimizer: 'adamw'            # 사용할 옵티마이저. 옵션: 'adamw', 'sgd', 'nadam', 'radam', 'rmsprop'
   lr: 0.001                     # 옵티마이저의 학습률.
@@ -70,11 +73,6 @@ training_main:
   loss_function: 'CrossEntropyLoss' # 사용할 손실 함수. 옵션: 'CrossEntropyLoss', 'BCEWithLogitsLoss', 'FocalLoss'
   label_smoothing: 0.1            # 레이블 스무딩(Label Smoothing) 값. 0.0은 비활성화. (과적합 방지, 모델 일반화 성능 향상)
   
-  # --- 학습률 Warmup 설정 ---
-  warmup:
-    enabled: false               # true: Warmup 사용, false: 사용 안 함
-    epochs: 5                   # Warmup을 진행할 에포크 수
-    start_lr: 0.00001           # Warmup 시작 시의 학습률 (선형증가)
 
 # --- 'BCEWithLogitsLoss' 사용 시 양성 클래스 가중치 ---
   # bce_pos_weight: 'auto'        # 'auto'로 설정 시 자동 계산, 특정 값(예: 9.0)으로 수동 설정 가능. (num_labels=2여도 코드가 자동으로 [B, 1]로 변환하여 처리)
@@ -96,19 +94,14 @@ training_main:
 # 3. 훈련 하이퍼파라미터 (baseline.py 전용)
 # =============================================================================
 training_baseline:
-  epochs: 10                  
-  batch_size: 16               
+  epochs: 90                  
+  batch_size: 256               
   pre_trained: false             # true: ImageNet 사전 훈련 가중치 사용, false: 무작위 초기화 가중치 사용
   optimizer: 'adamw'            # 사용할 옵티마이저. 옵션: 'adamw', 'sgd', 'nadam', 'radam', 'rmsprop'
   lr: 0.001                     # 옵티마이저의 학습률.
   weight_decay: 0.0001             # AdamW 옵티마이저의 가중치 감쇠(Weight Decay) 값.
   loss_function: 'CrossEntropyLoss' # 사용할 손실 함수. 옵션: 'CrossEntropyLoss', 'BCEWithLogitsLoss', 'FocalLoss'
   label_smoothing: 0.1            # 레이블 스무딩(Label Smoothing) 값. 0.0은 비활성화. (과적합 방지, 모델 일반화 성능 향상)
-  # --- 학습률 Warmup 설정 ---
-  warmup:
-    enabled: false               # true: Warmup 사용, false: 사용 안 함
-    epochs: 5                   # Warmup을 진행할 에포크 수
-    start_lr: 0.00001           # Warmup 시작 시의 학습률 (선형증가)
 
   scheduler: 'cosineannealinglr' # 옵션: 'multisteplr', 'cosineannealinglr', 'none'
   scheduler_params:
@@ -128,11 +121,6 @@ finetuning_pruned:
   weight_decay: 0.0001           # 가중치 감쇠 값.
   loss_function: 'CrossEntropyLoss' # 손실 함수.
   label_smoothing: 0.1           # 레이블 스무딩 값.
-  # --- 학습률 Warmup 설정 ---
-  warmup:
-    enabled: false
-    epochs: 5
-    start_lr: 0.000001
 
   scheduler: 'cosineannealinglr'
   scheduler_params:
@@ -163,7 +151,7 @@ model:
   positional_encoding: true  # 이미지 패치 시퀀스 (인코더 출력)에 위치 인코딩 추가 여부. False로 설정하면 위치 정보를 사용하지 않습니다.
   res_attention: true        # 디코더 레이어 간에 어텐션 스코어를 전달하는 잔차 어텐션 사용 여부.
   save_attention: true       # 추론 시 어텐션 맵을 저장할지 여부. True로 설정하면 시각화에 사용할 수 있습니다.
-  num_plot_attention: 0     # 어텐션 맵을 시각화하여 저장할 최대 샘플 수.
+  num_plot_attention: 500     # 어텐션 맵을 시각화하여 저장할 최대 샘플 수.
 
 # =============================================================================
 # 5. Baseline 모델 설정 (baseline.py 전용)
@@ -177,8 +165,8 @@ baseline:
 #   use_l1_pruning: True       # L1 Norm Pruning 적용 여부
 #   use_fpgm_pruning: True     # FPGM Pruning (torch-pruning 라이브러리 사용) 적용 여부
   # use_wanda_pruning: True     # Wanda (Pruning by Weights and Activations, ICLR 2024) # 중요도를 $|Weight| \times ||Input Norm||$으로 정의합니다. 즉, 가중치가 작더라도 입력 신호($X$)가 강하게 들어오는 뉴런은 중요하다고 판단합니다.
-  num_wanda_calib_samples: 1353 # Wanda Pruning 시 Calibration에 사용할 샘플 수. Sewer-TAPNEW: 1353, Sewer-ML: 4096
+#   num_wanda_calib_samples: 1353 # Wanda Pruning 시 Calibration에 사용할 샘플 수. Sewer-TAPNEW: 1353, Sewer-ML: 4096
   
   # pruning_sparsity: 0.4756640625     # 수동으로 설정할 가지치기 희소도. 아래 target_flops가 0보다 클 경우 이 값은 무시됩니다.
-  pruning_flops_target: 0.1829   # 목표 FLOPs(GFLOPs). 0보다 큰 값으로 설정 시, 이 목표에 가장 가까운 pruning_sparsity를 자동으로 계산합니다.
+#   pruning_flops_target: 0.1829   # 목표 FLOPs(GFLOPs). 0보다 큰 값으로 설정 시, 이 목표에 가장 가까운 pruning_sparsity를 자동으로 계산합니다.
   # pruning_params_target: 0.031371     # 목표 파라미터 수(단위: M). 0보다 큰 값으로 설정 시, 이 목표에 가장 가까운 pruning_sparsity를 자동으로 계산합니다.

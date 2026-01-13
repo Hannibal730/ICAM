@@ -305,37 +305,10 @@ def train(run_cfg, train_cfg, model, optimizer, scheduler, train_loader, valid_l
     best_model_criterion = getattr(train_cfg, 'best_model_criterion', 'F1_average')
     best_metric = 0.0 if best_model_criterion != 'val_loss' else float('inf')
 
-    # --- Warmup 설정 ---
-    warmup_cfg = getattr(train_cfg, 'warmup', None)
-    use_warmup = warmup_cfg and getattr(warmup_cfg, 'enabled', False)
-    if use_warmup:
-        warmup_epochs = getattr(warmup_cfg, 'epochs', 0)
-        warmup_start_lr = getattr(warmup_cfg, 'start_lr', 0.0)
-        warmup_end_lr = train_cfg.lr # Warmup 종료 LR은 메인 LR로 설정
-        logging.info(f"Warmup 활성화: {warmup_epochs} 에포크 동안 LR을 {warmup_start_lr}에서 {warmup_end_lr}로 선형 증가시킵니다.")
-
-        # Warmup 기간 동안에는 스케줄러를 비활성화합니다.
-        original_scheduler_step = scheduler.step if scheduler else lambda: None
-        if scheduler:
-            scheduler.step = lambda: None
-
 
     for epoch in range(train_cfg.epochs):
         # 에포크 시작 시 구분을 위한 라인 추가
         logging.info("-" * 50)
-
-        # --- Warmup LR 조정 ---
-        if use_warmup and epoch < warmup_epochs:
-            lr_step = (warmup_end_lr - warmup_start_lr) / warmup_epochs
-            current_lr = warmup_start_lr + (epoch + 1) * lr_step
-            # 첫 에포크(epoch=0)에서는 start_lr로, 마지막 warmup 에포크에서는 end_lr에 가깝도록 선형적으로 증가시킵니다.
-            if warmup_epochs > 1:
-                lr_step = (warmup_end_lr - warmup_start_lr) / (warmup_epochs - 1)
-                current_lr = warmup_start_lr + epoch * lr_step
-            else: # warmup_epochs가 1인 경우
-                current_lr = warmup_end_lr
-            for param_group in optimizer.param_groups:
-                param_group['lr'] = current_lr
 
         # 에포크 시작 시 Learning Rate 로깅
         current_lr = optimizer.param_groups[0]['lr']
@@ -414,14 +387,8 @@ def train(run_cfg, train_cfg, model, optimizer, scheduler, train_loader, valid_l
             logging.info(f"[Best Model Saved] ({criterion_name}: {best_metric:.4f}) -> '{model_path}'")
         
         # 스케줄러가 설정된 경우에만 step()을 호출
-        # Warmup 기간이 끝난 후에만 원래 스케줄러를 사용합니다.
-        if use_warmup and epoch == warmup_epochs - 1:
-            logging.info(f"Warmup 종료. 에포크 {epoch + 2}부터 기존 스케줄러를 활성화합니다.")
-            if scheduler:
-                scheduler.step = original_scheduler_step # 원래 스케줄러 step 함수 복원
-        
-        if not (use_warmup and epoch < warmup_epochs) and scheduler:
-            scheduler.step() # Warmup 기간이 아닐 때 스케줄러 step 호출
+        if scheduler:
+            scheduler.step()
 
 def inference(run_cfg, model_cfg, model, data_loader, device, run_dir_path, timestamp, mode_name="Inference", class_names=None, output_dir=None):
     """저장된 모델을 불러와 추론 시 GPU 메모리 사용량을 측정하고, 테스트셋 성능을 평가합니다."""
@@ -853,9 +820,6 @@ def main():
     # 중첩된 scheduler_params 딕셔너리를 SimpleNamespace로 변환
     if hasattr(train_cfg, 'scheduler_params') and isinstance(train_cfg.scheduler_params, dict):
         train_cfg.scheduler_params = SimpleNamespace(**train_cfg.scheduler_params)
-    # Warmup 설정을 SimpleNamespace로 변환
-    if hasattr(train_cfg, 'warmup') and isinstance(train_cfg.warmup, dict):
-        train_cfg.warmup = SimpleNamespace(**train_cfg.warmup)
 
     # dataset_cfg도 SimpleNamespace로 변환
     run_cfg.dataset = SimpleNamespace(**run_cfg.dataset)
