@@ -97,34 +97,7 @@ def setup_logging(run_cfg, data_dir_name):
     return run_dir_path, timestamp
 
 # =============================================================================
-# 2. Focal Loss 클래스 정의
-# =============================================================================
-class FocalLoss(nn.Module):
-    """
-    Focal Loss 구현. 클래스 불균형 문제를 해결하기 위해 사용됩니다.
-    """
-    def __init__(self, alpha=0.25, gamma=2.0, reduction='mean'):
-        super(FocalLoss, self).__init__()
-        self.alpha = alpha
-        self.gamma = gamma
-        self.reduction = reduction
-
-    def forward(self, inputs, targets):
-        # inputs: 모델의 출력 로짓 (B, C)
-        # targets: 실제 레이블 (B)
-        ce_loss = F.cross_entropy(inputs, targets, reduction='none')
-        pt = torch.exp(-ce_loss) # pt = p if target=1, 1-p if target=0
-        focal_loss = self.alpha * (1 - pt)**self.gamma * ce_loss
-
-        if self.reduction == 'mean':
-            return focal_loss.mean()
-        elif self.reduction == 'sum':
-            return focal_loss.sum()
-        else:
-            return focal_loss
-
-# =============================================================================
-# 3. 훈련 및 평가 함수
+# 2. 훈련 및 평가 함수
 # =============================================================================
 def log_model_parameters(model):
     """모델의 구간별 및 총 파라미터 수를 계산하고 로깅합니다."""
@@ -294,11 +267,6 @@ def train(run_cfg, train_cfg, model, optimizer, scheduler, train_loader, valid_l
         label_smoothing = getattr(train_cfg, 'label_smoothing', 0.0)
         criterion = nn.CrossEntropyLoss(label_smoothing=label_smoothing)
         logging.info(f"손실 함수: CrossEntropyLoss (label_smoothing: {label_smoothing})")
-    elif loss_function_name == 'focalloss':
-        alpha = getattr(train_cfg, 'focal_loss_alpha', 0.25)
-        gamma = getattr(train_cfg, 'focal_loss_gamma', 2.0)
-        criterion = FocalLoss(alpha=alpha, gamma=gamma)
-        logging.info(f"손실 함수: FocalLoss (alpha: {alpha}, gamma: {gamma})")
     else:
         raise ValueError(f"run.py에서 지원하지 않는 손실 함수입니다: {loss_function_name}")
 

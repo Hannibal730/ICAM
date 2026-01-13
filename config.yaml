@@ -73,16 +73,12 @@ training_main:
   optimizer: 'adamw'            # 사용할 옵티마이저. 옵션: 'adamw', 'sgd', 'nadam', 'radam', 'rmsprop'
   lr: 0.001                     # 옵티마이저의 학습률.
   weight_decay: 0.0001             # AdamW 옵티마이저의 가중치 감쇠(Weight Decay) 값.
-  loss_function: 'CrossEntropyLoss' # 사용할 손실 함수. 옵션: 'CrossEntropyLoss', 'BCEWithLogitsLoss', 'FocalLoss'
+  loss_function: 'CrossEntropyLoss' # 사용할 손실 함수. 옵션: 'CrossEntropyLoss', 'BCEWithLogitsLoss'
   label_smoothing: 0.1            # 레이블 스무딩(Label Smoothing) 값. 0.0은 비활성화. (과적합 방지, 모델 일반화 성능 향상)
   
 
 # --- 'BCEWithLogitsLoss' 사용 시 양성 클래스 가중치 ---
   # bce_pos_weight: 'auto'        # 'auto'로 설정 시 자동 계산, 특정 값(예: 9.0)으로 수동 설정 가능. (num_labels=2여도 코드가 자동으로 [B, 1]로 변환하여 처리)
-  
-  # --- FocalLoss 하이퍼파라미터 --- (loss_function이 'FocalLoss'일 때 사용)
-  # focal_loss_alpha: 0.5          # 클래스 불균형 조절. (0.5: 균등, >0.5: Defect 중요도 상승(Recall 향상), <0.5: Normal 중요도 상승(Precision 향상))
-  # focal_loss_gamma: 2.0           # 학습 집중도 조절. (0: 일반 CE Loss, >0: 어려운 샘플에 집중(과적합 완화), 값이 클수록 집중도 상승)
 
   # 사용할 학습률 스케줄러를 설정합니다.
   scheduler: 'cosineannealinglr' # 옵션: 'multisteplr', 'cosineannealinglr', 'none'
@@ -103,7 +99,7 @@ training_baseline:
   optimizer: 'adamw'            # 사용할 옵티마이저. 옵션: 'adamw', 'sgd', 'nadam', 'radam', 'rmsprop'
   lr: 0.001                     # 옵티마이저의 학습률.
   weight_decay: 0.0001             # AdamW 옵티마이저의 가중치 감쇠(Weight Decay) 값.
-  loss_function: 'CrossEntropyLoss' # 사용할 손실 함수. 옵션: 'CrossEntropyLoss', 'BCEWithLogitsLoss', 'FocalLoss'
+  loss_function: 'CrossEntropyLoss' # 사용할 손실 함수. 옵션: 'CrossEntropyLoss', 'BCEWithLogitsLoss'
   label_smoothing: 0.1            # 레이블 스무딩(Label Smoothing) 값. 0.0은 비활성화. (과적합 방지, 모델 일반화 성능 향상)
 
   scheduler: 'cosineannealinglr' # 옵션: 'multisteplr', 'cosineannealinglr', 'none'
