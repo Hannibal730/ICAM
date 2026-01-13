@@ -15,6 +15,12 @@ import timm
 from torchvision import models as torchvision_models
 import types
 import torch.nn.functional as F
+import gc
+
+try:
+    import psutil
+except ImportError:
+    psutil = None
 
 # timm layers
 try:
@@ -49,7 +55,7 @@ except ImportError:
 # =============================================================================
 from models import Model as DecoderBackbone, PatchConvEncoder, Classifier, HybridModel
 from dataloader import prepare_data, InferenceImageDataset
-from onnx_utils import ONNXCalibrationDataReader, measure_cpu_peak_memory_during_inference
+from onnx_utils import ONNXCalibrationDataReader, measure_onnx_performance, MemoryMonitor
 
 def setup_logging(run_cfg, data_dir_name):
     """
@@ -428,10 +434,16 @@ def main():
 
     logging.info(f"Loading weights from: {model_path}")
 
+    # 더미 입력 생성 (ONNX 변환 및 성능 측정용) - 모델 로드 전에 생성
+    dummy_input = torch.randn(1, 3, model_cfg.img_size, model_cfg.img_size).to(device)
+    single_dummy_input = dummy_input
+
     # 이미 ONNX 파일을 전달받는 경우: ONNX Runtime 세션으로 바로 로드하고
     # PyTorch의 torch.load를 시도하지 않도록 분기 처리합니다.
     model_ext = os.path.splitext(model_path)[1].lower()
     skip_torch_load = False
+    onnx_session = None
+
     if model_ext == '.onnx':
         if not onnxruntime:
             logging.error("ONNX Runtime이 설치되어 있지 않아 .onnx 파일을 직접 로드할 수 없습니다.")
@@ -439,16 +451,32 @@ def main():
         try:
             sess_options = onnxruntime.SessionOptions()
             # 기본적으로 CPUExecutionProvider 사용 (환경에 따라 변경 가능)
-            onnx_session = onnxruntime.InferenceSession(model_path, sess_options=sess_options, providers=['CPUExecutionProvider'])
+            gc.collect()
+            process = psutil.Process(os.getpid()) if psutil else None
+            mem_before_load = process.memory_info().rss / (1024 * 1024) if process else 0
+
+            with MemoryMonitor() as mem_mon:
+                onnx_session = onnxruntime.InferenceSession(model_path, sess_options=sess_options, providers=['CPUExecutionProvider'])
+            if psutil:
+                logging.info(f"[Model Load] ONNX 모델 로드 메모리: {mem_mon.peak_memory:.2f} MB (증가량: {mem_mon.peak_memory - mem_mon.start_memory:.2f} MB)")
             logging.info(f"Loaded ONNX model into ONNX Runtime session: {model_path}")
             skip_torch_load = True
         except Exception as e:
             logging.error(f"Failed to create ONNX Runtime session from provided .onnx file: {e}")
             return
+        
+        # 성능 측정
+        inference_peak = measure_onnx_performance(onnx_session, dummy_input)
+        if psutil and inference_peak:
+            logging.info(f"[Total Process] ONNX 모델 전체 메모리 사용량: {inference_peak:.2f} MB (전체 증가량: {inference_peak - mem_before_load:.2f} MB)")
 
     if not skip_torch_load:
         try:
-            model.load_state_dict(torch.load(model_path, map_location=device, weights_only=True))
+            gc.collect()
+            with MemoryMonitor() as mem_mon:
+                model.load_state_dict(torch.load(model_path, map_location=device, weights_only=True))
+            if psutil:
+                logging.info(f"[Model Load] PyTorch 모델 가중치 로드 메모리: {mem_mon.peak_memory:.2f} MB (증가량: {mem_mon.peak_memory - mem_mon.start_memory:.2f} MB)")
         except Exception as e:
             logging.error(f"Failed to load model weights: {e}")
             return
@@ -459,15 +487,9 @@ def main():
     use_fp16 = getattr(run_cfg, 'use_fp16_inference', False)
     use_int8 = getattr(run_cfg, 'use_int8_inference', False)
     
-    # 더미 입력 생성 (ONNX 변환용)
-    dummy_input = torch.randn(1, 3, model_cfg.img_size, model_cfg.img_size).to(device)
-    single_dummy_input = dummy_input
-
     if use_int8 and use_fp16:
         logging.error("use_int8_inference과 use_fp16_inference이 동시에 설정되었습니다. 둘 중 하나만 True로 설정해주세요.")
         raise ValueError("Conflicting quantization options: use_int8_inference and use_fp16_inference are both True.")
-
-    onnx_session = None
 
     if use_int8:
         logging.info("INT8 Static Quantization (ONNX)을 적용합니다.")
@@ -537,8 +559,21 @@ def main():
         # 5. Session Create
         sess_options = onnxruntime.SessionOptions()
         sess_options.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_ENABLE_ALL
-        onnx_session = onnxruntime.InferenceSession(int8_onnx_path, sess_options=sess_options, providers=['CPUExecutionProvider'])
-    
+        
+        # [수정] 메모리 모니터링 적용
+        gc.collect()
+        process = psutil.Process(os.getpid()) if psutil else None
+        mem_before_load = process.memory_info().rss / (1024 * 1024) if process else 0
+
+        with MemoryMonitor() as mem_mon:
+            onnx_session = onnxruntime.InferenceSession(int8_onnx_path, sess_options=sess_options, providers=['CPUExecutionProvider'])
+        
+        if psutil:
+            logging.info(f"[Model Load] ONNX 모델(INT8) 로드 메모리: {mem_mon.peak_memory:.2f} MB (증가량: {mem_mon.peak_memory - mem_mon.start_memory:.2f} MB)")
+        
+        inference_peak = measure_onnx_performance(onnx_session, dummy_input)
+        if psutil and inference_peak:
+             logging.info(f"[Total Process] ONNX 모델(INT8) 전체 메모리 사용량: {inference_peak:.2f} MB (전체 증가량: {inference_peak - mem_before_load:.2f} MB)")
     elif use_fp16:
         logging.info("FP16 Inference (ONNX)을 적용합니다.")
         if not (onnxruntime and onnx and float16):
@@ -560,7 +595,21 @@ def main():
         # 3. Session Create
         sess_options = onnxruntime.SessionOptions()
         sess_options.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_DISABLE_ALL
-        onnx_session = onnxruntime.InferenceSession(fp16_onnx_path, sess_options=sess_options, providers=['CPUExecutionProvider'])
+        
+        # [수정] 메모리 모니터링 적용
+        gc.collect()
+        process = psutil.Process(os.getpid()) if psutil else None
+        mem_before_load = process.memory_info().rss / (1024 * 1024) if process else 0
+
+        with MemoryMonitor() as mem_mon:
+            onnx_session = onnxruntime.InferenceSession(fp16_onnx_path, sess_options=sess_options, providers=['CPUExecutionProvider'])
+        
+        if psutil:
+            logging.info(f"[Model Load] ONNX 모델(FP16) 로드 메모리: {mem_mon.peak_memory:.2f} MB (증가량: {mem_mon.peak_memory - mem_mon.start_memory:.2f} MB)")
+        
+        inference_peak = measure_onnx_performance(onnx_session, dummy_input)
+        if psutil and inference_peak:
+             logging.info(f"[Total Process] ONNX 모델(FP16) 전체 메모리 사용량: {inference_peak:.2f} MB (전체 증가량: {inference_peak - mem_before_load:.2f} MB)")
 
     # 7. 추론 실행
     all_filenames = []
@@ -574,10 +623,6 @@ def main():
         # ONNX Inference
         input_name = onnx_session.get_inputs()[0].name
         input_type = onnx_session.get_inputs()[0].type
-        
-        # CPU Memory Measurement
-        if device.type == 'cpu':
-             measure_cpu_peak_memory_during_inference(onnx_session, test_loader, device)
 
         for images, _, filenames in progress_bar:
             images_np = images.cpu().numpy()

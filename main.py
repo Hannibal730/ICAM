@@ -16,6 +16,7 @@ import logging
 from datetime import datetime
 import random
 import time 
+import gc
 from models import Model as DecoderBackbone, PatchConvEncoder, Classifier, HybridModel
 
 try:
@@ -56,7 +57,7 @@ except ImportError:
     quantize_fx = None
     get_default_qconfig_mapping = None
 
-from onnx_utils import evaluate_onnx, measure_onnx_performance, measure_model_flops, ONNXCalibrationDataReader
+from onnx_utils import evaluate_onnx, measure_onnx_performance, measure_model_flops, ONNXCalibrationDataReader, MemoryMonitor
 
 from plot import plot_and_save_train_val_accuracy_graph, plot_and_save_val_accuracy_graph, plot_and_save_confusion_matrix, plot_and_save_attention_maps, plot_and_save_f1_normal_graph, plot_and_save_loss_graph, plot_and_save_lr_graph, plot_and_save_compiled_graph
 
@@ -530,11 +531,24 @@ def inference(run_cfg, model_cfg, model, data_loader, device, run_dir_path, time
         logging.info(f"ONNX INT8 모델 저장 완료: {int8_onnx_path}")
 
         # 4. Evaluate
-        sess_options = onnxruntime.SessionOptions()
-        sess_options.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_ENABLE_ALL
-        onnx_session = onnxruntime.InferenceSession(int8_onnx_path, sess_options=sess_options, providers=['CPUExecutionProvider'])
+        # [수정] 모델 로드 메모리(Static Footprint)와 추론 메모리(Dynamic Overhead) 분리 측정
+        gc.collect()
+        # [추가] 전체 메모리 증가량 계산을 위한 기준점 측정
+        process = psutil.Process(os.getpid()) if psutil else None
+        mem_before_load = process.memory_info().rss / (1024 * 1024) if process else 0
+
+        with MemoryMonitor() as mem_mon:
+            sess_options = onnxruntime.SessionOptions()
+            sess_options.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_ENABLE_ALL
+            onnx_session = onnxruntime.InferenceSession(int8_onnx_path, sess_options=sess_options, providers=['CPUExecutionProvider'])
         
-        measure_onnx_performance(onnx_session, dummy_input_cpu)
+        if psutil:
+            logging.info(f"[Model Load] ONNX 모델(INT8) 로드 메모리: {mem_mon.peak_memory:.2f} MB (증가량: {mem_mon.peak_memory - mem_mon.start_memory:.2f} MB)")
+
+        inference_peak = measure_onnx_performance(onnx_session, dummy_input_cpu)
+        if psutil and inference_peak:
+             logging.info(f"[Total Process] ONNX 모델(INT8) 전체 메모리 사용량: {inference_peak:.2f} MB (전체 증가량: {inference_peak - mem_before_load:.2f} MB)")
+
         eval_results = evaluate_onnx(run_cfg, onnx_session, data_loader, desc=f"[{mode_name} (ONNX INT8)]", class_names=class_names, log_class_metrics=True)
         
         if eval_results['labels'] and eval_results['preds']:
@@ -575,12 +589,24 @@ def inference(run_cfg, model_cfg, model, data_loader, device, run_dir_path, time
         logging.info(f"ONNX FP16 모델 저장 완료: {fp16_onnx_path}")
 
         # 3. Evaluate
-        sess_options = onnxruntime.SessionOptions()
-        sess_options.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_DISABLE_ALL
-        # [수정] 사용자의 요청에 따라 CPUExecutionProvider로 고정
-        onnx_session = onnxruntime.InferenceSession(fp16_onnx_path, sess_options=sess_options, providers=['CPUExecutionProvider'])
-        
-        measure_onnx_performance(onnx_session, dummy_input_cpu)
+        # [수정] 모델 로드 메모리(Static Footprint)와 추론 메모리(Dynamic Overhead) 분리 측정
+        gc.collect()
+        # [추가] 전체 메모리 증가량 계산을 위한 기준점 측정
+        process = psutil.Process(os.getpid()) if psutil else None
+        mem_before_load = process.memory_info().rss / (1024 * 1024) if process else 0
+
+        with MemoryMonitor() as mem_mon:
+            sess_options = onnxruntime.SessionOptions()
+            sess_options.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_DISABLE_ALL
+            onnx_session = onnxruntime.InferenceSession(fp16_onnx_path, sess_options=sess_options, providers=['CPUExecutionProvider'])
+
+        if psutil:
+            logging.info(f"[Model Load] ONNX 모델(FP16) 로드 메모리: {mem_mon.peak_memory:.2f} MB (증가량: {mem_mon.peak_memory - mem_mon.start_memory:.2f} MB)")
+
+        inference_peak = measure_onnx_performance(onnx_session, dummy_input_cpu)
+        if psutil and inference_peak:
+             logging.info(f"[Total Process] ONNX 모델(FP16) 전체 메모리 사용량: {inference_peak:.2f} MB (전체 증가량: {inference_peak - mem_before_load:.2f} MB)")
+
         eval_results = evaluate_onnx(run_cfg, onnx_session, data_loader, desc=f"[{mode_name} (ONNX FP16)]", class_names=class_names, log_class_metrics=True)
 
         if eval_results['labels'] and eval_results['preds']:
@@ -593,6 +619,8 @@ def inference(run_cfg, model_cfg, model, data_loader, device, run_dir_path, time
     logging.info("="*50)
     logging.info("GPU 캐시를 비우고 측정을 시작합니다.")
     if device.type == 'cuda' and torch.cuda.is_available():
+        # [추가] Python 가비지 컬렉션 및 CUDA 캐시 비우기
+        gc.collect()
         torch.cuda.empty_cache()
         torch.cuda.reset_peak_memory_stats(device)
         
@@ -653,15 +681,17 @@ def inference(run_cfg, model_cfg, model, data_loader, device, run_dir_path, time
         with torch.no_grad():
             for _ in range(10):
                 _ = model(single_dummy_input)
+        
+        gc.collect() # [추가] CPU 메모리 측정 전 GC 수행
 
         # 실제 시간 측정
         num_iterations = 100
         iteration_times = []
         with torch.no_grad():
             for _ in range(num_iterations):
-                start_time = time.time()
+                start_time = time.perf_counter()
                 _ = model(single_dummy_input)
-                end_time = time.time()
+                end_time = time.perf_counter()
                 iteration_times.append((end_time - start_time) * 1000) # ms
 
         avg_inference_time_per_sample = np.mean(iteration_times)
@@ -807,8 +837,22 @@ def inference(run_cfg, model_cfg, model, data_loader, device, run_dir_path, time
                 logging.info(f"모델이 ONNX 형식으로 변환되어 '{onnx_path}'에 저장되었습니다. (크기: {onnx_file_size_mb:.2f} MB)")
 
                 # ONNX 런타임 세션 생성 및 평가
-                onnx_session = onnxruntime.InferenceSession(onnx_path, sess_options=sess_options, providers=['CPUExecutionProvider'])
-                measure_onnx_performance(onnx_session, dummy_input)
+                # [수정] 모델 로드 메모리(Static Footprint)와 추론 메모리(Dynamic Overhead) 분리 측정
+                gc.collect()
+                # [추가] 전체 메모리 증가량 계산을 위한 기준점 측정
+                process = psutil.Process(os.getpid()) if psutil else None
+                mem_before_load = process.memory_info().rss / (1024 * 1024) if process else 0
+
+                with MemoryMonitor() as mem_mon:
+                    onnx_session = onnxruntime.InferenceSession(onnx_path, sess_options=sess_options, providers=['CPUExecutionProvider'])
+                
+                if psutil:
+                    logging.info(f"[Model Load] ONNX 모델(FP32) 로드 메모리: {mem_mon.peak_memory:.2f} MB (증가량: {mem_mon.peak_memory - mem_mon.start_memory:.2f} MB)")
+
+                inference_peak = measure_onnx_performance(onnx_session, dummy_input)
+                if psutil and inference_peak:
+                    logging.info(f"[Total Process] ONNX 모델(FP32) 전체 메모리 사용량: {inference_peak:.2f} MB (전체 증가량: {inference_peak - mem_before_load:.2f} MB)")
+
                 evaluate_onnx(run_cfg, onnx_session, data_loader, desc=f"[{mode_name} (ONNX)]", class_names=class_names, log_class_metrics=True)
 
             except Exception as e:

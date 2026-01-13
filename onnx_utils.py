@@ -6,6 +6,8 @@ import torch
 from torch.utils.data import Subset
 from tqdm import tqdm
 from sklearn.metrics import precision_score, recall_score, f1_score
+import threading
+import gc
 
 try:
     import psutil
@@ -23,6 +25,40 @@ try:
     from thop import profile
 except ImportError:
     profile = None
+
+# [추가] SCI급 논문용 정밀 메모리 측정 클래스 (Context Manager)
+class MemoryMonitor:
+    def __init__(self, interval=0.001):
+        self.interval = interval
+        self.stop_event = threading.Event()
+        self.peak_memory = 0
+        self.start_memory = 0
+        self.process = psutil.Process(os.getpid()) if psutil else None
+
+    def __enter__(self):
+        if not self.process: return self
+        # 시작 시점 메모리 (Baseline)
+        self.start_memory = self.process.memory_info().rss / (1024 * 1024)
+        self.peak_memory = self.start_memory
+        # 모니터링 스레드 시작
+        self.thread = threading.Thread(target=self._monitor)
+        self.thread.start()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if not self.process: return
+        self.stop_event.set()
+        self.thread.join()
+
+    def _monitor(self):
+        while not self.stop_event.is_set():
+            try:
+                current_mem = self.process.memory_info().rss / (1024 * 1024)
+                if current_mem > self.peak_memory:
+                    self.peak_memory = current_mem
+            except:
+                pass
+            time.sleep(self.interval)
 
 def evaluate_onnx(run_cfg, onnx_session, data_loader, desc="Evaluating ONNX", class_names=None, log_class_metrics=False):
     """ONNX 모델을 평가하고 정확도, 정밀도, 재현율, F1 점수를 로깅합니다."""
@@ -96,28 +132,24 @@ def measure_onnx_performance(onnx_session, dummy_input):
     if 'float16' in input_type:
         single_dummy_input_np = single_dummy_input_np.astype(np.float16)
 
-    # CPU 시간 측정을 위한 예열(warm-up)
-    for _ in range(10):
-        _ = onnx_session.run(None, {input_name: single_dummy_input_np})
+    # [추가] 정확한 메모리 측정을 위해 가비지 컬렉션 수행
+    gc.collect()
+    
+    # [수정] MemoryMonitor를 사용하여 Warm-up 및 추론 루프 전체의 피크 메모리 측정
+    with MemoryMonitor(interval=0.0001) as mem_mon:
+        # CPU 시간 측정을 위한 예열(warm-up)
+        for _ in range(10):
+            _ = onnx_session.run(None, {input_name: single_dummy_input_np})
 
-    # 실제 시간 측정
-    num_iterations = 100
-    iteration_times = []
-
-    # [추가] 메모리 측정 준비
-    process = psutil.Process(os.getpid()) if psutil else None
-    mem_before = process.memory_info().rss / (1024 * 1024) if process else 0
-    peak_mem = mem_before
-
-    for _ in range(num_iterations):
-        start_time = time.time()
-        _ = onnx_session.run(None, {input_name: single_dummy_input_np})
-        end_time = time.time()
-        iteration_times.append((end_time - start_time) * 1000) # ms
+        # 실제 시간 측정
+        num_iterations = 100
+        iteration_times = []
         
-        # [추가] 메모리 피크 갱신
-        if process:
-            peak_mem = max(peak_mem, process.memory_info().rss / (1024 * 1024))
+        for _ in range(num_iterations):
+            start_time = time.perf_counter()
+            _ = onnx_session.run(None, {input_name: single_dummy_input_np})
+            end_time = time.perf_counter()
+            iteration_times.append((end_time - start_time) * 1000) # ms
 
     # 단일 이미지 추론을 반복했으므로, 총 시간을 반복 횟수로 나누면 샘플 당 평균 시간이 됩니다.
     avg_inference_time_per_sample = np.mean(iteration_times)
@@ -131,11 +163,14 @@ def measure_onnx_performance(onnx_session, dummy_input):
     logging.info(f"샘플 당 평균 Forward Pass 시간 (ONNX, CPU): {avg_inference_time_per_sample:.2f}ms (std: {std_inference_time_per_sample:.2f}ms)")
     logging.info(f"샘플 당 평균 FPS (ONNX, CPU): {avg_fps:.2f} FPS (std: {std_fps:.2f}) (1개 샘플 x {num_iterations}회 반복)")
     
-    # [수정] 메모리 측정 결과 출력
-    if process:
-        logging.info(f"ONNX 런타임 추론 중 최대 CPU 메모리 사용량: {peak_mem:.2f} MB (증가량: {peak_mem - mem_before:.2f} MB)")
+    # [추가] 추론 중 메모리 사용량 로깅
+    peak_mem = 0
+    if psutil:
+        logging.info(f"[Inference Only] ONNX 런타임 추론 중 최대 CPU 메모리: {mem_mon.peak_memory:.2f} MB (순수 증가량: {mem_mon.peak_memory - mem_mon.start_memory:.2f} MB)")
+        peak_mem = mem_mon.peak_memory
     else:
-        logging.info("ONNX 런타임의 CPU 메모리 사용량 측정은 지원되지 않습니다. (psutil 미설치)")
+        logging.warning("psutil 모듈이 없어 메모리 측정을 수행하지 못했습니다.")
+    return peak_mem
 
 def measure_cpu_peak_memory_during_inference(session, data_loader, device):
     """ONNX 모델 추론 중 CPU 최대 메모리 사용량(RSS)을 단일 샘플 기준으로 측정합니다."""
@@ -161,31 +196,28 @@ def measure_cpu_peak_memory_during_inference(session, data_loader, device):
         logging.error(f"ONNX 메모리 측정을 위한 더미 데이터 생성 중 오류 발생: {e}")
         return
 
-    # 기준 메모리를 추론 실행 전에 측정
-    mem_before = process.memory_info().rss / (1024 * 1024) # MB
-    logging.info(f"ONNX 추론 실행 전 기본 CPU 메모리: {mem_before:.2f} MB")
-    peak_mem = mem_before
-
-    # Warm-up (10회)
-    logging.info("ONNX CPU 메모리 측정을 위한 예열(warm-up)을 시작합니다 (단일 샘플 x 10회).")
-    for _ in range(10):
-        session.run(None, {input_name: single_dummy_input_np})
-        # 예열 중에도 메모리 피크를 측정
-        peak_mem = max(peak_mem, process.memory_info().rss / (1024 * 1024))
-
-    logging.info("="*50)
-    logging.info("ONNX 모델 추론 중 CPU 최대 메모리 사용량 측정을 시작합니다 (단일 샘플 x 100회 반복).")
+    # [추가] 정확한 메모리 측정을 위해 가비지 컬렉션 수행
+    gc.collect()
     
-    # 실제 측정 (100회 반복)
-    num_iterations = 100
-    for _ in range(num_iterations):
-        session.run(None, {input_name: single_dummy_input_np})
-        peak_mem = max(peak_mem, process.memory_info().rss / (1024 * 1024))
+    with MemoryMonitor(interval=0.0001) as mem_mon:
+        # Warm-up (10회)
+        logging.info("ONNX CPU 메모리 측정을 위한 예열(warm-up)을 시작합니다 (단일 샘플 x 10회).")
+        for _ in range(10):
+            session.run(None, {input_name: single_dummy_input_np})
 
-    logging.info(f"  - 추론 전 기본 CPU 메모리: {mem_before:.2f} MB")
-    logging.info(f"  - 추론 중 최대 CPU 메모리 (Peak): {peak_mem:.2f} MB")
-    logging.info(f"  - 추론으로 인한 순수 메모리 증가량: {(peak_mem - mem_before):.2f} MB")
+        logging.info("="*50)
+        logging.info("ONNX 모델 추론 중 CPU 최대 메모리 사용량 측정을 시작합니다 (단일 샘플 x 100회 반복).")
+        
+        # 실제 측정 (100회 반복)
+        num_iterations = 100
+        for _ in range(num_iterations):
+            session.run(None, {input_name: single_dummy_input_np})
+
+    logging.info(f"  - 추론 전 기본 CPU 메모리: {mem_mon.start_memory:.2f} MB")
+    logging.info(f"  - 추론 중 최대 CPU 메모리 (Peak): {mem_mon.peak_memory:.2f} MB")
+    logging.info(f"  - 추론으로 인한 순수 메모리 증가량: {(mem_mon.peak_memory - mem_mon.start_memory):.2f} MB")
     logging.info("="*50)
+    return mem_mon.peak_memory
 
 def measure_model_flops(model, device, data_loader):
     """모델의 연산량(FLOPs)을 측정합니다."""

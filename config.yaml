@@ -8,7 +8,8 @@ run:
   
 #   pth_inference_dir: './pretrained/proposed_model/original'   # 추론 모드에서 사용할 .pth 모델이 포함된 디렉토리의 경로
 #   pth_inference_dir: './pretrained/baselines/original/mobile_vit_xxs'   # 추론 모드에서 사용할 .pth 모델이 포함된 디렉토리의 경로
-  pth_inference_dir: './log/Sewer-ML/main_20260113_041514'   # 추론 모드에서 사용할 .pth 모델이 포함된 디렉토리의 경로  
+  pth_inference_dir: './log/Sewer-ML/original/main_20260113_041514'   # 추론 모드에서 사용할 .pth 모델이 포함된 디렉토리의 경로  
+#   pth_inference_dir: './log/Sewer-ML/original/baseline_efficientnet_b0_20260109_145449'   # 추론 모드에서 사용할 .pth 모델이 포함된 디렉토리의 경로  
   pth_best_name: 'best_model.pth' # .pth 모델의 파일 이름 또는 추론 시 불러올 모델의 파일 이름.
   evaluate_onnx: true # true: 훈련/추론 시 ONNX를 생성하고 성능을 평가합니다. (이미 각 pth 파일폴더에 생성 후 저장해뒀습니다.)
 
@@ -21,10 +22,10 @@ run:
   only_inference: false # false: 정답 레이블과 비교하여 성능 평가.
   
   # 추론 시 양자화 옵션 (동시 사용 불가)
-#   use_fp16_inference: true # true: FP16(Half Precision) 추론 사용 (CUDA 권장)
-  use_int8_inference: true # true: INT8 동적 양자화 추론 사용 (CPU 권장)
-  int8_calib_samples: 2048 # [수정] 샘플 수를 256 -> 2048로 증가 권장
-  int8_calibration_method: 'Entropy' # Calibration 방법. 옵션: 'Entropy', 'MinMax', 'Percentile'
+  use_fp16_inference: true # true: FP16(Half Precision) 추론 사용 (CPU)
+#   use_int8_inference: true # true: INT8 동적 양자화 추론 사용 (CPU)
+  int8_calib_samples: 512 # [수정] 샘플 수를 256 -> 2048로 증가 권장
+  int8_calibration_method: 'Percentile' # Calibration 방법. 옵션: 'Entropy', 'MinMax', 'Percentile'
   int8_activation_type: 'QUInt8' # [추가] Activation 양자화 타입. 'QInt8'(기본) 또는 'QUInt8'(ReLU 모델 권장)
   int8_percentile: 99.99 # [추가] Percentile 방식 사용 시 적용할 백분위수 (기본값: 99.999)
 
@@ -51,7 +52,7 @@ run:
       # /home/user/workspace/disk/nvme1/data/Sewer/Sewer-TAP
       # /home/user/workspace/disk/nvme1/data/Sewer/Sewer-TAPNEW
       # img_folder: '/home/pi/Desktop/tap_new/data'
-      # img_folder: '/home/user/workspace/disk/nvme1/data/Sewer/Sewer-TAPNEW'
+      img_folder: '/home/user/workspace/disk/nvme1/data/Sewer/Sewer-TAPNEW'
       # img_folder: '/home/user/workspace/CHOI/Sewer-TAPNEW/data' # 5090서버 임시 데이터
       # img_folder: '/home/cau/workspace/data/Sewer/Sewer-TAPNEW' # 동국대 블랙월 서버
 
@@ -161,7 +162,7 @@ model:
 baseline:
   # 사용할 baseline 모델의 이름을 지정합니다.
   # 사용 가능한 옵션: 'efficientnet_b0', 'mobilenet_v4_s', 'xie2019', 'deit_tiny', 'mobile_vit_xxs'
-  model_name: 'mobile_vit_xxs'
+  model_name: 'efficientnet_b0'
 
   # --- 경량화 옵션 ---
 #   use_l1_pruning: True       # L1 Norm Pruning 적용 여부
