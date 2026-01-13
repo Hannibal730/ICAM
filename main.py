@@ -495,6 +495,17 @@ def inference(run_cfg, model_cfg, model, data_loader, device, run_dir_path, time
         int8_onnx_path = os.path.join(save_dir, f'best_model_int8.onnx')
 
         calib_method_str = getattr(run_cfg, 'int8_calibration_method', 'MinMax').lower()
+        
+        # [추가] Activation Type 설정
+        act_type_str = getattr(run_cfg, 'int8_activation_type', 'QInt8').lower()
+        activation_type = QuantType.QUInt8 if act_type_str == 'quint8' else QuantType.QInt8
+
+        # [추가] Extra Options
+        extra_options = {}
+        if calib_method_str == 'percentile':
+            percentile_val = getattr(run_cfg, 'int8_percentile', 99.999)
+            extra_options['Percentile'] = percentile_val
+
         if calib_method_str == 'entropy':
             calib_method = CalibrationMethod.Entropy
         elif calib_method_str == 'percentile':
@@ -502,6 +513,7 @@ def inference(run_cfg, model_cfg, model, data_loader, device, run_dir_path, time
         else:
             calib_method = CalibrationMethod.MinMax
         logging.info(f"Calibration Method: {calib_method_str} ({calib_method})")
+        logging.info(f"Activation Type: {activation_type} (Extra Options: {extra_options})")
 
         quantize_static(
             model_input=preprocessed_onnx_path, # 전처리된 모델 사용
@@ -510,7 +522,9 @@ def inference(run_cfg, model_cfg, model, data_loader, device, run_dir_path, time
             quant_format=QuantFormat.QDQ,
             per_channel=True,
             weight_type=QuantType.QInt8,
-            calibrate_method=calib_method
+            activation_type=activation_type, # [추가]
+            calibrate_method=calib_method,
+            extra_options=extra_options # [추가]
         )
 
         logging.info(f"ONNX INT8 모델 저장 완료: {int8_onnx_path}")

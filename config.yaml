@@ -6,7 +6,7 @@ run:
   cuda: true # true: CUDA 사용 시도. false: CPU만 사용. CUDA를 사용할 수 없는 경우 자동으로 CPU로 전환됩니다.
   mode: 'inference' # 실행 모드. 'train': 모델 훈련, 'inference': 모델 추론 및 성능 평가
   
-#   pth_inference_dir: './pretrained/proposed_model'   # 추론 모드에서 사용할 .pth 모델이 포함된 디렉토리의 경로
+#   pth_inference_dir: './pretrained/proposed_model/original'   # 추론 모드에서 사용할 .pth 모델이 포함된 디렉토리의 경로
 #   pth_inference_dir: './pretrained/baselines/original/mobile_vit_xxs'   # 추론 모드에서 사용할 .pth 모델이 포함된 디렉토리의 경로
   pth_inference_dir: './log/Sewer-ML/main_20260113_041514'   # 추론 모드에서 사용할 .pth 모델이 포함된 디렉토리의 경로  
   pth_best_name: 'best_model.pth' # .pth 모델의 파일 이름 또는 추론 시 불러올 모델의 파일 이름.
@@ -23,16 +23,18 @@ run:
   # 추론 시 양자화 옵션 (동시 사용 불가)
 #   use_fp16_inference: true # true: FP16(Half Precision) 추론 사용 (CUDA 권장)
   use_int8_inference: true # true: INT8 동적 양자화 추론 사용 (CPU 권장)
-  int8_calib_samples: 1024 # INT8 정적 양자화(Static Quantization) 시 Calibration에 사용할 샘플 수
+  int8_calib_samples: 2048 # [수정] 샘플 수를 256 -> 2048로 증가 권장
   int8_calibration_method: 'Entropy' # Calibration 방법. 옵션: 'Entropy', 'MinMax', 'Percentile'
+  int8_activation_type: 'QUInt8' # [추가] Activation 양자화 타입. 'QInt8'(기본) 또는 'QUInt8'(ReLU 모델 권장)
+  int8_percentile: 99.99 # [추가] Percentile 방식 사용 시 적용할 백분위수 (기본값: 99.999)
 
   # 로그를 콘솔에 출력하고 파일로 저장
   show_log: true # false: 모든 로깅 비활성화.
   
   # --- 데이터셋 설정 ---
   dataset:
-    name: 'Sewer-ML' # 생성할 폴더 이름 지정
-    type: 'csv'
+    name: 'Sewer-ML' # 사용할 데이터셋 이름 (로깅 및 폴더명 생성에 사용) Sewer-TAPNEW, Sewer-TAP, Sewer-ML
+    type: 'csv' # type: 'csv' (이미지 폴더 + CSV 라벨) 또는 'image_folder' (클래스별 폴더 구조)
     train_split_ratio: 0.8 # 'image_folder' 타입일 때 사용할 훈련 데이터 비율 (나머지는 테스트/검증 데이터가 됨)
 
     # 데이터셋 경로 설정
@@ -49,7 +51,7 @@ run:
       # /home/user/workspace/disk/nvme1/data/Sewer/Sewer-TAP
       # /home/user/workspace/disk/nvme1/data/Sewer/Sewer-TAPNEW
       # img_folder: '/home/pi/Desktop/tap_new/data'
-#       img_folder: '/home/user/workspace/disk/nvme1/data/Sewer/Sewer-TAPNEW'
+      # img_folder: '/home/user/workspace/disk/nvme1/data/Sewer/Sewer-TAPNEW'
       # img_folder: '/home/user/workspace/CHOI/Sewer-TAPNEW/data' # 5090서버 임시 데이터
       # img_folder: '/home/cau/workspace/data/Sewer/Sewer-TAPNEW' # 동국대 블랙월 서버
 

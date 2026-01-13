@@ -32,7 +32,8 @@ except ImportError:
 # ONNX 관련 라이브러리
 try:
     import onnxruntime
-    from onnxruntime.quantization import quantize_static, CalibrationDataReader, QuantType, QuantFormatt_pre_process
+    from onnxruntime.quantization import quantize_static, CalibrationDataReader, QuantType, QuantFormat, CalibrationMethod
+    from onnxruntime.quantization.preprocess import quant_pre_process
     import onnx
     from onnxconverter_common import float16
 except ImportError:
@@ -504,15 +505,34 @@ def main():
         # 4. Quantize
         int8_onnx_path = os.path.join(run_dir_path, 'model_int8.onnx')
 
+        # [추가] Activation Type 및 Extra Options 설정
+        act_type_str = getattr(run_cfg, 'int8_activation_type', 'QInt8').lower()
+        activation_type = QuantType.QUInt8 if act_type_str == 'quint8' else QuantType.QInt8
+
+        extra_options = {}
+        calib_method_str = getattr(run_cfg, 'int8_calibration_method', 'MinMax').lower()
         if calib_method_str == 'entropy':
             calib_method = CalibrationMethod.Entropy
         elif calib_method_str == 'percentile':
             calib_method = CalibrationMethod.Percentile
+            percentile_val = getattr(run_cfg, 'int8_percentile', 99.999)
+            extra_options['Percentile'] = percentile_val
         else:
             calib_method = CalibrationMethod.MinMax
         logging.info(f"Calibration Method: {calib_method_str} ({calib_method})")
+        logging.info(f"Activation Type: {activation_type} (Extra Options: {extra_options})")
 
-        quantize_static(preprocessed_onnx_path, int8_onnx_path, dr, quant_format=QuantFormat.QDQ, per_channel=True, weight_type=QuantType.QInt8, calibrate_method=calib_method)
+        quantize_static(
+            preprocessed_onnx_path, 
+            int8_onnx_path, 
+            dr, 
+            quant_format=QuantFormat.QDQ, 
+            per_channel=True, 
+            weight_type=QuantType.QInt8, 
+            activation_type=activation_type, # [추가]
+            calibrate_method=calib_method,
+            extra_options=extra_options # [추가]
+        )
         
         # 5. Session Create
         sess_options = onnxruntime.SessionOptions()
