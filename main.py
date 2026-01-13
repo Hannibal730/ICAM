@@ -37,7 +37,7 @@ except ImportError:
 
 try:
     import onnxruntime
-    from onnxruntime.quantization import quantize_static, CalibrationDataReader, QuantType, QuantFormat
+    from onnxruntime.quantization import quantize_static, CalibrationDataReader, QuantType, QuantFormat, CalibrationMethod
     from onnxruntime.quantization.preprocess import quant_pre_process
     import onnx
     from onnxconverter_common import float16
@@ -45,6 +45,7 @@ except ImportError:
     onnxruntime = None
     quantize_static = None
     quant_pre_process = None
+    CalibrationMethod = None
     onnx = None
     float16 = None
 
@@ -55,7 +56,7 @@ except ImportError:
     quantize_fx = None
     get_default_qconfig_mapping = None
 
-from onnx_utils import evaluate_onnx, measure_onnx_performance, measure_model_flops, ONNXCalibrationDataReader, measure_cpu_peak_memory_during_inference
+from onnx_utils import evaluate_onnx, measure_onnx_performance, measure_model_flops, ONNXCalibrationDataReader
 
 from plot import plot_and_save_train_val_accuracy_graph, plot_and_save_val_accuracy_graph, plot_and_save_confusion_matrix, plot_and_save_attention_maps, plot_and_save_f1_normal_graph, plot_and_save_loss_graph, plot_and_save_lr_graph, plot_and_save_compiled_graph
 
@@ -440,10 +441,6 @@ def inference(run_cfg, model_cfg, model, data_loader, device, run_dir_path, time
             logging.info(f"ONNX Runtime (v{onnxruntime.__version__})으로 평가를 시작합니다.")
             onnx_session = onnxruntime.InferenceSession(onnx_inference_path, providers=['CPUExecutionProvider'])
 
-            # --- ONNX CPU Peak Memory Measurement ---
-            if device.type == 'cpu':
-                measure_cpu_peak_memory_during_inference(onnx_session, data_loader, device)
-
             dummy_input, _, _ = next(iter(data_loader))
             measure_onnx_performance(onnx_session, dummy_input)
             evaluate_onnx(run_cfg, onnx_session, data_loader, desc=f"[{mode_name} (ONNX)]", class_names=class_names, log_class_metrics=True)
@@ -530,13 +527,23 @@ def inference(run_cfg, model_cfg, model, data_loader, device, run_dir_path, time
         # 3. Quantize
         int8_onnx_path = os.path.join(save_dir, f'best_model_int8.onnx')
 
+        calib_method_str = getattr(run_cfg, 'int8_calibration_method', 'MinMax').lower()
+        if calib_method_str == 'entropy':
+            calib_method = CalibrationMethod.Entropy
+        elif calib_method_str == 'percentile':
+            calib_method = CalibrationMethod.Percentile
+        else:
+            calib_method = CalibrationMethod.MinMax
+        logging.info(f"Calibration Method: {calib_method_str} ({calib_method})")
+
         quantize_static(
             model_input=preprocessed_onnx_path, # 전처리된 모델 사용
             model_output=int8_onnx_path,
             calibration_data_reader=dr,
             quant_format=QuantFormat.QDQ,
             per_channel=True,
-            weight_type=QuantType.QInt8
+            weight_type=QuantType.QInt8,
+            calibrate_method=calib_method
         )
 
         logging.info(f"ONNX INT8 모델 저장 완료: {int8_onnx_path}")

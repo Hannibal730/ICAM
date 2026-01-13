@@ -32,14 +32,14 @@ except ImportError:
 # ONNX 관련 라이브러리
 try:
     import onnxruntime
-    from onnxruntime.quantization import quantize_static, CalibrationDataReader, QuantType, QuantFormat
-    from onnxruntime.quantization.preprocess import quant_pre_process
+    from onnxruntime.quantization import quantize_static, CalibrationDataReader, QuantType, QuantFormatt_pre_process
     import onnx
     from onnxconverter_common import float16
 except ImportError:
     onnxruntime = None
     quantize_static = None
     quant_pre_process = None
+    CalibrationMethod = None
     onnx = None
     float16 = None
 
@@ -503,7 +503,16 @@ def main():
         
         # 4. Quantize
         int8_onnx_path = os.path.join(run_dir_path, 'model_int8.onnx')
-        quantize_static(preprocessed_onnx_path, int8_onnx_path, dr, quant_format=QuantFormat.QDQ, per_channel=True, weight_type=QuantType.QInt8)
+
+        if calib_method_str == 'entropy':
+            calib_method = CalibrationMethod.Entropy
+        elif calib_method_str == 'percentile':
+            calib_method = CalibrationMethod.Percentile
+        else:
+            calib_method = CalibrationMethod.MinMax
+        logging.info(f"Calibration Method: {calib_method_str} ({calib_method})")
+
+        quantize_static(preprocessed_onnx_path, int8_onnx_path, dr, quant_format=QuantFormat.QDQ, per_channel=True, weight_type=QuantType.QInt8, calibrate_method=calib_method)
         
         # 5. Session Create
         sess_options = onnxruntime.SessionOptions()

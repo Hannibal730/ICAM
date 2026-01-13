@@ -103,11 +103,21 @@ def measure_onnx_performance(onnx_session, dummy_input):
     # 실제 시간 측정
     num_iterations = 100
     iteration_times = []
+
+    # [추가] 메모리 측정 준비
+    process = psutil.Process(os.getpid()) if psutil else None
+    mem_before = process.memory_info().rss / (1024 * 1024) if process else 0
+    peak_mem = mem_before
+
     for _ in range(num_iterations):
         start_time = time.time()
         _ = onnx_session.run(None, {input_name: single_dummy_input_np})
         end_time = time.time()
         iteration_times.append((end_time - start_time) * 1000) # ms
+        
+        # [추가] 메모리 피크 갱신
+        if process:
+            peak_mem = max(peak_mem, process.memory_info().rss / (1024 * 1024))
 
     # 단일 이미지 추론을 반복했으므로, 총 시간을 반복 횟수로 나누면 샘플 당 평균 시간이 됩니다.
     avg_inference_time_per_sample = np.mean(iteration_times)
@@ -120,7 +130,12 @@ def measure_onnx_performance(onnx_session, dummy_input):
 
     logging.info(f"샘플 당 평균 Forward Pass 시간 (ONNX, CPU): {avg_inference_time_per_sample:.2f}ms (std: {std_inference_time_per_sample:.2f}ms)")
     logging.info(f"샘플 당 평균 FPS (ONNX, CPU): {avg_fps:.2f} FPS (std: {std_fps:.2f}) (1개 샘플 x {num_iterations}회 반복)")
-    logging.info("ONNX 런타임의 CPU 메모리 사용량 측정은 지원되지 않습니다.")
+    
+    # [수정] 메모리 측정 결과 출력
+    if process:
+        logging.info(f"ONNX 런타임 추론 중 최대 CPU 메모리 사용량: {peak_mem:.2f} MB (증가량: {peak_mem - mem_before:.2f} MB)")
+    else:
+        logging.info("ONNX 런타임의 CPU 메모리 사용량 측정은 지원되지 않습니다. (psutil 미설치)")
 
 def measure_cpu_peak_memory_during_inference(session, data_loader, device):
     """ONNX 모델 추론 중 CPU 최대 메모리 사용량(RSS)을 단일 샘플 기준으로 측정합니다."""
