@@ -24,7 +24,7 @@ run:
   # 추론 시 양자화 옵션 (동시 사용 불가)
   use_fp16_inference: true # true: FP16(Half Precision) 추론 사용 (CPU)
 #   use_int8_inference: true # true: INT8 동적 양자화 추론 사용 (CPU)
-  int8_calib_samples: 512 # [수정] 샘플 수를 256 -> 2048로 증가 권장
+  int8_calib_samples: 512 # CPU 처리라 많은 샘플 사용 불가
   int8_calibration_method: 'Percentile' # Calibration 방법. 옵션: 'Entropy', 'MinMax', 'Percentile'
   int8_activation_type: 'QUInt8' # [추가] Activation 양자화 타입. 'QInt8'(기본) 또는 'QUInt8'(ReLU 모델 권장)
   int8_percentile: 99.99 # [추가] Percentile 방식 사용 시 적용할 백분위수 (기본값: 99.999)
