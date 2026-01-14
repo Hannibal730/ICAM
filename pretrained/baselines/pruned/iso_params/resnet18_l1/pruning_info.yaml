@@ -1,4 +1,0 @@
-pruning_method: l1
-target_type: params
-target_value: 0.031371
-optimal_sparsity: 0.94552734375

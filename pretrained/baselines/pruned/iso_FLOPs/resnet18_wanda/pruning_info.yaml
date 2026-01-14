@@ -1,5 +1,0 @@
-model_name: resnet18
-pruning_method: wanda
-target_type: flops
-target_value: 0.1829
-optimal_sparsity: 0.79857421875

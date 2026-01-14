@@ -1,0 +1,1542 @@
+2026-01-14 12:40:23,628 - INFO - 로그 파일이 'log/Sewer-TAPNEW/baseline_mobile_vit_xxs_wanda_20260114_124023/log_20260114_124023.log'에 저장됩니다.
+2026-01-14 12:40:23,637 - INFO - ==================================================
+2026-01-14 12:40:23,637 - INFO - config.yaml:
+2026-01-14 12:40:23,638 - INFO - 
+run:
+  global_seed: 42
+  cuda: true
+  mode: train
+  pth_inference_dir: ./pretrained
+  pth_best_name: best_model.pth
+  evaluate_onnx: true
+  only_inference: false
+  show_log: true
+  dataset:
+    name: Sewer-TAPNEW
+    type: image_folder
+    train_split_ratio: 0.8
+    paths:
+      train_img_dir: /home/cau/workspace/data/Sewer/Sewer-ML/train
+      valid_img_dir: /home/cau/workspace/data/Sewer/Sewer-ML/valid
+      test_img_dir: /home/cau/workspace/data/Sewer/Sewer-ML/valid
+      train_csv: /home/cau/workspace/data/Sewer/Sewer-ML/SewerML_Train.csv
+      valid_csv: /home/cau/workspace/data/Sewer/Sewer-ML/SewerML_Val.csv
+      test_csv: /home/cau/workspace/data/Sewer/Sewer-ML/SewerML_Val.csv
+      img_folder: /home/cau/workspace/data/Sewer/Sewer-TAPNEW
+  random_sampling_ratio:
+    train: 1.0
+    valid: 1.0
+    test: 1.0
+  num_workers: 16
+training_main:
+  epochs: 90
+  batch_size: 16
+  pre_trained: false
+  optimizer: adamw
+  lr: 0.001
+  weight_decay: 0.0001
+  loss_function: CrossEntropyLoss
+  label_smoothing: 0.1
+  scheduler: cosineannealinglr
+  scheduler_params:
+    T_max: 90
+    eta_min: 0.0001
+  best_model_criterion: val_loss
+training_baseline:
+  epochs: 10
+  batch_size: 16
+  pre_trained: false
+  optimizer: adamw
+  lr: 0.001
+  weight_decay: 0.0001
+  loss_function: CrossEntropyLoss
+  label_smoothing: 0.1
+  scheduler: cosineannealinglr
+  scheduler_params:
+    T_max: 10
+    eta_min: 0.0001
+  best_model_criterion: val_loss
+finetuning_pruned:
+  epochs: 80
+  batch_size: 16
+  optimizer: adamw
+  lr: 0.001
+  weight_decay: 0.0001
+  loss_function: CrossEntropyLoss
+  label_smoothing: 0.1
+  scheduler: cosineannealinglr
+  scheduler_params:
+    T_max: 80
+    eta_min: 0.0001
+  best_model_criterion: val_loss
+model:
+  img_size: 224
+  patch_size: 56
+  stride: 56
+  cnn_feature_extractor:
+    name: efficientnet_b0_feat2
+  featured_patch_dim: 24
+  emb_dim: 24
+  num_heads: 2
+  num_decoder_layers: 2
+  num_decoder_patches: 1
+  adaptive_initial_query: true
+  decoder_ff_ratio: 2
+  dropout: 0.1
+  positional_encoding: true
+  res_attention: true
+  save_attention: true
+  num_plot_attention: 5
+baseline:
+  model_name: mobile_vit_xxs
+  use_wanda_pruning: true
+  num_wanda_calib_samples: 1353
+  pruning_flops_target: 0.1829
+
+2026-01-14 12:40:23,639 - INFO - ==================================================
+2026-01-14 12:40:23,713 - INFO - CUDA 사용 가능. GPU 사용을 시작합니다. (Device: NVIDIA RTX PRO 6000 Blackwell Server Edition)
+2026-01-14 12:40:23,714 - INFO - 'Sewer-TAPNEW' 데이터 로드를 시작합니다 (Type: image_folder).
+2026-01-14 12:40:23,714 - INFO - '/home/cau/workspace/data/Sewer/Sewer-TAPNEW' 경로의 데이터를 훈련/테스트셋으로 분할합니다.
+2026-01-14 12:40:23,729 - INFO - 총 1692개 데이터를 훈련용 1353개, 테스트용 339개로 분할합니다 (split_seed=42).
+2026-01-14 12:40:23,731 - INFO - 데이터셋 클래스: ['abnormal', 'normal'] (총 2개)
+2026-01-14 12:40:23,732 - INFO - 훈련 데이터: 1353개, 검증 데이터: 339개, 테스트 데이터: 339개
+2026-01-14 12:40:23,732 - INFO - Baseline 모델 'mobile_vit_xxs'을(를) 생성합니다 (사전 훈련 가중치: 미사용).
+2026-01-14 12:40:24,083 - INFO - timm 모델(mobile_vit_xxs)의 Attention.forward를 Pruning 호환성을 위해 Monkey-patching 합니다.
+2026-01-14 12:40:24,124 - INFO - ==================================================
+2026-01-14 12:40:24,125 - INFO - 모델 파라미터 수:
+2026-01-14 12:40:24,125 - INFO -   - 총 파라미터: 951,666 개
+2026-01-14 12:40:24,125 - INFO -   - 학습 가능한 파라미터: 951,666 개
+2026-01-14 12:40:24,126 - INFO - ================================================================================
+2026-01-14 12:40:24,126 - INFO - 단계 1/2: 사전 훈련(Pre-training)을 시작합니다.
+2026-01-14 12:40:24,126 - INFO - ================================================================================
+2026-01-14 12:40:24,127 - INFO - 옵티마이저: AdamW (lr=0.001, weight_decay=0.0001)
+2026-01-14 12:40:24,129 - INFO - 스케줄러: CosineAnnealingLR (T_max=10, eta_min=0.0001)
+2026-01-14 12:40:24,130 - INFO - ==================================================
+2026-01-14 12:40:24,130 - INFO - train 모드를 시작합니다.
+2026-01-14 12:40:24,131 - INFO - 손실 함수: CrossEntropyLoss (label_smoothing: 0.1)
+2026-01-14 12:40:24,131 - INFO - Best metric을 초기값(inf)으로 설정합니다.
+2026-01-14 12:40:24,131 - INFO - --------------------------------------------------
+2026-01-14 12:40:24,135 - INFO - [LR]    [1/10] | Learning Rate: 0.001000
+2026-01-14 12:40:37,506 - INFO - [Train] [1/10] | Loss: 0.5202 | Train Acc: 78.42%
+2026-01-14 12:40:41,368 - INFO - [Valid] [1/10] | Loss: 0.5373 | Val Acc: 80.83%
+2026-01-14 12:40:41,403 - INFO - [Metrics for 'abnormal'] | Precision: 0.7949 | Recall: 0.7898 | F1: 0.7923
+2026-01-14 12:40:41,404 - INFO - [Metrics for 'normal'] | Precision: 0.8197 | Recall: 0.8242 | F1: 0.8219
+2026-01-14 12:40:41,495 - INFO - [Best Model Saved] (val loss: 0.5373) -> 'log/Sewer-TAPNEW/baseline_mobile_vit_xxs_wanda_20260114_124023/best_model.pth'
+2026-01-14 12:40:41,498 - INFO - --------------------------------------------------
+2026-01-14 12:40:41,504 - INFO - [LR]    [2/10] | Learning Rate: 0.000978
+2026-01-14 12:40:53,368 - INFO - [Train] [2/10] | Loss: 0.4601 | Train Acc: 83.41%
+2026-01-14 12:40:56,570 - INFO - [Valid] [2/10] | Loss: 0.5179 | Val Acc: 82.60%
+2026-01-14 12:40:56,583 - INFO - [Metrics for 'abnormal'] | Precision: 0.8224 | Recall: 0.7962 | F1: 0.8091
+2026-01-14 12:40:56,583 - INFO - [Metrics for 'normal'] | Precision: 0.8289 | Recall: 0.8516 | F1: 0.8401
+2026-01-14 12:40:56,646 - INFO - [Best Model Saved] (val loss: 0.5179) -> 'log/Sewer-TAPNEW/baseline_mobile_vit_xxs_wanda_20260114_124023/best_model.pth'
+2026-01-14 12:40:56,647 - INFO - --------------------------------------------------
+2026-01-14 12:40:56,650 - INFO - [LR]    [3/10] | Learning Rate: 0.000914
+2026-01-14 12:41:06,581 - INFO - [Train] [3/10] | Loss: 0.4294 | Train Acc: 85.94%
+2026-01-14 12:41:10,353 - INFO - [Valid] [3/10] | Loss: 0.5099 | Val Acc: 81.12%
+2026-01-14 12:41:10,378 - INFO - [Metrics for 'abnormal'] | Precision: 0.7888 | Recall: 0.8089 | F1: 0.7987
+2026-01-14 12:41:10,381 - INFO - [Metrics for 'normal'] | Precision: 0.8315 | Recall: 0.8132 | F1: 0.8222
+2026-01-14 12:41:10,479 - INFO - [Best Model Saved] (val loss: 0.5099) -> 'log/Sewer-TAPNEW/baseline_mobile_vit_xxs_wanda_20260114_124023/best_model.pth'
+2026-01-14 12:41:10,479 - INFO - --------------------------------------------------
+2026-01-14 12:41:10,486 - INFO - [LR]    [4/10] | Learning Rate: 0.000815
+2026-01-14 12:41:20,404 - INFO - [Train] [4/10] | Loss: 0.3899 | Train Acc: 87.72%
+2026-01-14 12:41:23,796 - INFO - [Valid] [4/10] | Loss: 0.5153 | Val Acc: 80.83%
+2026-01-14 12:41:23,808 - INFO - [Metrics for 'abnormal'] | Precision: 0.7911 | Recall: 0.7962 | F1: 0.7937
+2026-01-14 12:41:23,808 - INFO - [Metrics for 'normal'] | Precision: 0.8232 | Recall: 0.8187 | F1: 0.8209
+2026-01-14 12:41:23,813 - INFO - --------------------------------------------------
+2026-01-14 12:41:23,816 - INFO - [LR]    [5/10] | Learning Rate: 0.000689
+2026-01-14 12:41:32,948 - INFO - [Train] [5/10] | Loss: 0.3796 | Train Acc: 89.06%
+2026-01-14 12:41:35,996 - INFO - [Valid] [5/10] | Loss: 0.5247 | Val Acc: 80.83%
+2026-01-14 12:41:36,035 - INFO - [Metrics for 'abnormal'] | Precision: 0.7674 | Recall: 0.8408 | F1: 0.8024
+2026-01-14 12:41:36,035 - INFO - [Metrics for 'normal'] | Precision: 0.8503 | Recall: 0.7802 | F1: 0.8138
+2026-01-14 12:41:36,047 - INFO - --------------------------------------------------
+2026-01-14 12:41:36,054 - INFO - [LR]    [6/10] | Learning Rate: 0.000550
+2026-01-14 12:41:45,039 - INFO - [Train] [6/10] | Loss: 0.3606 | Train Acc: 90.48%
+2026-01-14 12:41:48,914 - INFO - [Valid] [6/10] | Loss: 0.4963 | Val Acc: 81.71%
+2026-01-14 12:41:48,938 - INFO - [Metrics for 'abnormal'] | Precision: 0.7987 | Recall: 0.8089 | F1: 0.8038
+2026-01-14 12:41:48,941 - INFO - [Metrics for 'normal'] | Precision: 0.8333 | Recall: 0.8242 | F1: 0.8287
+2026-01-14 12:41:49,031 - INFO - [Best Model Saved] (val loss: 0.4963) -> 'log/Sewer-TAPNEW/baseline_mobile_vit_xxs_wanda_20260114_124023/best_model.pth'
+2026-01-14 12:41:49,032 - INFO - --------------------------------------------------
+2026-01-14 12:41:49,035 - INFO - [LR]    [7/10] | Learning Rate: 0.000411
+2026-01-14 12:41:59,124 - INFO - [Train] [7/10] | Loss: 0.3043 | Train Acc: 94.35%
+2026-01-14 12:42:02,697 - INFO - [Valid] [7/10] | Loss: 0.4983 | Val Acc: 81.42%
+2026-01-14 12:42:02,710 - INFO - [Metrics for 'abnormal'] | Precision: 0.7866 | Recall: 0.8217 | F1: 0.8037
+2026-01-14 12:42:02,710 - INFO - [Metrics for 'normal'] | Precision: 0.8400 | Recall: 0.8077 | F1: 0.8235
+2026-01-14 12:42:02,715 - INFO - --------------------------------------------------
+2026-01-14 12:42:02,719 - INFO - [LR]    [8/10] | Learning Rate: 0.000285
+2026-01-14 12:42:13,265 - INFO - [Train] [8/10] | Loss: 0.2871 | Train Acc: 95.68%
+2026-01-14 12:42:15,949 - INFO - [Valid] [8/10] | Loss: 0.4884 | Val Acc: 82.30%
+2026-01-14 12:42:15,963 - INFO - [Metrics for 'abnormal'] | Precision: 0.7870 | Recall: 0.8471 | F1: 0.8160
+2026-01-14 12:42:15,964 - INFO - [Metrics for 'normal'] | Precision: 0.8588 | Recall: 0.8022 | F1: 0.8295
+2026-01-14 12:42:16,019 - INFO - [Best Model Saved] (val loss: 0.4884) -> 'log/Sewer-TAPNEW/baseline_mobile_vit_xxs_wanda_20260114_124023/best_model.pth'
+2026-01-14 12:42:16,020 - INFO - --------------------------------------------------
+2026-01-14 12:42:16,023 - INFO - [LR]    [9/10] | Learning Rate: 0.000186
+2026-01-14 12:42:26,017 - INFO - [Train] [9/10] | Loss: 0.2704 | Train Acc: 97.25%
+2026-01-14 12:42:28,809 - INFO - [Valid] [9/10] | Loss: 0.4942 | Val Acc: 83.19%
+2026-01-14 12:42:28,820 - INFO - [Metrics for 'abnormal'] | Precision: 0.8086 | Recall: 0.8344 | F1: 0.8213
+2026-01-14 12:42:28,820 - INFO - [Metrics for 'normal'] | Precision: 0.8531 | Recall: 0.8297 | F1: 0.8412
+2026-01-14 12:42:28,825 - INFO - --------------------------------------------------
+2026-01-14 12:42:28,828 - INFO - [LR]    [10/10] | Learning Rate: 0.000122
+2026-01-14 12:42:39,387 - INFO - [Train] [10/10] | Loss: 0.2579 | Train Acc: 97.62%
+2026-01-14 12:42:40,953 - INFO - [Valid] [10/10] | Loss: 0.4913 | Val Acc: 82.30%
+2026-01-14 12:42:40,965 - INFO - [Metrics for 'abnormal'] | Precision: 0.8050 | Recall: 0.8153 | F1: 0.8101
+2026-01-14 12:42:40,966 - INFO - [Metrics for 'normal'] | Precision: 0.8389 | Recall: 0.8297 | F1: 0.8343
+2026-01-14 12:42:40,972 - INFO - ================================================================================
+2026-01-14 12:42:40,973 - INFO - 단계 2/2: Pruning 및 미세 조정(Fine-tuning)을 시작합니다.
+2026-01-14 12:42:40,973 - INFO - ================================================================================
+2026-01-14 12:42:41,104 - INFO - 사전 훈련된 모델 'log/Sewer-TAPNEW/baseline_mobile_vit_xxs_wanda_20260114_124023/best_model.pth'을(를) 불러왔습니다.
+2026-01-14 12:42:41,105 - INFO - ================================================================================
+2026-01-14 12:42:41,106 - INFO - 목표 FLOPs (0.1829 GFLOPs)에 맞는 최적의 Pruning 희소도를 탐색합니다.
+2026-01-14 12:42:41,253 - INFO - 원본 모델 FLOPs: 0.5384 GFLOPs
+2026-01-14 12:42:41,412 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:42:41,413 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:42:41,419 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:42:50,810 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:42:50,815 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:42:51,928 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.495)에 맞춰 변경되었습니다.
+2026-01-14 12:42:51,928 - INFO - ==================================================
+2026-01-14 12:42:52,040 - INFO -   [탐색  1] 희소도: 0.4950 -> FLOPs: 0.1747 GFLOPs (감소율: 67.56%)
+2026-01-14 12:42:52,130 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:42:52,131 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:42:52,135 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:43:01,098 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:43:01,100 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:43:02,096 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.2475)에 맞춰 변경되었습니다.
+2026-01-14 12:43:02,097 - INFO - ==================================================
+2026-01-14 12:43:02,292 - INFO -   [탐색  2] 희소도: 0.2475 -> FLOPs: 0.3329 GFLOPs (감소율: 38.17%)
+2026-01-14 12:43:02,614 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:43:02,614 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:43:02,628 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:43:12,388 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:43:12,391 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:43:13,914 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.37124999999999997)에 맞춰 변경되었습니다.
+2026-01-14 12:43:13,915 - INFO - ==================================================
+2026-01-14 12:43:14,031 - INFO -   [탐색  3] 희소도: 0.3712 -> FLOPs: 0.2479 GFLOPs (감소율: 53.96%)
+2026-01-14 12:43:14,112 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:43:14,112 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:43:14,115 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:43:23,482 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:43:23,484 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:43:24,476 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.433125)에 맞춰 변경되었습니다.
+2026-01-14 12:43:24,476 - INFO - ==================================================
+2026-01-14 12:43:24,636 - INFO -   [탐색  4] 희소도: 0.4331 -> FLOPs: 0.2093 GFLOPs (감소율: 61.13%)
+2026-01-14 12:43:24,746 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:43:24,747 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:43:24,750 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:43:33,903 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:43:33,908 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:43:34,732 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.4640625)에 맞춰 변경되었습니다.
+2026-01-14 12:43:34,733 - INFO - ==================================================
+2026-01-14 12:43:34,951 - INFO -   [탐색  5] 희소도: 0.4641 -> FLOPs: 0.1880 GFLOPs (감소율: 65.08%)
+2026-01-14 12:43:35,039 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:43:35,040 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:43:35,045 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:43:43,318 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:43:43,320 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:43:44,182 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.47953124999999996)에 맞춰 변경되었습니다.
+2026-01-14 12:43:44,183 - INFO - ==================================================
+2026-01-14 12:43:44,275 - INFO -   [탐색  6] 희소도: 0.4795 -> FLOPs: 0.1790 GFLOPs (감소율: 66.74%)
+2026-01-14 12:43:44,391 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:43:44,392 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:43:44,397 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:43:53,018 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:43:53,021 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:43:53,826 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.471796875)에 맞춰 변경되었습니다.
+2026-01-14 12:43:53,827 - INFO - ==================================================
+2026-01-14 12:43:53,929 - INFO -   [탐색  7] 희소도: 0.4718 -> FLOPs: 0.1838 GFLOPs (감소율: 65.85%)
+2026-01-14 12:43:54,375 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:43:54,379 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:43:54,386 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:44:03,431 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:44:03,435 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:44:04,379 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.4756640625)에 맞춰 변경되었습니다.
+2026-01-14 12:44:04,381 - INFO - ==================================================
+2026-01-14 12:44:04,496 - INFO -   [탐색  8] 희소도: 0.4757 -> FLOPs: 0.1826 GFLOPs (감소율: 66.08%)
+2026-01-14 12:44:04,591 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:44:04,592 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:44:04,597 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:44:12,905 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:44:12,907 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:44:13,785 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.47373046875)에 맞춰 변경되었습니다.
+2026-01-14 12:44:13,786 - INFO - ==================================================
+2026-01-14 12:44:13,907 - INFO -   [탐색  9] 희소도: 0.4737 -> FLOPs: 0.1838 GFLOPs (감소율: 65.85%)
+2026-01-14 12:44:14,023 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:44:14,024 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:44:14,028 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:44:23,838 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:44:23,840 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:44:25,001 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.47469726562500003)에 맞춰 변경되었습니다.
+2026-01-14 12:44:25,002 - INFO - ==================================================
+2026-01-14 12:44:25,086 - INFO -   [탐색 10] 희소도: 0.4747 -> FLOPs: 0.1838 GFLOPs (감소율: 65.86%)
+2026-01-14 12:44:25,199 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:44:25,200 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:44:25,205 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:44:33,492 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:44:33,494 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:44:34,266 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.47518066406250004)에 맞춰 변경되었습니다.
+2026-01-14 12:44:34,267 - INFO - ==================================================
+2026-01-14 12:44:34,374 - INFO -   [탐색 11] 희소도: 0.4752 -> FLOPs: 0.1826 GFLOPs (감소율: 66.08%)
+2026-01-14 12:44:34,472 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:44:34,473 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:44:34,478 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:44:42,453 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:44:42,454 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:44:43,826 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.47493896484375003)에 맞춰 변경되었습니다.
+2026-01-14 12:44:43,828 - INFO - ==================================================
+2026-01-14 12:44:43,946 - INFO -   [탐색 12] 희소도: 0.4749 -> FLOPs: 0.1838 GFLOPs (감소율: 65.86%)
+2026-01-14 12:44:44,038 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:44:44,039 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:44:44,045 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:44:53,199 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:44:53,201 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:44:54,228 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.47505981445312506)에 맞춰 변경되었습니다.
+2026-01-14 12:44:54,234 - INFO - ==================================================
+2026-01-14 12:44:54,382 - INFO -   [탐색 13] 희소도: 0.4751 -> FLOPs: 0.1826 GFLOPs (감소율: 66.08%)
+2026-01-14 12:44:54,478 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:44:54,479 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:44:54,486 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:45:02,701 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:45:02,707 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:45:04,748 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.4749993896484376)에 맞춰 변경되었습니다.
+2026-01-14 12:45:04,752 - INFO - ==================================================
+2026-01-14 12:45:04,931 - INFO -   [탐색 14] 희소도: 0.4750 -> FLOPs: 0.1838 GFLOPs (감소율: 65.86%)
+2026-01-14 12:45:05,280 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:45:05,280 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:45:05,289 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:45:14,370 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:45:14,372 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:45:15,578 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.4750296020507813)에 맞춰 변경되었습니다.
+2026-01-14 12:45:15,578 - INFO - ==================================================
+2026-01-14 12:45:15,661 - INFO -   [탐색 15] 희소도: 0.4750 -> FLOPs: 0.1826 GFLOPs (감소율: 66.08%)
+2026-01-14 12:45:15,748 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:45:15,749 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:45:15,755 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:45:24,543 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:45:24,550 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:45:26,185 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.4750144958496094)에 맞춰 변경되었습니다.
+2026-01-14 12:45:26,186 - INFO - ==================================================
+2026-01-14 12:45:26,280 - INFO -   [탐색 16] 희소도: 0.4750 -> FLOPs: 0.1826 GFLOPs (감소율: 66.08%)
+2026-01-14 12:45:26,819 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:45:26,820 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:45:26,850 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:45:36,799 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:45:36,801 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:45:37,718 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.4750069427490235)에 맞춰 변경되었습니다.
+2026-01-14 12:45:37,718 - INFO - ==================================================
+2026-01-14 12:45:37,778 - INFO -   [탐색 17] 희소도: 0.4750 -> FLOPs: 0.1826 GFLOPs (감소율: 66.08%)
+2026-01-14 12:45:37,876 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:45:37,877 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:45:37,882 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:45:47,995 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:45:47,997 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:45:48,983 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.4750031661987305)에 맞춰 변경되었습니다.
+2026-01-14 12:45:48,984 - INFO - ==================================================
+2026-01-14 12:45:49,067 - INFO -   [탐색 18] 희소도: 0.4750 -> FLOPs: 0.1826 GFLOPs (감소율: 66.08%)
+2026-01-14 12:45:49,156 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:45:49,157 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:45:49,162 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:45:58,768 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:45:58,770 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:45:59,526 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.47500127792358404)에 맞춰 변경되었습니다.
+2026-01-14 12:45:59,526 - INFO - ==================================================
+2026-01-14 12:45:59,649 - INFO -   [탐색 19] 희소도: 0.4750 -> FLOPs: 0.1826 GFLOPs (감소율: 66.08%)
+2026-01-14 12:45:59,751 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:45:59,752 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:45:59,757 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:46:10,235 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:46:10,238 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:46:11,148 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.4750003337860108)에 맞춰 변경되었습니다.
+2026-01-14 12:46:11,149 - INFO - ==================================================
+2026-01-14 12:46:11,238 - INFO -   [탐색 20] 희소도: 0.4750 -> FLOPs: 0.1826 GFLOPs (감소율: 66.08%)
+2026-01-14 12:46:11,815 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:46:11,816 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:46:11,826 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:46:21,777 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:46:21,779 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:46:22,792 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.4749998617172242)에 맞춰 변경되었습니다.
+2026-01-14 12:46:22,795 - INFO - ==================================================
+2026-01-14 12:46:22,861 - INFO -   [탐색 21] 희소도: 0.4750 -> FLOPs: 0.1838 GFLOPs (감소율: 65.86%)
+2026-01-14 12:46:22,937 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:46:22,938 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:46:22,944 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:46:32,029 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:46:32,031 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:46:33,021 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.4750000977516175)에 맞춰 변경되었습니다.
+2026-01-14 12:46:33,021 - INFO - ==================================================
+2026-01-14 12:46:33,150 - INFO -   [탐색 22] 희소도: 0.4750 -> FLOPs: 0.1826 GFLOPs (감소율: 66.08%)
+2026-01-14 12:46:33,241 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:46:33,242 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:46:33,248 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:46:42,320 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:46:42,325 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:46:43,884 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.4749999797344209)에 맞춰 변경되었습니다.
+2026-01-14 12:46:43,885 - INFO - ==================================================
+2026-01-14 12:46:44,036 - INFO -   [탐색 23] 희소도: 0.4750 -> FLOPs: 0.1838 GFLOPs (감소율: 65.86%)
+2026-01-14 12:46:44,175 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:46:44,176 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:46:44,182 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:46:52,505 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:46:52,509 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:46:53,795 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.4750000387430192)에 맞춰 변경되었습니다.
+2026-01-14 12:46:53,796 - INFO - ==================================================
+2026-01-14 12:46:53,866 - INFO -   [탐색 24] 희소도: 0.4750 -> FLOPs: 0.1826 GFLOPs (감소율: 66.08%)
+2026-01-14 12:46:53,941 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:46:53,942 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:46:53,947 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:47:03,376 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:47:03,383 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:47:05,115 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.47500000923872004)에 맞춰 변경되었습니다.
+2026-01-14 12:47:05,116 - INFO - ==================================================
+2026-01-14 12:47:05,169 - INFO -   [탐색 25] 희소도: 0.4750 -> FLOPs: 0.1826 GFLOPs (감소율: 66.08%)
+2026-01-14 12:47:05,230 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:47:05,231 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:47:05,236 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:47:14,525 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:47:14,528 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:47:15,489 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.4749999944865705)에 맞춰 변경되었습니다.
+2026-01-14 12:47:15,489 - INFO - ==================================================
+2026-01-14 12:47:15,571 - INFO -   [탐색 26] 희소도: 0.4750 -> FLOPs: 0.1838 GFLOPs (감소율: 65.86%)
+2026-01-14 12:47:15,648 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:47:15,648 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:47:15,653 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:47:26,306 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:47:26,313 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:47:27,209 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.47500000186264524)에 맞춰 변경되었습니다.
+2026-01-14 12:47:27,210 - INFO - ==================================================
+2026-01-14 12:47:27,295 - INFO -   [탐색 27] 희소도: 0.4750 -> FLOPs: 0.1826 GFLOPs (감소율: 66.08%)
+2026-01-14 12:47:27,419 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:47:27,420 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:47:27,426 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:47:37,315 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:47:37,317 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:47:38,050 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.47499999817460786)에 맞춰 변경되었습니다.
+2026-01-14 12:47:38,051 - INFO - ==================================================
+2026-01-14 12:47:38,147 - INFO -   [탐색 28] 희소도: 0.4750 -> FLOPs: 0.1838 GFLOPs (감소율: 65.86%)
+2026-01-14 12:47:38,244 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:47:38,245 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:47:38,248 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:47:47,458 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:47:47,460 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:47:48,211 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.4750000000186265)에 맞춰 변경되었습니다.
+2026-01-14 12:47:48,212 - INFO - ==================================================
+2026-01-14 12:47:48,286 - INFO -   [탐색 29] 희소도: 0.4750 -> FLOPs: 0.1826 GFLOPs (감소율: 66.08%)
+2026-01-14 12:47:48,743 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:47:48,744 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:47:48,749 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:47:58,370 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:47:58,380 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:47:59,385 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.47499999909661716)에 맞춰 변경되었습니다.
+2026-01-14 12:47:59,388 - INFO - ==================================================
+2026-01-14 12:47:59,587 - INFO -   [탐색 30] 희소도: 0.4750 -> FLOPs: 0.1838 GFLOPs (감소율: 65.86%)
+2026-01-14 12:47:59,733 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:47:59,737 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:47:59,745 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:48:08,888 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:48:08,890 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:48:10,529 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.47499999955762184)에 맞춰 변경되었습니다.
+2026-01-14 12:48:10,530 - INFO - ==================================================
+2026-01-14 12:48:10,646 - INFO -   [탐색 31] 희소도: 0.4750 -> FLOPs: 0.1838 GFLOPs (감소율: 65.86%)
+2026-01-14 12:48:11,002 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:48:11,003 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:48:11,015 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:48:18,717 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:48:18,718 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:48:19,617 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.4749999997881242)에 맞춰 변경되었습니다.
+2026-01-14 12:48:19,618 - INFO - ==================================================
+2026-01-14 12:48:19,809 - INFO -   [탐색 32] 희소도: 0.4750 -> FLOPs: 0.1838 GFLOPs (감소율: 65.86%)
+2026-01-14 12:48:19,979 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:48:19,979 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:48:19,987 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:48:30,055 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:48:30,057 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:48:30,911 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.4749999999033754)에 맞춰 변경되었습니다.
+2026-01-14 12:48:30,911 - INFO - ==================================================
+2026-01-14 12:48:30,986 - INFO -   [탐색 33] 희소도: 0.4750 -> FLOPs: 0.1838 GFLOPs (감소율: 65.86%)
+2026-01-14 12:48:31,064 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:48:31,064 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:48:31,069 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:48:40,424 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:48:40,426 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:48:42,356 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.47499999996100095)에 맞춰 변경되었습니다.
+2026-01-14 12:48:42,357 - INFO - ==================================================
+2026-01-14 12:48:42,541 - INFO -   [탐색 34] 희소도: 0.4750 -> FLOPs: 0.1838 GFLOPs (감소율: 65.86%)
+2026-01-14 12:48:42,739 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:48:42,743 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:48:42,753 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:48:51,172 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:48:51,178 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:48:52,029 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.47499999998981374)에 맞춰 변경되었습니다.
+2026-01-14 12:48:52,029 - INFO - ==================================================
+2026-01-14 12:48:52,119 - INFO -   [탐색 35] 희소도: 0.4750 -> FLOPs: 0.1838 GFLOPs (감소율: 65.86%)
+2026-01-14 12:48:52,213 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:48:52,214 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:48:52,219 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:49:00,897 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:49:00,904 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:49:01,900 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.47500000000422016)에 맞춰 변경되었습니다.
+2026-01-14 12:49:01,900 - INFO - ==================================================
+2026-01-14 12:49:01,997 - INFO -   [탐색 36] 희소도: 0.4750 -> FLOPs: 0.1826 GFLOPs (감소율: 66.08%)
+2026-01-14 12:49:02,077 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:49:02,077 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:49:02,081 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:49:11,506 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:49:11,509 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:49:12,540 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.4749999999970169)에 맞춰 변경되었습니다.
+2026-01-14 12:49:12,541 - INFO - ==================================================
+2026-01-14 12:49:12,614 - INFO -   [탐색 37] 희소도: 0.4750 -> FLOPs: 0.1838 GFLOPs (감소율: 65.86%)
+2026-01-14 12:49:12,705 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:49:12,706 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:49:12,711 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:49:22,133 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:49:22,138 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:49:23,327 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.47500000000061854)에 맞춰 변경되었습니다.
+2026-01-14 12:49:23,328 - INFO - ==================================================
+2026-01-14 12:49:23,639 - INFO -   [탐색 38] 희소도: 0.4750 -> FLOPs: 0.1826 GFLOPs (감소율: 66.08%)
+2026-01-14 12:49:23,727 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:49:23,728 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:49:23,735 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:49:33,272 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:49:33,274 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:49:34,146 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.4749999999988177)에 맞춰 변경되었습니다.
+2026-01-14 12:49:34,147 - INFO - ==================================================
+2026-01-14 12:49:34,234 - INFO -   [탐색 39] 희소도: 0.4750 -> FLOPs: 0.1838 GFLOPs (감소율: 65.86%)
+2026-01-14 12:49:34,327 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:49:34,328 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:49:34,333 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:49:43,180 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:49:43,181 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:49:43,998 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.4749999999997181)에 맞춰 변경되었습니다.
+2026-01-14 12:49:43,999 - INFO - ==================================================
+2026-01-14 12:49:44,064 - INFO -   [탐색 40] 희소도: 0.4750 -> FLOPs: 0.1838 GFLOPs (감소율: 65.86%)
+2026-01-14 12:49:44,140 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:49:44,141 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:49:44,144 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:49:52,411 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:49:52,413 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:49:53,174 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.4750000000001683)에 맞춰 변경되었습니다.
+2026-01-14 12:49:53,175 - INFO - ==================================================
+2026-01-14 12:49:53,258 - INFO -   [탐색 41] 희소도: 0.4750 -> FLOPs: 0.1826 GFLOPs (감소율: 66.08%)
+2026-01-14 12:49:53,331 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:49:53,331 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:49:53,335 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:50:01,821 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:50:01,824 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:50:02,446 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.4749999999999432)에 맞춰 변경되었습니다.
+2026-01-14 12:50:02,446 - INFO - ==================================================
+2026-01-14 12:50:02,499 - INFO -   [탐색 42] 희소도: 0.4750 -> FLOPs: 0.1838 GFLOPs (감소율: 65.86%)
+2026-01-14 12:50:02,569 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:50:02,569 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:50:02,574 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:50:11,777 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:50:11,779 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:50:13,081 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.4750000000000557)에 맞춰 변경되었습니다.
+2026-01-14 12:50:13,085 - INFO - ==================================================
+2026-01-14 12:50:13,280 - INFO -   [탐색 43] 희소도: 0.4750 -> FLOPs: 0.1826 GFLOPs (감소율: 66.08%)
+2026-01-14 12:50:13,483 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:50:13,487 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:50:13,495 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:50:25,533 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:50:25,537 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:50:26,396 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.4749999999999994)에 맞춰 변경되었습니다.
+2026-01-14 12:50:26,397 - INFO - ==================================================
+2026-01-14 12:50:26,482 - INFO -   [탐색 44] 희소도: 0.4750 -> FLOPs: 0.1838 GFLOPs (감소율: 65.86%)
+2026-01-14 12:50:26,581 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:50:26,583 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:50:26,588 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:50:37,240 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:50:37,241 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:50:38,509 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.47500000000002757)에 맞춰 변경되었습니다.
+2026-01-14 12:50:38,509 - INFO - ==================================================
+2026-01-14 12:50:38,589 - INFO -   [탐색 45] 희소도: 0.4750 -> FLOPs: 0.1826 GFLOPs (감소율: 66.08%)
+2026-01-14 12:50:38,676 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:50:38,676 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:50:38,682 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:50:47,530 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:50:47,532 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:50:48,226 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.4750000000000135)에 맞춰 변경되었습니다.
+2026-01-14 12:50:48,227 - INFO - ==================================================
+2026-01-14 12:50:48,291 - INFO -   [탐색 46] 희소도: 0.4750 -> FLOPs: 0.1826 GFLOPs (감소율: 66.08%)
+2026-01-14 12:50:48,361 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:50:48,362 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:50:48,366 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:50:57,608 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:50:57,611 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:50:58,441 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.4750000000000065)에 맞춰 변경되었습니다.
+2026-01-14 12:50:58,442 - INFO - ==================================================
+2026-01-14 12:50:58,525 - INFO -   [탐색 47] 희소도: 0.4750 -> FLOPs: 0.1826 GFLOPs (감소율: 66.08%)
+2026-01-14 12:50:58,922 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:50:58,923 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:50:58,928 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:51:08,380 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:51:08,381 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:51:09,095 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.475000000000003)에 맞춰 변경되었습니다.
+2026-01-14 12:51:09,095 - INFO - ==================================================
+2026-01-14 12:51:09,146 - INFO -   [탐색 48] 희소도: 0.4750 -> FLOPs: 0.1826 GFLOPs (감소율: 66.08%)
+2026-01-14 12:51:09,200 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:51:09,200 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:51:09,203 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:51:20,404 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:51:20,406 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:51:21,070 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.4750000000000012)에 맞춰 변경되었습니다.
+2026-01-14 12:51:21,070 - INFO - ==================================================
+2026-01-14 12:51:21,122 - INFO -   [탐색 49] 희소도: 0.4750 -> FLOPs: 0.1826 GFLOPs (감소율: 66.08%)
+2026-01-14 12:51:21,188 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:51:21,189 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:51:21,192 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:51:30,723 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:51:30,728 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:51:31,434 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.4750000000000003)에 맞춰 변경되었습니다.
+2026-01-14 12:51:31,434 - INFO - ==================================================
+2026-01-14 12:51:31,511 - INFO -   [탐색 50] 희소도: 0.4750 -> FLOPs: 0.1826 GFLOPs (감소율: 66.08%)
+2026-01-14 12:51:31,595 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:51:31,596 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:51:31,601 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:51:41,273 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:51:41,276 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:51:41,894 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.47499999999999987)에 맞춰 변경되었습니다.
+2026-01-14 12:51:41,895 - INFO - ==================================================
+2026-01-14 12:51:41,979 - INFO -   [탐색 51] 희소도: 0.4750 -> FLOPs: 0.1838 GFLOPs (감소율: 65.86%)
+2026-01-14 12:51:42,045 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:51:42,045 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:51:42,050 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:51:51,760 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:51:51,761 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:51:52,763 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.4750000000000001)에 맞춰 변경되었습니다.
+2026-01-14 12:51:52,764 - INFO - ==================================================
+2026-01-14 12:51:52,831 - INFO -   [탐색 52] 희소도: 0.4750 -> FLOPs: 0.1826 GFLOPs (감소율: 66.08%)
+2026-01-14 12:51:52,904 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:51:52,906 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:51:52,911 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:52:01,656 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:52:01,658 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:52:02,360 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.475)에 맞춰 변경되었습니다.
+2026-01-14 12:52:02,360 - INFO - ==================================================
+2026-01-14 12:52:02,440 - INFO -   [탐색 53] 희소도: 0.4750 -> FLOPs: 0.1838 GFLOPs (감소율: 65.86%)
+2026-01-14 12:52:02,527 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:52:02,528 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:52:02,533 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:52:11,942 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:52:11,944 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:52:12,670 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.47500000000000003)에 맞춰 변경되었습니다.
+2026-01-14 12:52:12,671 - INFO - ==================================================
+2026-01-14 12:52:12,826 - INFO -   [탐색 54] 희소도: 0.4750 -> FLOPs: 0.1826 GFLOPs (감소율: 66.08%)
+2026-01-14 12:52:12,959 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:52:12,960 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:52:12,965 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:52:22,230 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:52:22,231 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:52:23,375 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.475)에 맞춰 변경되었습니다.
+2026-01-14 12:52:23,376 - INFO - ==================================================
+2026-01-14 12:52:23,467 - INFO -   [탐색 55] 희소도: 0.4750 -> FLOPs: 0.1838 GFLOPs (감소율: 65.86%)
+2026-01-14 12:52:23,605 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:52:23,606 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:52:23,611 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:52:32,571 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:52:32,576 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:52:33,333 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.475)에 맞춰 변경되었습니다.
+2026-01-14 12:52:33,334 - INFO - ==================================================
+2026-01-14 12:52:33,473 - INFO -   [탐색 56] 희소도: 0.4750 -> FLOPs: 0.1838 GFLOPs (감소율: 65.86%)
+2026-01-14 12:52:34,093 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:52:34,094 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:52:34,099 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:52:42,808 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:52:42,810 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:52:44,156 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.475)에 맞춰 변경되었습니다.
+2026-01-14 12:52:44,157 - INFO - ==================================================
+2026-01-14 12:52:44,242 - INFO -   [탐색 57] 희소도: 0.4750 -> FLOPs: 0.1838 GFLOPs (감소율: 65.86%)
+2026-01-14 12:52:44,337 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:52:44,338 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:52:44,342 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:52:52,316 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:52:52,317 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:52:53,097 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.475)에 맞춰 변경되었습니다.
+2026-01-14 12:52:53,098 - INFO - ==================================================
+2026-01-14 12:52:53,203 - INFO -   [탐색 58] 희소도: 0.4750 -> FLOPs: 0.1838 GFLOPs (감소율: 65.86%)
+2026-01-14 12:52:53,302 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:52:53,303 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:52:53,309 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:53:02,730 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:53:02,732 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:53:03,545 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.475)에 맞춰 변경되었습니다.
+2026-01-14 12:53:03,546 - INFO - ==================================================
+2026-01-14 12:53:03,624 - INFO -   [탐색 59] 희소도: 0.4750 -> FLOPs: 0.1838 GFLOPs (감소율: 65.86%)
+2026-01-14 12:53:03,716 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:53:03,717 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:53:03,723 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:53:13,112 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:53:13,114 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:53:14,006 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.475)에 맞춰 변경되었습니다.
+2026-01-14 12:53:14,009 - INFO - ==================================================
+2026-01-14 12:53:14,106 - INFO -   [탐색 60] 희소도: 0.4750 -> FLOPs: 0.1838 GFLOPs (감소율: 65.86%)
+2026-01-14 12:53:14,213 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:53:14,216 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:53:14,221 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:53:21,780 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:53:21,781 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:53:23,922 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.475)에 맞춰 변경되었습니다.
+2026-01-14 12:53:23,922 - INFO - ==================================================
+2026-01-14 12:53:24,100 - INFO -   [탐색 61] 희소도: 0.4750 -> FLOPs: 0.1838 GFLOPs (감소율: 65.86%)
+2026-01-14 12:53:24,232 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:53:24,233 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:53:24,242 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:53:32,465 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:53:32,467 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:53:33,739 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.475)에 맞춰 변경되었습니다.
+2026-01-14 12:53:33,740 - INFO - ==================================================
+2026-01-14 12:53:33,823 - INFO -   [탐색 62] 희소도: 0.4750 -> FLOPs: 0.1838 GFLOPs (감소율: 65.86%)
+2026-01-14 12:53:33,912 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:53:33,913 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:53:33,918 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:53:43,038 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:53:43,040 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:53:43,764 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.475)에 맞춰 변경되었습니다.
+2026-01-14 12:53:43,765 - INFO - ==================================================
+2026-01-14 12:53:43,842 - INFO -   [탐색 63] 희소도: 0.4750 -> FLOPs: 0.1838 GFLOPs (감소율: 65.86%)
+2026-01-14 12:53:43,914 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:53:43,915 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:53:43,919 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:53:51,907 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:53:51,914 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:53:52,821 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.475)에 맞춰 변경되었습니다.
+2026-01-14 12:53:52,823 - INFO - ==================================================
+2026-01-14 12:53:52,894 - INFO -   [탐색 64] 희소도: 0.4750 -> FLOPs: 0.1838 GFLOPs (감소율: 65.86%)
+2026-01-14 12:53:52,963 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:53:52,963 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:53:52,967 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:54:00,436 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:54:00,437 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:54:01,354 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.475)에 맞춰 변경되었습니다.
+2026-01-14 12:54:01,355 - INFO - ==================================================
+2026-01-14 12:54:01,440 - INFO -   [탐색 65] 희소도: 0.4750 -> FLOPs: 0.1838 GFLOPs (감소율: 65.86%)
+2026-01-14 12:54:01,853 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:54:01,854 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:54:01,859 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:54:11,070 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:54:11,072 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:54:12,437 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.475)에 맞춰 변경되었습니다.
+2026-01-14 12:54:12,437 - INFO - ==================================================
+2026-01-14 12:54:12,572 - INFO -   [탐색 66] 희소도: 0.4750 -> FLOPs: 0.1838 GFLOPs (감소율: 65.86%)
+2026-01-14 12:54:12,703 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:54:12,704 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:54:12,710 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:54:21,737 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:54:21,740 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:54:22,515 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.475)에 맞춰 변경되었습니다.
+2026-01-14 12:54:22,515 - INFO - ==================================================
+2026-01-14 12:54:22,592 - INFO -   [탐색 67] 희소도: 0.4750 -> FLOPs: 0.1838 GFLOPs (감소율: 65.86%)
+2026-01-14 12:54:22,676 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:54:22,677 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:54:22,682 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:54:31,699 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:54:31,701 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:54:32,410 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.475)에 맞춰 변경되었습니다.
+2026-01-14 12:54:32,411 - INFO - ==================================================
+2026-01-14 12:54:32,504 - INFO -   [탐색 68] 희소도: 0.4750 -> FLOPs: 0.1838 GFLOPs (감소율: 65.86%)
+2026-01-14 12:54:32,601 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:54:32,601 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:54:32,606 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:54:41,636 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:54:41,639 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:54:42,507 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.475)에 맞춰 변경되었습니다.
+2026-01-14 12:54:42,508 - INFO - ==================================================
+2026-01-14 12:54:42,603 - INFO -   [탐색 69] 희소도: 0.4750 -> FLOPs: 0.1838 GFLOPs (감소율: 65.86%)
+2026-01-14 12:54:42,697 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:54:42,698 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:54:42,704 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:54:50,612 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:54:50,613 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:54:51,736 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.475)에 맞춰 변경되었습니다.
+2026-01-14 12:54:51,738 - INFO - ==================================================
+2026-01-14 12:54:51,824 - INFO -   [탐색 70] 희소도: 0.4750 -> FLOPs: 0.1838 GFLOPs (감소율: 65.86%)
+2026-01-14 12:54:51,921 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:54:51,922 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:54:51,927 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:55:01,719 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:55:01,721 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:55:02,742 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.475)에 맞춰 변경되었습니다.
+2026-01-14 12:55:02,743 - INFO - ==================================================
+2026-01-14 12:55:02,839 - INFO -   [탐색 71] 희소도: 0.4750 -> FLOPs: 0.1838 GFLOPs (감소율: 65.86%)
+2026-01-14 12:55:02,939 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:55:02,940 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:55:02,945 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:55:13,687 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:55:13,689 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:55:14,768 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.475)에 맞춰 변경되었습니다.
+2026-01-14 12:55:14,769 - INFO - ==================================================
+2026-01-14 12:55:14,899 - INFO -   [탐색 72] 희소도: 0.4750 -> FLOPs: 0.1838 GFLOPs (감소율: 65.86%)
+2026-01-14 12:55:15,021 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:55:15,022 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:55:15,026 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:55:22,896 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:55:22,901 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:55:23,798 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.475)에 맞춰 변경되었습니다.
+2026-01-14 12:55:23,799 - INFO - ==================================================
+2026-01-14 12:55:23,930 - INFO -   [탐색 73] 희소도: 0.4750 -> FLOPs: 0.1838 GFLOPs (감소율: 65.86%)
+2026-01-14 12:55:24,029 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:55:24,030 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:55:24,037 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:55:32,760 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:55:32,763 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:55:33,496 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.475)에 맞춰 변경되었습니다.
+2026-01-14 12:55:33,497 - INFO - ==================================================
+2026-01-14 12:55:33,615 - INFO -   [탐색 74] 희소도: 0.4750 -> FLOPs: 0.1838 GFLOPs (감소율: 65.86%)
+2026-01-14 12:55:33,710 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:55:33,711 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:55:33,717 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:55:42,413 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:55:42,416 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:55:43,943 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.475)에 맞춰 변경되었습니다.
+2026-01-14 12:55:43,945 - INFO - ==================================================
+2026-01-14 12:55:44,068 - INFO -   [탐색 75] 희소도: 0.4750 -> FLOPs: 0.1838 GFLOPs (감소율: 65.86%)
+2026-01-14 12:55:44,219 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:55:44,220 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:55:44,225 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:55:53,196 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:55:53,198 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:55:54,123 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.475)에 맞춰 변경되었습니다.
+2026-01-14 12:55:54,124 - INFO - ==================================================
+2026-01-14 12:55:54,219 - INFO -   [탐색 76] 희소도: 0.4750 -> FLOPs: 0.1838 GFLOPs (감소율: 65.86%)
+2026-01-14 12:55:54,322 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:55:54,324 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:55:54,329 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:56:02,944 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:56:02,946 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:56:03,780 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.475)에 맞춰 변경되었습니다.
+2026-01-14 12:56:03,781 - INFO - ==================================================
+2026-01-14 12:56:03,870 - INFO -   [탐색 77] 희소도: 0.4750 -> FLOPs: 0.1838 GFLOPs (감소율: 65.86%)
+2026-01-14 12:56:03,963 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:56:03,964 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:56:03,969 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:56:12,806 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:56:12,810 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:56:13,681 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.475)에 맞춰 변경되었습니다.
+2026-01-14 12:56:13,682 - INFO - ==================================================
+2026-01-14 12:56:13,832 - INFO -   [탐색 78] 희소도: 0.4750 -> FLOPs: 0.1838 GFLOPs (감소율: 65.86%)
+2026-01-14 12:56:13,927 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:56:13,927 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:56:13,932 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:56:23,201 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:56:23,203 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:56:23,977 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.475)에 맞춰 변경되었습니다.
+2026-01-14 12:56:23,977 - INFO - ==================================================
+2026-01-14 12:56:24,058 - INFO -   [탐색 79] 희소도: 0.4750 -> FLOPs: 0.1838 GFLOPs (감소율: 65.86%)
+2026-01-14 12:56:24,432 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:56:24,433 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:56:24,438 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:56:33,504 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:56:33,506 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:56:34,325 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.475)에 맞춰 변경되었습니다.
+2026-01-14 12:56:34,325 - INFO - ==================================================
+2026-01-14 12:56:34,390 - INFO -   [탐색 80] 희소도: 0.4750 -> FLOPs: 0.1838 GFLOPs (감소율: 65.86%)
+2026-01-14 12:56:34,455 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:56:34,456 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:56:34,459 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:56:43,729 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:56:43,730 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:56:44,352 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.475)에 맞춰 변경되었습니다.
+2026-01-14 12:56:44,352 - INFO - ==================================================
+2026-01-14 12:56:44,436 - INFO -   [탐색 81] 희소도: 0.4750 -> FLOPs: 0.1838 GFLOPs (감소율: 65.86%)
+2026-01-14 12:56:44,535 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:56:44,536 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:56:44,541 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:56:54,602 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:56:54,604 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:56:55,411 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.475)에 맞춰 변경되었습니다.
+2026-01-14 12:56:55,412 - INFO - ==================================================
+2026-01-14 12:56:55,552 - INFO -   [탐색 82] 희소도: 0.4750 -> FLOPs: 0.1838 GFLOPs (감소율: 65.86%)
+2026-01-14 12:56:55,657 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:56:55,657 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:56:55,662 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:57:05,530 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:57:05,531 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:57:06,571 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.475)에 맞춰 변경되었습니다.
+2026-01-14 12:57:06,573 - INFO - ==================================================
+2026-01-14 12:57:06,647 - INFO -   [탐색 83] 희소도: 0.4750 -> FLOPs: 0.1838 GFLOPs (감소율: 65.86%)
+2026-01-14 12:57:06,913 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:57:06,913 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:57:06,921 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:57:16,877 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:57:16,878 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:57:18,797 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.475)에 맞춰 변경되었습니다.
+2026-01-14 12:57:18,798 - INFO - ==================================================
+2026-01-14 12:57:18,900 - INFO -   [탐색 84] 희소도: 0.4750 -> FLOPs: 0.1838 GFLOPs (감소율: 65.86%)
+2026-01-14 12:57:19,005 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:57:19,006 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:57:19,012 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:57:28,721 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:57:28,723 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:57:30,228 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.475)에 맞춰 변경되었습니다.
+2026-01-14 12:57:30,229 - INFO - ==================================================
+2026-01-14 12:57:30,301 - INFO -   [탐색 85] 희소도: 0.4750 -> FLOPs: 0.1838 GFLOPs (감소율: 65.86%)
+2026-01-14 12:57:30,589 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:57:30,590 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:57:30,595 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:57:39,532 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:57:39,537 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:57:40,580 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.475)에 맞춰 변경되었습니다.
+2026-01-14 12:57:40,580 - INFO - ==================================================
+2026-01-14 12:57:40,656 - INFO -   [탐색 86] 희소도: 0.4750 -> FLOPs: 0.1838 GFLOPs (감소율: 65.86%)
+2026-01-14 12:57:40,739 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:57:40,739 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:57:40,744 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:57:49,752 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:57:49,756 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:57:50,444 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.475)에 맞춰 변경되었습니다.
+2026-01-14 12:57:50,445 - INFO - ==================================================
+2026-01-14 12:57:50,521 - INFO -   [탐색 87] 희소도: 0.4750 -> FLOPs: 0.1838 GFLOPs (감소율: 65.86%)
+2026-01-14 12:57:50,601 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:57:50,602 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:57:50,607 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:58:00,057 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:58:00,059 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:58:00,849 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.475)에 맞춰 변경되었습니다.
+2026-01-14 12:58:00,853 - INFO - ==================================================
+2026-01-14 12:58:01,029 - INFO -   [탐색 88] 희소도: 0.4750 -> FLOPs: 0.1838 GFLOPs (감소율: 65.86%)
+2026-01-14 12:58:01,782 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:58:01,782 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:58:01,787 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:58:10,869 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:58:10,871 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:58:12,379 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.475)에 맞춰 변경되었습니다.
+2026-01-14 12:58:12,379 - INFO - ==================================================
+2026-01-14 12:58:12,462 - INFO -   [탐색 89] 희소도: 0.4750 -> FLOPs: 0.1838 GFLOPs (감소율: 65.86%)
+2026-01-14 12:58:12,624 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:58:12,624 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:58:12,647 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:58:21,710 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:58:21,712 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:58:22,620 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.475)에 맞춰 변경되었습니다.
+2026-01-14 12:58:22,620 - INFO - ==================================================
+2026-01-14 12:58:22,749 - INFO -   [탐색 90] 희소도: 0.4750 -> FLOPs: 0.1838 GFLOPs (감소율: 65.86%)
+2026-01-14 12:58:22,836 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:58:22,836 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:58:22,842 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:58:32,568 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:58:32,570 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:58:33,690 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.475)에 맞춰 변경되었습니다.
+2026-01-14 12:58:33,691 - INFO - ==================================================
+2026-01-14 12:58:33,822 - INFO -   [탐색 91] 희소도: 0.4750 -> FLOPs: 0.1838 GFLOPs (감소율: 65.86%)
+2026-01-14 12:58:33,909 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:58:33,911 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:58:33,917 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:58:44,134 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:58:44,138 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:58:45,046 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.475)에 맞춰 변경되었습니다.
+2026-01-14 12:58:45,047 - INFO - ==================================================
+2026-01-14 12:58:45,127 - INFO -   [탐색 92] 희소도: 0.4750 -> FLOPs: 0.1838 GFLOPs (감소율: 65.86%)
+2026-01-14 12:58:45,217 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:58:45,218 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:58:45,223 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:58:53,241 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:58:53,243 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:58:54,395 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.475)에 맞춰 변경되었습니다.
+2026-01-14 12:58:54,398 - INFO - ==================================================
+2026-01-14 12:58:54,527 - INFO -   [탐색 93] 희소도: 0.4750 -> FLOPs: 0.1838 GFLOPs (감소율: 65.86%)
+2026-01-14 12:58:54,628 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:58:54,629 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:58:54,635 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:59:04,607 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:59:04,609 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:59:05,842 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.475)에 맞춰 변경되었습니다.
+2026-01-14 12:59:05,842 - INFO - ==================================================
+2026-01-14 12:59:05,945 - INFO -   [탐색 94] 희소도: 0.4750 -> FLOPs: 0.1838 GFLOPs (감소율: 65.86%)
+2026-01-14 12:59:06,099 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:59:06,099 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:59:06,119 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:59:13,911 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:59:13,912 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:59:14,768 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.475)에 맞춰 변경되었습니다.
+2026-01-14 12:59:14,799 - INFO - ==================================================
+2026-01-14 12:59:14,963 - INFO -   [탐색 95] 희소도: 0.4750 -> FLOPs: 0.1838 GFLOPs (감소율: 65.86%)
+2026-01-14 12:59:15,134 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:59:15,135 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:59:15,140 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:59:24,442 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:59:24,444 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:59:25,408 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.475)에 맞춰 변경되었습니다.
+2026-01-14 12:59:25,409 - INFO - ==================================================
+2026-01-14 12:59:25,542 - INFO -   [탐색 96] 희소도: 0.4750 -> FLOPs: 0.1838 GFLOPs (감소율: 65.86%)
+2026-01-14 12:59:25,720 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:59:25,720 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:59:25,727 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:59:35,266 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:59:35,269 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:59:36,486 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.475)에 맞춰 변경되었습니다.
+2026-01-14 12:59:36,487 - INFO - ==================================================
+2026-01-14 12:59:36,579 - INFO -   [탐색 97] 희소도: 0.4750 -> FLOPs: 0.1838 GFLOPs (감소율: 65.86%)
+2026-01-14 12:59:36,667 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:59:36,668 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:59:36,673 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:59:45,189 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:59:45,193 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:59:46,254 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.475)에 맞춰 변경되었습니다.
+2026-01-14 12:59:46,255 - INFO - ==================================================
+2026-01-14 12:59:46,324 - INFO -   [탐색 98] 희소도: 0.4750 -> FLOPs: 0.1838 GFLOPs (감소율: 65.86%)
+2026-01-14 12:59:46,389 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:59:46,389 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:59:46,393 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 12:59:55,325 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 12:59:55,327 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 12:59:56,277 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.475)에 맞춰 변경되었습니다.
+2026-01-14 12:59:56,277 - INFO - ==================================================
+2026-01-14 12:59:56,363 - INFO -   [탐색 99] 희소도: 0.4750 -> FLOPs: 0.1838 GFLOPs (감소율: 65.86%)
+2026-01-14 12:59:56,526 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 12:59:56,526 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 12:59:56,530 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 13:00:05,988 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 13:00:05,990 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 13:00:06,859 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.475)에 맞춰 변경되었습니다.
+2026-01-14 13:00:06,860 - INFO - ==================================================
+2026-01-14 13:00:06,939 - INFO -   [탐색 100] 희소도: 0.4750 -> FLOPs: 0.1838 GFLOPs (감소율: 65.86%)
+2026-01-14 13:00:06,940 - INFO - 탐색 완료. 목표 FLOPs(0.1829)에 가장 근접한 최적 희소도는 0.4757 입니다.
+2026-01-14 13:00:06,941 - INFO - ================================================================================
+2026-01-14 13:00:06,949 - INFO - 계산된 Pruning 정보(희소도: 0.4757)를 'log/Sewer-TAPNEW/baseline_mobile_vit_xxs_wanda_20260114_124023/pruning_info.yaml'에 저장했습니다.
+2026-01-14 13:00:07,041 - INFO - Pruning 전 원본 모델의 FLOPs를 측정합니다.
+2026-01-14 13:00:07,224 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 13:00:07,224 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 13:00:07,231 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 13:00:15,316 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 13:00:15,317 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 13:00:16,350 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.4756640625)에 맞춰 변경되었습니다.
+2026-01-14 13:00:16,354 - INFO - ==================================================
+2026-01-14 13:00:16,361 - INFO - ==================================================
+2026-01-14 13:00:16,361 - INFO - 모델 파라미터 수:
+2026-01-14 13:00:16,362 - INFO -   - 총 파라미터: 320,767 개
+2026-01-14 13:00:16,362 - INFO -   - 학습 가능한 파라미터: 320,767 개
+2026-01-14 13:00:16,479 - INFO - Pruning 후 모델의 FLOPs를 측정합니다.
+2026-01-14 13:00:17,203 - INFO - FLOPs가 0.5384 GFLOPs에서 0.1826 GFLOPs로 감소했습니다 (감소율: 66.08%).
+2026-01-14 13:00:17,204 - INFO - 미세 조정을 위한 새로운 옵티마이저와 스케줄러를 생성합니다.
+2026-01-14 13:00:17,204 - INFO - 옵티마이저: AdamW (lr=0.001, weight_decay=0.0001)
+2026-01-14 13:00:17,206 - INFO - 스케줄러: CosineAnnealingLR (T_max=80, eta_min=0.0001)
+2026-01-14 13:00:17,206 - INFO - ==================================================
+2026-01-14 13:00:17,206 - INFO - train 모드를 시작합니다.
+2026-01-14 13:00:17,207 - INFO - 손실 함수: CrossEntropyLoss (label_smoothing: 0.1)
+2026-01-14 13:00:17,207 - INFO - Best metric을 초기값(inf)으로 설정합니다.
+2026-01-14 13:00:17,207 - INFO - --------------------------------------------------
+2026-01-14 13:00:17,210 - INFO - [LR]    [11/90] | Learning Rate: 0.001000
+2026-01-14 13:00:26,609 - INFO - [Train] [11/90] | Loss: 0.5086 | Train Acc: 79.61%
+2026-01-14 13:00:30,367 - INFO - [Valid] [11/90] | Loss: 0.5236 | Val Acc: 79.65%
+2026-01-14 13:00:30,380 - INFO - [Metrics for 'abnormal'] | Precision: 0.7750 | Recall: 0.7898 | F1: 0.7823
+2026-01-14 13:00:30,380 - INFO - [Metrics for 'normal'] | Precision: 0.8156 | Recall: 0.8022 | F1: 0.8089
+2026-01-14 13:00:30,452 - INFO - [Best Model Saved] (val loss: 0.5236) -> 'log/Sewer-TAPNEW/baseline_mobile_vit_xxs_wanda_20260114_124023/best_model.pth'
+2026-01-14 13:00:30,453 - INFO - --------------------------------------------------
+2026-01-14 13:00:30,456 - INFO - [LR]    [12/90] | Learning Rate: 0.001000
+2026-01-14 13:00:40,545 - INFO - [Train] [12/90] | Loss: 0.4671 | Train Acc: 82.66%
+2026-01-14 13:00:43,176 - INFO - [Valid] [12/90] | Loss: 0.4930 | Val Acc: 80.24%
+2026-01-14 13:00:43,190 - INFO - [Metrics for 'abnormal'] | Precision: 0.7778 | Recall: 0.8025 | F1: 0.7900
+2026-01-14 13:00:43,190 - INFO - [Metrics for 'normal'] | Precision: 0.8249 | Recall: 0.8022 | F1: 0.8134
+2026-01-14 13:00:43,242 - INFO - [Best Model Saved] (val loss: 0.4930) -> 'log/Sewer-TAPNEW/baseline_mobile_vit_xxs_wanda_20260114_124023/best_model.pth'
+2026-01-14 13:00:43,242 - INFO - --------------------------------------------------
+2026-01-14 13:00:43,246 - INFO - [LR]    [13/90] | Learning Rate: 0.000999
+2026-01-14 13:00:52,052 - INFO - [Train] [13/90] | Loss: 0.4397 | Train Acc: 85.42%
+2026-01-14 13:00:55,568 - INFO - [Valid] [13/90] | Loss: 0.5150 | Val Acc: 79.94%
+2026-01-14 13:00:55,581 - INFO - [Metrics for 'abnormal'] | Precision: 0.7633 | Recall: 0.8217 | F1: 0.7914
+2026-01-14 13:00:55,582 - INFO - [Metrics for 'normal'] | Precision: 0.8353 | Recall: 0.7802 | F1: 0.8068
+2026-01-14 13:00:55,587 - INFO - --------------------------------------------------
+2026-01-14 13:00:55,590 - INFO - [LR]    [14/90] | Learning Rate: 0.000997
+2026-01-14 13:01:04,028 - INFO - [Train] [14/90] | Loss: 0.4165 | Train Acc: 86.76%
+2026-01-14 13:01:06,933 - INFO - [Valid] [14/90] | Loss: 0.5244 | Val Acc: 81.12%
+2026-01-14 13:01:06,947 - INFO - [Metrics for 'abnormal'] | Precision: 0.7853 | Recall: 0.8153 | F1: 0.8000
+2026-01-14 13:01:06,947 - INFO - [Metrics for 'normal'] | Precision: 0.8352 | Recall: 0.8077 | F1: 0.8212
+2026-01-14 13:01:06,951 - INFO - --------------------------------------------------
+2026-01-14 13:01:06,955 - INFO - [LR]    [15/90] | Learning Rate: 0.000994
+2026-01-14 13:01:15,270 - INFO - [Train] [15/90] | Loss: 0.4152 | Train Acc: 86.24%
+2026-01-14 13:01:18,751 - INFO - [Valid] [15/90] | Loss: 0.5320 | Val Acc: 80.24%
+2026-01-14 13:01:18,762 - INFO - [Metrics for 'abnormal'] | Precision: 0.7647 | Recall: 0.8280 | F1: 0.7951
+2026-01-14 13:01:18,763 - INFO - [Metrics for 'normal'] | Precision: 0.8402 | Recall: 0.7802 | F1: 0.8091
+2026-01-14 13:01:18,767 - INFO - --------------------------------------------------
+2026-01-14 13:01:18,770 - INFO - [LR]    [16/90] | Learning Rate: 0.000991
+2026-01-14 13:01:27,321 - INFO - [Train] [16/90] | Loss: 0.3933 | Train Acc: 87.80%
+2026-01-14 13:01:30,227 - INFO - [Valid] [16/90] | Loss: 0.5536 | Val Acc: 78.17%
+2026-01-14 13:01:30,239 - INFO - [Metrics for 'abnormal'] | Precision: 0.7862 | Recall: 0.7261 | F1: 0.7550
+2026-01-14 13:01:30,240 - INFO - [Metrics for 'normal'] | Precision: 0.7784 | Recall: 0.8297 | F1: 0.8032
+2026-01-14 13:01:30,245 - INFO - --------------------------------------------------
+2026-01-14 13:01:30,248 - INFO - [LR]    [17/90] | Learning Rate: 0.000988
+2026-01-14 13:01:39,583 - INFO - [Train] [17/90] | Loss: 0.3701 | Train Acc: 89.06%
+2026-01-14 13:01:42,764 - INFO - [Valid] [17/90] | Loss: 0.4993 | Val Acc: 81.42%
+2026-01-14 13:01:42,774 - INFO - [Metrics for 'abnormal'] | Precision: 0.7831 | Recall: 0.8280 | F1: 0.8050
+2026-01-14 13:01:42,775 - INFO - [Metrics for 'normal'] | Precision: 0.8439 | Recall: 0.8022 | F1: 0.8225
+2026-01-14 13:01:42,778 - INFO - --------------------------------------------------
+2026-01-14 13:01:42,781 - INFO - [LR]    [18/90] | Learning Rate: 0.000983
+2026-01-14 13:01:52,432 - INFO - [Train] [18/90] | Loss: 0.3437 | Train Acc: 91.37%
+2026-01-14 13:01:55,562 - INFO - [Valid] [18/90] | Loss: 0.5127 | Val Acc: 81.42%
+2026-01-14 13:01:55,574 - INFO - [Metrics for 'abnormal'] | Precision: 0.7866 | Recall: 0.8217 | F1: 0.8037
+2026-01-14 13:01:55,575 - INFO - [Metrics for 'normal'] | Precision: 0.8400 | Recall: 0.8077 | F1: 0.8235
+2026-01-14 13:01:55,580 - INFO - --------------------------------------------------
+2026-01-14 13:01:55,584 - INFO - [LR]    [19/90] | Learning Rate: 0.000978
+2026-01-14 13:02:05,546 - INFO - [Train] [19/90] | Loss: 0.3513 | Train Acc: 91.29%
+2026-01-14 13:02:07,905 - INFO - [Valid] [19/90] | Loss: 0.5223 | Val Acc: 79.94%
+2026-01-14 13:02:07,917 - INFO - [Metrics for 'abnormal'] | Precision: 0.7871 | Recall: 0.7771 | F1: 0.7821
+2026-01-14 13:02:07,917 - INFO - [Metrics for 'normal'] | Precision: 0.8098 | Recall: 0.8187 | F1: 0.8142
+2026-01-14 13:02:07,921 - INFO - --------------------------------------------------
+2026-01-14 13:02:07,924 - INFO - [LR]    [20/90] | Learning Rate: 0.000972
+2026-01-14 13:02:18,374 - INFO - [Train] [20/90] | Loss: 0.3395 | Train Acc: 91.74%
+2026-01-14 13:02:20,716 - INFO - [Valid] [20/90] | Loss: 0.5372 | Val Acc: 79.06%
+2026-01-14 13:02:20,726 - INFO - [Metrics for 'abnormal'] | Precision: 0.8308 | Recall: 0.6879 | F1: 0.7526
+2026-01-14 13:02:20,727 - INFO - [Metrics for 'normal'] | Precision: 0.7656 | Recall: 0.8791 | F1: 0.8184
+2026-01-14 13:02:20,730 - INFO - --------------------------------------------------
+2026-01-14 13:02:20,732 - INFO - [LR]    [21/90] | Learning Rate: 0.000966
+2026-01-14 13:02:30,804 - INFO - [Train] [21/90] | Loss: 0.3257 | Train Acc: 93.38%
+2026-01-14 13:02:33,141 - INFO - [Valid] [21/90] | Loss: 0.5566 | Val Acc: 81.12%
+2026-01-14 13:02:33,152 - INFO - [Metrics for 'abnormal'] | Precision: 0.7719 | Recall: 0.8408 | F1: 0.8049
+2026-01-14 13:02:33,152 - INFO - [Metrics for 'normal'] | Precision: 0.8512 | Recall: 0.7857 | F1: 0.8171
+2026-01-14 13:02:33,156 - INFO - --------------------------------------------------
+2026-01-14 13:02:33,159 - INFO - [LR]    [22/90] | Learning Rate: 0.000959
+2026-01-14 13:02:43,775 - INFO - [Train] [22/90] | Loss: 0.3247 | Train Acc: 92.49%
+2026-01-14 13:02:45,570 - INFO - [Valid] [22/90] | Loss: 0.5085 | Val Acc: 80.83%
+2026-01-14 13:02:45,583 - INFO - [Metrics for 'abnormal'] | Precision: 0.7840 | Recall: 0.8089 | F1: 0.7962
+2026-01-14 13:02:45,584 - INFO - [Metrics for 'normal'] | Precision: 0.8305 | Recall: 0.8077 | F1: 0.8189
+2026-01-14 13:02:45,588 - INFO - --------------------------------------------------
+2026-01-14 13:02:45,592 - INFO - [LR]    [23/90] | Learning Rate: 0.000951
+2026-01-14 13:02:56,139 - INFO - [Train] [23/90] | Loss: 0.3045 | Train Acc: 94.05%
+2026-01-14 13:02:58,215 - INFO - [Valid] [23/90] | Loss: 0.5072 | Val Acc: 82.60%
+2026-01-14 13:02:58,227 - INFO - [Metrics for 'abnormal'] | Precision: 0.7784 | Recall: 0.8726 | F1: 0.8228
+2026-01-14 13:02:58,228 - INFO - [Metrics for 'normal'] | Precision: 0.8773 | Recall: 0.7857 | F1: 0.8290
+2026-01-14 13:02:58,234 - INFO - --------------------------------------------------
+2026-01-14 13:02:58,238 - INFO - [LR]    [24/90] | Learning Rate: 0.000943
+2026-01-14 13:03:08,969 - INFO - [Train] [24/90] | Loss: 0.3069 | Train Acc: 94.12%
+2026-01-14 13:03:11,048 - INFO - [Valid] [24/90] | Loss: 0.5287 | Val Acc: 77.29%
+2026-01-14 13:03:11,059 - INFO - [Metrics for 'abnormal'] | Precision: 0.8390 | Recall: 0.6306 | F1: 0.7200
+2026-01-14 13:03:11,059 - INFO - [Metrics for 'normal'] | Precision: 0.7376 | Recall: 0.8956 | F1: 0.8089
+2026-01-14 13:03:11,064 - INFO - --------------------------------------------------
+2026-01-14 13:03:11,068 - INFO - [LR]    [25/90] | Learning Rate: 0.000934
+2026-01-14 13:03:21,045 - INFO - [Train] [25/90] | Loss: 0.2904 | Train Acc: 96.13%
+2026-01-14 13:03:23,615 - INFO - [Valid] [25/90] | Loss: 0.5273 | Val Acc: 82.30%
+2026-01-14 13:03:23,655 - INFO - [Metrics for 'abnormal'] | Precision: 0.8489 | Recall: 0.7516 | F1: 0.7973
+2026-01-14 13:03:23,659 - INFO - [Metrics for 'normal'] | Precision: 0.8050 | Recall: 0.8846 | F1: 0.8429
+2026-01-14 13:03:23,687 - INFO - --------------------------------------------------
+2026-01-14 13:03:23,696 - INFO - [LR]    [26/90] | Learning Rate: 0.000924
+2026-01-14 13:03:34,436 - INFO - [Train] [26/90] | Loss: 0.2836 | Train Acc: 95.46%
+2026-01-14 13:03:36,970 - INFO - [Valid] [26/90] | Loss: 0.5624 | Val Acc: 82.30%
+2026-01-14 13:03:36,981 - INFO - [Metrics for 'abnormal'] | Precision: 0.8647 | Recall: 0.7325 | F1: 0.7931
+2026-01-14 13:03:36,982 - INFO - [Metrics for 'normal'] | Precision: 0.7961 | Recall: 0.9011 | F1: 0.8454
+2026-01-14 13:03:36,986 - INFO - --------------------------------------------------
+2026-01-14 13:03:36,990 - INFO - [LR]    [27/90] | Learning Rate: 0.000914
+2026-01-14 13:03:46,879 - INFO - [Train] [27/90] | Loss: 0.2810 | Train Acc: 96.28%
+2026-01-14 13:03:49,553 - INFO - [Valid] [27/90] | Loss: 0.5507 | Val Acc: 80.53%
+2026-01-14 13:03:49,570 - INFO - [Metrics for 'abnormal'] | Precision: 0.7661 | Recall: 0.8344 | F1: 0.7988
+2026-01-14 13:03:49,570 - INFO - [Metrics for 'normal'] | Precision: 0.8452 | Recall: 0.7802 | F1: 0.8114
+2026-01-14 13:03:49,577 - INFO - --------------------------------------------------
+2026-01-14 13:03:49,583 - INFO - [LR]    [28/90] | Learning Rate: 0.000903
+2026-01-14 13:04:00,572 - INFO - [Train] [28/90] | Loss: 0.2679 | Train Acc: 97.10%
+2026-01-14 13:04:03,996 - INFO - [Valid] [28/90] | Loss: 0.5669 | Val Acc: 82.30%
+2026-01-14 13:04:04,009 - INFO - [Metrics for 'abnormal'] | Precision: 0.7904 | Recall: 0.8408 | F1: 0.8148
+2026-01-14 13:04:04,010 - INFO - [Metrics for 'normal'] | Precision: 0.8547 | Recall: 0.8077 | F1: 0.8305
+2026-01-14 13:04:04,016 - INFO - --------------------------------------------------
+2026-01-14 13:04:04,019 - INFO - [LR]    [29/90] | Learning Rate: 0.000892
+2026-01-14 13:04:13,406 - INFO - [Train] [29/90] | Loss: 0.2697 | Train Acc: 96.65%
+2026-01-14 13:04:16,306 - INFO - [Valid] [29/90] | Loss: 0.5318 | Val Acc: 81.71%
+2026-01-14 13:04:16,332 - INFO - [Metrics for 'abnormal'] | Precision: 0.7844 | Recall: 0.8344 | F1: 0.8086
+2026-01-14 13:04:16,333 - INFO - [Metrics for 'normal'] | Precision: 0.8488 | Recall: 0.8022 | F1: 0.8249
+2026-01-14 13:04:16,344 - INFO - --------------------------------------------------
+2026-01-14 13:04:16,350 - INFO - [LR]    [30/90] | Learning Rate: 0.000880
+2026-01-14 13:04:26,433 - INFO - [Train] [30/90] | Loss: 0.2689 | Train Acc: 97.17%
+2026-01-14 13:04:29,053 - INFO - [Valid] [30/90] | Loss: 0.4843 | Val Acc: 84.07%
+2026-01-14 13:04:29,064 - INFO - [Metrics for 'abnormal'] | Precision: 0.8084 | Recall: 0.8599 | F1: 0.8333
+2026-01-14 13:04:29,065 - INFO - [Metrics for 'normal'] | Precision: 0.8721 | Recall: 0.8242 | F1: 0.8475
+2026-01-14 13:04:29,116 - INFO - [Best Model Saved] (val loss: 0.4843) -> 'log/Sewer-TAPNEW/baseline_mobile_vit_xxs_wanda_20260114_124023/best_model.pth'
+2026-01-14 13:04:29,116 - INFO - --------------------------------------------------
+2026-01-14 13:04:29,119 - INFO - [LR]    [31/90] | Learning Rate: 0.000868
+2026-01-14 13:04:38,915 - INFO - [Train] [31/90] | Loss: 0.2551 | Train Acc: 97.77%
+2026-01-14 13:04:41,633 - INFO - [Valid] [31/90] | Loss: 0.4910 | Val Acc: 82.01%
+2026-01-14 13:04:41,649 - INFO - [Metrics for 'abnormal'] | Precision: 0.7791 | Recall: 0.8535 | F1: 0.8146
+2026-01-14 13:04:41,650 - INFO - [Metrics for 'normal'] | Precision: 0.8623 | Recall: 0.7912 | F1: 0.8252
+2026-01-14 13:04:41,655 - INFO - --------------------------------------------------
+2026-01-14 13:04:41,658 - INFO - [LR]    [32/90] | Learning Rate: 0.000855
+2026-01-14 13:04:51,052 - INFO - [Train] [32/90] | Loss: 0.2568 | Train Acc: 97.40%
+2026-01-14 13:04:53,946 - INFO - [Valid] [32/90] | Loss: 0.5461 | Val Acc: 82.60%
+2026-01-14 13:04:53,956 - INFO - [Metrics for 'abnormal'] | Precision: 0.8141 | Recall: 0.8089 | F1: 0.8115
+2026-01-14 13:04:53,956 - INFO - [Metrics for 'normal'] | Precision: 0.8361 | Recall: 0.8407 | F1: 0.8384
+2026-01-14 13:04:53,960 - INFO - --------------------------------------------------
+2026-01-14 13:04:53,963 - INFO - [LR]    [33/90] | Learning Rate: 0.000842
+2026-01-14 13:05:03,563 - INFO - [Train] [33/90] | Loss: 0.2514 | Train Acc: 98.07%
+2026-01-14 13:05:06,108 - INFO - [Valid] [33/90] | Loss: 0.5278 | Val Acc: 82.89%
+2026-01-14 13:05:06,120 - INFO - [Metrics for 'abnormal'] | Precision: 0.8113 | Recall: 0.8217 | F1: 0.8165
+2026-01-14 13:05:06,121 - INFO - [Metrics for 'normal'] | Precision: 0.8444 | Recall: 0.8352 | F1: 0.8398
+2026-01-14 13:05:06,125 - INFO - --------------------------------------------------
+2026-01-14 13:05:06,129 - INFO - [LR]    [34/90] | Learning Rate: 0.000829
+2026-01-14 13:05:15,238 - INFO - [Train] [34/90] | Loss: 0.2527 | Train Acc: 97.84%
+2026-01-14 13:05:17,424 - INFO - [Valid] [34/90] | Loss: 0.5450 | Val Acc: 81.71%
+2026-01-14 13:05:17,436 - INFO - [Metrics for 'abnormal'] | Precision: 0.8065 | Recall: 0.7962 | F1: 0.8013
+2026-01-14 13:05:17,436 - INFO - [Metrics for 'normal'] | Precision: 0.8261 | Recall: 0.8352 | F1: 0.8306
+2026-01-14 13:05:17,440 - INFO - --------------------------------------------------
+2026-01-14 13:05:17,444 - INFO - [LR]    [35/90] | Learning Rate: 0.000815
+2026-01-14 13:05:27,440 - INFO - [Train] [35/90] | Loss: 0.2439 | Train Acc: 97.84%
+2026-01-14 13:05:29,713 - INFO - [Valid] [35/90] | Loss: 0.5580 | Val Acc: 78.47%
+2026-01-14 13:05:29,724 - INFO - [Metrics for 'abnormal'] | Precision: 0.7625 | Recall: 0.7771 | F1: 0.7697
+2026-01-14 13:05:29,725 - INFO - [Metrics for 'normal'] | Precision: 0.8045 | Recall: 0.7912 | F1: 0.7978
+2026-01-14 13:05:29,729 - INFO - --------------------------------------------------
+2026-01-14 13:05:29,731 - INFO - [LR]    [36/90] | Learning Rate: 0.000800
+2026-01-14 13:05:38,750 - INFO - [Train] [36/90] | Loss: 0.2476 | Train Acc: 97.84%
+2026-01-14 13:05:40,940 - INFO - [Valid] [36/90] | Loss: 0.5852 | Val Acc: 80.24%
+2026-01-14 13:05:40,983 - INFO - [Metrics for 'abnormal'] | Precision: 0.7500 | Recall: 0.8599 | F1: 0.8012
+2026-01-14 13:05:40,983 - INFO - [Metrics for 'normal'] | Precision: 0.8616 | Recall: 0.7527 | F1: 0.8035
+2026-01-14 13:05:40,988 - INFO - --------------------------------------------------
+2026-01-14 13:05:40,991 - INFO - [LR]    [37/90] | Learning Rate: 0.000785
+2026-01-14 13:05:50,249 - INFO - [Train] [37/90] | Loss: 0.2504 | Train Acc: 97.62%
+2026-01-14 13:05:52,846 - INFO - [Valid] [37/90] | Loss: 0.5309 | Val Acc: 80.24%
+2026-01-14 13:05:52,861 - INFO - [Metrics for 'abnormal'] | Precision: 0.8000 | Recall: 0.7643 | F1: 0.7818
+2026-01-14 13:05:52,862 - INFO - [Metrics for 'normal'] | Precision: 0.8042 | Recall: 0.8352 | F1: 0.8194
+2026-01-14 13:05:52,867 - INFO - --------------------------------------------------
+2026-01-14 13:05:52,871 - INFO - [LR]    [38/90] | Learning Rate: 0.000770
+2026-01-14 13:06:01,879 - INFO - [Train] [38/90] | Loss: 0.2499 | Train Acc: 97.77%
+2026-01-14 13:06:05,042 - INFO - [Valid] [38/90] | Loss: 0.5079 | Val Acc: 82.60%
+2026-01-14 13:06:05,054 - INFO - [Metrics for 'abnormal'] | Precision: 0.7882 | Recall: 0.8535 | F1: 0.8196
+2026-01-14 13:06:05,055 - INFO - [Metrics for 'normal'] | Precision: 0.8639 | Recall: 0.8022 | F1: 0.8319
+2026-01-14 13:06:05,059 - INFO - --------------------------------------------------
+2026-01-14 13:06:05,063 - INFO - [LR]    [39/90] | Learning Rate: 0.000754
+2026-01-14 13:06:14,754 - INFO - [Train] [39/90] | Loss: 0.2438 | Train Acc: 97.77%
+2026-01-14 13:06:18,208 - INFO - [Valid] [39/90] | Loss: 0.5195 | Val Acc: 82.01%
+2026-01-14 13:06:18,231 - INFO - [Metrics for 'abnormal'] | Precision: 0.7791 | Recall: 0.8535 | F1: 0.8146
+2026-01-14 13:06:18,231 - INFO - [Metrics for 'normal'] | Precision: 0.8623 | Recall: 0.7912 | F1: 0.8252
+2026-01-14 13:06:18,238 - INFO - --------------------------------------------------
+2026-01-14 13:06:18,244 - INFO - [LR]    [40/90] | Learning Rate: 0.000738
+2026-01-14 13:06:27,319 - INFO - [Train] [40/90] | Loss: 0.2398 | Train Acc: 98.14%
+2026-01-14 13:06:30,333 - INFO - [Valid] [40/90] | Loss: 0.5356 | Val Acc: 81.71%
+2026-01-14 13:06:30,347 - INFO - [Metrics for 'abnormal'] | Precision: 0.8105 | Recall: 0.7898 | F1: 0.8000
+2026-01-14 13:06:30,348 - INFO - [Metrics for 'normal'] | Precision: 0.8226 | Recall: 0.8407 | F1: 0.8315
+2026-01-14 13:06:30,352 - INFO - --------------------------------------------------
+2026-01-14 13:06:30,357 - INFO - [LR]    [41/90] | Learning Rate: 0.000722
+2026-01-14 13:06:40,492 - INFO - [Train] [41/90] | Loss: 0.2310 | Train Acc: 98.96%
+2026-01-14 13:06:43,104 - INFO - [Valid] [41/90] | Loss: 0.5876 | Val Acc: 80.53%
+2026-01-14 13:06:43,117 - INFO - [Metrics for 'abnormal'] | Precision: 0.7542 | Recall: 0.8599 | F1: 0.8036
+2026-01-14 13:06:43,118 - INFO - [Metrics for 'normal'] | Precision: 0.8625 | Recall: 0.7582 | F1: 0.8070
+2026-01-14 13:06:43,123 - INFO - --------------------------------------------------
+2026-01-14 13:06:43,126 - INFO - [LR]    [42/90] | Learning Rate: 0.000706
+2026-01-14 13:06:52,190 - INFO - [Train] [42/90] | Loss: 0.2350 | Train Acc: 99.03%
+2026-01-14 13:06:56,501 - INFO - [Valid] [42/90] | Loss: 0.5302 | Val Acc: 81.42%
+2026-01-14 13:06:56,514 - INFO - [Metrics for 'abnormal'] | Precision: 0.7798 | Recall: 0.8344 | F1: 0.8062
+2026-01-14 13:06:56,515 - INFO - [Metrics for 'normal'] | Precision: 0.8480 | Recall: 0.7967 | F1: 0.8215
+2026-01-14 13:06:56,520 - INFO - --------------------------------------------------
+2026-01-14 13:06:56,524 - INFO - [LR]    [43/90] | Learning Rate: 0.000689
+2026-01-14 13:07:05,797 - INFO - [Train] [43/90] | Loss: 0.2463 | Train Acc: 97.84%
+2026-01-14 13:07:08,359 - INFO - [Valid] [43/90] | Loss: 0.5503 | Val Acc: 82.01%
+2026-01-14 13:07:08,372 - INFO - [Metrics for 'abnormal'] | Precision: 0.8117 | Recall: 0.7962 | F1: 0.8039
+2026-01-14 13:07:08,373 - INFO - [Metrics for 'normal'] | Precision: 0.8270 | Recall: 0.8407 | F1: 0.8338
+2026-01-14 13:07:08,377 - INFO - --------------------------------------------------
+2026-01-14 13:07:08,382 - INFO - [LR]    [44/90] | Learning Rate: 0.000672
+2026-01-14 13:07:17,153 - INFO - [Train] [44/90] | Loss: 0.2376 | Train Acc: 98.21%
+2026-01-14 13:07:20,372 - INFO - [Valid] [44/90] | Loss: 0.5052 | Val Acc: 81.71%
+2026-01-14 13:07:20,401 - INFO - [Metrics for 'abnormal'] | Precision: 0.8231 | Recall: 0.7707 | F1: 0.7961
+2026-01-14 13:07:20,402 - INFO - [Metrics for 'normal'] | Precision: 0.8125 | Recall: 0.8571 | F1: 0.8342
+2026-01-14 13:07:20,408 - INFO - --------------------------------------------------
+2026-01-14 13:07:20,411 - INFO - [LR]    [45/90] | Learning Rate: 0.000655
+2026-01-14 13:07:30,533 - INFO - [Train] [45/90] | Loss: 0.2374 | Train Acc: 98.51%
+2026-01-14 13:07:33,395 - INFO - [Valid] [45/90] | Loss: 0.5357 | Val Acc: 82.60%
+2026-01-14 13:07:33,418 - INFO - [Metrics for 'abnormal'] | Precision: 0.8101 | Recall: 0.8153 | F1: 0.8127
+2026-01-14 13:07:33,422 - INFO - [Metrics for 'normal'] | Precision: 0.8398 | Recall: 0.8352 | F1: 0.8375
+2026-01-14 13:07:33,427 - INFO - --------------------------------------------------
+2026-01-14 13:07:33,440 - INFO - [LR]    [46/90] | Learning Rate: 0.000638
+2026-01-14 13:07:43,462 - INFO - [Train] [46/90] | Loss: 0.2355 | Train Acc: 98.36%
+2026-01-14 13:07:45,919 - INFO - [Valid] [46/90] | Loss: 0.5042 | Val Acc: 83.19%
+2026-01-14 13:07:45,940 - INFO - [Metrics for 'abnormal'] | Precision: 0.8049 | Recall: 0.8408 | F1: 0.8224
+2026-01-14 13:07:45,941 - INFO - [Metrics for 'normal'] | Precision: 0.8571 | Recall: 0.8242 | F1: 0.8403
+2026-01-14 13:07:45,945 - INFO - --------------------------------------------------
+2026-01-14 13:07:45,949 - INFO - [LR]    [47/90] | Learning Rate: 0.000620
+2026-01-14 13:07:55,067 - INFO - [Train] [47/90] | Loss: 0.2479 | Train Acc: 98.14%
+2026-01-14 13:07:57,485 - INFO - [Valid] [47/90] | Loss: 0.5288 | Val Acc: 82.60%
+2026-01-14 13:07:57,497 - INFO - [Metrics for 'abnormal'] | Precision: 0.7917 | Recall: 0.8471 | F1: 0.8185
+2026-01-14 13:07:57,498 - INFO - [Metrics for 'normal'] | Precision: 0.8596 | Recall: 0.8077 | F1: 0.8329
+2026-01-14 13:07:57,502 - INFO - --------------------------------------------------
+2026-01-14 13:07:57,505 - INFO - [LR]    [48/90] | Learning Rate: 0.000603
+2026-01-14 13:08:06,994 - INFO - [Train] [48/90] | Loss: 0.2463 | Train Acc: 97.92%
+2026-01-14 13:08:09,957 - INFO - [Valid] [48/90] | Loss: 0.5212 | Val Acc: 81.42%
+2026-01-14 13:08:09,970 - INFO - [Metrics for 'abnormal'] | Precision: 0.7937 | Recall: 0.8089 | F1: 0.8013
+2026-01-14 13:08:09,971 - INFO - [Metrics for 'normal'] | Precision: 0.8324 | Recall: 0.8187 | F1: 0.8255
+2026-01-14 13:08:09,975 - INFO - --------------------------------------------------
+2026-01-14 13:08:09,980 - INFO - [LR]    [49/90] | Learning Rate: 0.000585
+2026-01-14 13:08:19,951 - INFO - [Train] [49/90] | Loss: 0.2309 | Train Acc: 99.11%
+2026-01-14 13:08:23,124 - INFO - [Valid] [49/90] | Loss: 0.5439 | Val Acc: 79.65%
+2026-01-14 13:08:23,148 - INFO - [Metrics for 'abnormal'] | Precision: 0.7651 | Recall: 0.8089 | F1: 0.7864
+2026-01-14 13:08:23,151 - INFO - [Metrics for 'normal'] | Precision: 0.8266 | Recall: 0.7857 | F1: 0.8056
+2026-01-14 13:08:23,159 - INFO - --------------------------------------------------
+2026-01-14 13:08:23,170 - INFO - [LR]    [50/90] | Learning Rate: 0.000568
+2026-01-14 13:08:32,312 - INFO - [Train] [50/90] | Loss: 0.2340 | Train Acc: 98.88%
+2026-01-14 13:08:35,451 - INFO - [Valid] [50/90] | Loss: 0.5302 | Val Acc: 82.01%
+2026-01-14 13:08:35,460 - INFO - [Metrics for 'abnormal'] | Precision: 0.8333 | Recall: 0.7643 | F1: 0.7973
+2026-01-14 13:08:35,461 - INFO - [Metrics for 'normal'] | Precision: 0.8103 | Recall: 0.8681 | F1: 0.8382
+2026-01-14 13:08:35,465 - INFO - --------------------------------------------------
+2026-01-14 13:08:35,468 - INFO - [LR]    [51/90] | Learning Rate: 0.000550
+2026-01-14 13:08:45,277 - INFO - [Train] [51/90] | Loss: 0.2212 | Train Acc: 99.55%
+2026-01-14 13:08:48,202 - INFO - [Valid] [51/90] | Loss: 0.5103 | Val Acc: 81.71%
+2026-01-14 13:08:48,214 - INFO - [Metrics for 'abnormal'] | Precision: 0.7914 | Recall: 0.8217 | F1: 0.8063
+2026-01-14 13:08:48,214 - INFO - [Metrics for 'normal'] | Precision: 0.8409 | Recall: 0.8132 | F1: 0.8268
+2026-01-14 13:08:48,218 - INFO - --------------------------------------------------
+2026-01-14 13:08:48,222 - INFO - [LR]    [52/90] | Learning Rate: 0.000532
+2026-01-14 13:08:58,016 - INFO - [Train] [52/90] | Loss: 0.2193 | Train Acc: 99.63%
+2026-01-14 13:09:00,624 - INFO - [Valid] [52/90] | Loss: 0.5113 | Val Acc: 82.89%
+2026-01-14 13:09:00,635 - INFO - [Metrics for 'abnormal'] | Precision: 0.8075 | Recall: 0.8280 | F1: 0.8176
+2026-01-14 13:09:00,636 - INFO - [Metrics for 'normal'] | Precision: 0.8483 | Recall: 0.8297 | F1: 0.8389
+2026-01-14 13:09:00,641 - INFO - --------------------------------------------------
+2026-01-14 13:09:00,644 - INFO - [LR]    [53/90] | Learning Rate: 0.000515
+2026-01-14 13:09:09,526 - INFO - [Train] [53/90] | Loss: 0.2168 | Train Acc: 99.63%
+2026-01-14 13:09:12,079 - INFO - [Valid] [53/90] | Loss: 0.5237 | Val Acc: 82.01%
+2026-01-14 13:09:12,090 - INFO - [Metrics for 'abnormal'] | Precision: 0.7892 | Recall: 0.8344 | F1: 0.8111
+2026-01-14 13:09:12,091 - INFO - [Metrics for 'normal'] | Precision: 0.8497 | Recall: 0.8077 | F1: 0.8282
+2026-01-14 13:09:12,095 - INFO - --------------------------------------------------
+2026-01-14 13:09:12,102 - INFO - [LR]    [54/90] | Learning Rate: 0.000497
+2026-01-14 13:09:22,180 - INFO - [Train] [54/90] | Loss: 0.2210 | Train Acc: 99.11%
+2026-01-14 13:09:25,189 - INFO - [Valid] [54/90] | Loss: 0.5153 | Val Acc: 82.60%
+2026-01-14 13:09:25,199 - INFO - [Metrics for 'abnormal'] | Precision: 0.8403 | Recall: 0.7707 | F1: 0.8040
+2026-01-14 13:09:25,200 - INFO - [Metrics for 'normal'] | Precision: 0.8154 | Recall: 0.8736 | F1: 0.8435
+2026-01-14 13:09:25,203 - INFO - --------------------------------------------------
+2026-01-14 13:09:25,207 - INFO - [LR]    [55/90] | Learning Rate: 0.000480
+2026-01-14 13:09:35,559 - INFO - [Train] [55/90] | Loss: 0.2223 | Train Acc: 99.33%
+2026-01-14 13:09:38,009 - INFO - [Valid] [55/90] | Loss: 0.5350 | Val Acc: 81.42%
+2026-01-14 13:09:38,032 - INFO - [Metrics for 'abnormal'] | Precision: 0.7866 | Recall: 0.8217 | F1: 0.8037
+2026-01-14 13:09:38,032 - INFO - [Metrics for 'normal'] | Precision: 0.8400 | Recall: 0.8077 | F1: 0.8235
+2026-01-14 13:09:38,039 - INFO - --------------------------------------------------
+2026-01-14 13:09:38,041 - INFO - [LR]    [56/90] | Learning Rate: 0.000462
+2026-01-14 13:09:48,127 - INFO - [Train] [56/90] | Loss: 0.2180 | Train Acc: 99.55%
+2026-01-14 13:09:50,563 - INFO - [Valid] [56/90] | Loss: 0.5372 | Val Acc: 81.42%
+2026-01-14 13:09:50,577 - INFO - [Metrics for 'abnormal'] | Precision: 0.7975 | Recall: 0.8025 | F1: 0.8000
+2026-01-14 13:09:50,578 - INFO - [Metrics for 'normal'] | Precision: 0.8287 | Recall: 0.8242 | F1: 0.8264
+2026-01-14 13:09:50,582 - INFO - --------------------------------------------------
+2026-01-14 13:09:50,584 - INFO - [LR]    [57/90] | Learning Rate: 0.000445
+2026-01-14 13:10:00,994 - INFO - [Train] [57/90] | Loss: 0.2188 | Train Acc: 99.55%
+2026-01-14 13:10:03,826 - INFO - [Valid] [57/90] | Loss: 0.5328 | Val Acc: 82.01%
+2026-01-14 13:10:03,848 - INFO - [Metrics for 'abnormal'] | Precision: 0.8117 | Recall: 0.7962 | F1: 0.8039
+2026-01-14 13:10:03,850 - INFO - [Metrics for 'normal'] | Precision: 0.8270 | Recall: 0.8407 | F1: 0.8338
+2026-01-14 13:10:03,854 - INFO - --------------------------------------------------
+2026-01-14 13:10:03,860 - INFO - [LR]    [58/90] | Learning Rate: 0.000428
+2026-01-14 13:10:13,955 - INFO - [Train] [58/90] | Loss: 0.2204 | Train Acc: 99.55%
+2026-01-14 13:10:16,353 - INFO - [Valid] [58/90] | Loss: 0.5475 | Val Acc: 81.71%
+2026-01-14 13:10:16,364 - INFO - [Metrics for 'abnormal'] | Precision: 0.7879 | Recall: 0.8280 | F1: 0.8075
+2026-01-14 13:10:16,364 - INFO - [Metrics for 'normal'] | Precision: 0.8448 | Recall: 0.8077 | F1: 0.8258
+2026-01-14 13:10:16,368 - INFO - --------------------------------------------------
+2026-01-14 13:10:16,371 - INFO - [LR]    [59/90] | Learning Rate: 0.000411
+2026-01-14 13:10:26,276 - INFO - [Train] [59/90] | Loss: 0.2147 | Train Acc: 99.63%
+2026-01-14 13:10:28,731 - INFO - [Valid] [59/90] | Loss: 0.5403 | Val Acc: 79.94%
+2026-01-14 13:10:28,743 - INFO - [Metrics for 'abnormal'] | Precision: 0.7665 | Recall: 0.8153 | F1: 0.7901
+2026-01-14 13:10:28,744 - INFO - [Metrics for 'normal'] | Precision: 0.8314 | Recall: 0.7857 | F1: 0.8079
+2026-01-14 13:10:28,749 - INFO - --------------------------------------------------
+2026-01-14 13:10:28,753 - INFO - [LR]    [60/90] | Learning Rate: 0.000394
+2026-01-14 13:10:38,751 - INFO - [Train] [60/90] | Loss: 0.2200 | Train Acc: 99.33%
+2026-01-14 13:10:41,215 - INFO - [Valid] [60/90] | Loss: 0.5160 | Val Acc: 81.42%
+2026-01-14 13:10:41,228 - INFO - [Metrics for 'abnormal'] | Precision: 0.8052 | Recall: 0.7898 | F1: 0.7974
+2026-01-14 13:10:41,228 - INFO - [Metrics for 'normal'] | Precision: 0.8216 | Recall: 0.8352 | F1: 0.8283
+2026-01-14 13:10:41,233 - INFO - --------------------------------------------------
+2026-01-14 13:10:41,236 - INFO - [LR]    [61/90] | Learning Rate: 0.000378
+2026-01-14 13:10:52,176 - INFO - [Train] [61/90] | Loss: 0.2104 | Train Acc: 99.85%
+2026-01-14 13:10:54,290 - INFO - [Valid] [61/90] | Loss: 0.5521 | Val Acc: 81.12%
+2026-01-14 13:10:54,311 - INFO - [Metrics for 'abnormal'] | Precision: 0.7888 | Recall: 0.8089 | F1: 0.7987
+2026-01-14 13:10:54,315 - INFO - [Metrics for 'normal'] | Precision: 0.8315 | Recall: 0.8132 | F1: 0.8222
+2026-01-14 13:10:54,322 - INFO - --------------------------------------------------
+2026-01-14 13:10:54,328 - INFO - [LR]    [62/90] | Learning Rate: 0.000362
+2026-01-14 13:11:04,426 - INFO - [Train] [62/90] | Loss: 0.2115 | Train Acc: 99.78%
+2026-01-14 13:11:06,339 - INFO - [Valid] [62/90] | Loss: 0.5327 | Val Acc: 80.83%
+2026-01-14 13:11:06,364 - INFO - [Metrics for 'abnormal'] | Precision: 0.8026 | Recall: 0.7771 | F1: 0.7896
+2026-01-14 13:11:06,364 - INFO - [Metrics for 'normal'] | Precision: 0.8128 | Recall: 0.8352 | F1: 0.8238
+2026-01-14 13:11:06,372 - INFO - --------------------------------------------------
+2026-01-14 13:11:06,378 - INFO - [LR]    [63/90] | Learning Rate: 0.000346
+2026-01-14 13:11:16,220 - INFO - [Train] [63/90] | Loss: 0.2101 | Train Acc: 99.70%
+2026-01-14 13:11:18,206 - INFO - [Valid] [63/90] | Loss: 0.5739 | Val Acc: 79.65%
+2026-01-14 13:11:18,225 - INFO - [Metrics for 'abnormal'] | Precision: 0.7558 | Recall: 0.8280 | F1: 0.7903
+2026-01-14 13:11:18,226 - INFO - [Metrics for 'normal'] | Precision: 0.8383 | Recall: 0.7692 | F1: 0.8023
+2026-01-14 13:11:18,232 - INFO - --------------------------------------------------
+2026-01-14 13:11:18,237 - INFO - [LR]    [64/90] | Learning Rate: 0.000330
+2026-01-14 13:11:28,717 - INFO - [Train] [64/90] | Loss: 0.2098 | Train Acc: 99.85%
+2026-01-14 13:11:31,135 - INFO - [Valid] [64/90] | Loss: 0.5597 | Val Acc: 79.65%
+2026-01-14 13:11:31,147 - INFO - [Metrics for 'abnormal'] | Precision: 0.7750 | Recall: 0.7898 | F1: 0.7823
+2026-01-14 13:11:31,148 - INFO - [Metrics for 'normal'] | Precision: 0.8156 | Recall: 0.8022 | F1: 0.8089
+2026-01-14 13:11:31,154 - INFO - --------------------------------------------------
+2026-01-14 13:11:31,158 - INFO - [LR]    [65/90] | Learning Rate: 0.000315
+2026-01-14 13:11:41,228 - INFO - [Train] [65/90] | Loss: 0.2233 | Train Acc: 99.11%
+2026-01-14 13:11:43,841 - INFO - [Valid] [65/90] | Loss: 0.5488 | Val Acc: 80.53%
+2026-01-14 13:11:43,850 - INFO - [Metrics for 'abnormal'] | Precision: 0.7826 | Recall: 0.8025 | F1: 0.7925
+2026-01-14 13:11:43,851 - INFO - [Metrics for 'normal'] | Precision: 0.8258 | Recall: 0.8077 | F1: 0.8167
+2026-01-14 13:11:43,855 - INFO - --------------------------------------------------
+2026-01-14 13:11:43,858 - INFO - [LR]    [66/90] | Learning Rate: 0.000300
+2026-01-14 13:11:54,265 - INFO - [Train] [66/90] | Loss: 0.2132 | Train Acc: 99.70%
+2026-01-14 13:11:57,245 - INFO - [Valid] [66/90] | Loss: 0.5715 | Val Acc: 80.53%
+2026-01-14 13:11:57,329 - INFO - [Metrics for 'abnormal'] | Precision: 0.7791 | Recall: 0.8089 | F1: 0.7937
+2026-01-14 13:11:57,329 - INFO - [Metrics for 'normal'] | Precision: 0.8295 | Recall: 0.8022 | F1: 0.8156
+2026-01-14 13:11:57,338 - INFO - --------------------------------------------------
+2026-01-14 13:11:57,344 - INFO - [LR]    [67/90] | Learning Rate: 0.000285
+2026-01-14 13:12:06,861 - INFO - [Train] [67/90] | Loss: 0.2121 | Train Acc: 99.70%
+2026-01-14 13:12:09,930 - INFO - [Valid] [67/90] | Loss: 0.5414 | Val Acc: 80.53%
+2026-01-14 13:12:09,942 - INFO - [Metrics for 'abnormal'] | Precision: 0.8182 | Recall: 0.7452 | F1: 0.7800
+2026-01-14 13:12:09,942 - INFO - [Metrics for 'normal'] | Precision: 0.7959 | Recall: 0.8571 | F1: 0.8254
+2026-01-14 13:12:09,946 - INFO - --------------------------------------------------
+2026-01-14 13:12:09,950 - INFO - [LR]    [68/90] | Learning Rate: 0.000271
+2026-01-14 13:12:20,257 - INFO - [Train] [68/90] | Loss: 0.2108 | Train Acc: 99.85%
+2026-01-14 13:12:23,976 - INFO - [Valid] [68/90] | Loss: 0.5465 | Val Acc: 80.83%
+2026-01-14 13:12:23,988 - INFO - [Metrics for 'abnormal'] | Precision: 0.8067 | Recall: 0.7707 | F1: 0.7883
+2026-01-14 13:12:23,988 - INFO - [Metrics for 'normal'] | Precision: 0.8095 | Recall: 0.8407 | F1: 0.8248
+2026-01-14 13:12:23,993 - INFO - --------------------------------------------------
+2026-01-14 13:12:23,996 - INFO - [LR]    [69/90] | Learning Rate: 0.000258
+2026-01-14 13:12:33,200 - INFO - [Train] [69/90] | Loss: 0.2120 | Train Acc: 99.78%
+2026-01-14 13:12:37,048 - INFO - [Valid] [69/90] | Loss: 0.5339 | Val Acc: 82.60%
+2026-01-14 13:12:37,066 - INFO - [Metrics for 'abnormal'] | Precision: 0.8403 | Recall: 0.7707 | F1: 0.8040
+2026-01-14 13:12:37,066 - INFO - [Metrics for 'normal'] | Precision: 0.8154 | Recall: 0.8736 | F1: 0.8435
+2026-01-14 13:12:37,072 - INFO - --------------------------------------------------
+2026-01-14 13:12:37,077 - INFO - [LR]    [70/90] | Learning Rate: 0.000245
+2026-01-14 13:12:48,145 - INFO - [Train] [70/90] | Loss: 0.2091 | Train Acc: 99.78%
+2026-01-14 13:12:50,598 - INFO - [Valid] [70/90] | Loss: 0.5209 | Val Acc: 81.12%
+2026-01-14 13:12:50,610 - INFO - [Metrics for 'abnormal'] | Precision: 0.8207 | Recall: 0.7580 | F1: 0.7881
+2026-01-14 13:12:50,610 - INFO - [Metrics for 'normal'] | Precision: 0.8041 | Recall: 0.8571 | F1: 0.8298
+2026-01-14 13:12:50,614 - INFO - --------------------------------------------------
+2026-01-14 13:12:50,618 - INFO - [LR]    [71/90] | Learning Rate: 0.000232
+2026-01-14 13:13:00,241 - INFO - [Train] [71/90] | Loss: 0.2137 | Train Acc: 99.63%
+2026-01-14 13:13:03,303 - INFO - [Valid] [71/90] | Loss: 0.5429 | Val Acc: 80.83%
+2026-01-14 13:13:03,316 - INFO - [Metrics for 'abnormal'] | Precision: 0.8026 | Recall: 0.7771 | F1: 0.7896
+2026-01-14 13:13:03,316 - INFO - [Metrics for 'normal'] | Precision: 0.8128 | Recall: 0.8352 | F1: 0.8238
+2026-01-14 13:13:03,320 - INFO - --------------------------------------------------
+2026-01-14 13:13:03,323 - INFO - [LR]    [72/90] | Learning Rate: 0.000220
+2026-01-14 13:13:13,086 - INFO - [Train] [72/90] | Loss: 0.2081 | Train Acc: 99.85%
+2026-01-14 13:13:15,239 - INFO - [Valid] [72/90] | Loss: 0.5434 | Val Acc: 82.89%
+2026-01-14 13:13:15,262 - INFO - [Metrics for 'abnormal'] | Precision: 0.8414 | Recall: 0.7771 | F1: 0.8079
+2026-01-14 13:13:15,263 - INFO - [Metrics for 'normal'] | Precision: 0.8196 | Recall: 0.8736 | F1: 0.8457
+2026-01-14 13:13:15,269 - INFO - --------------------------------------------------
+2026-01-14 13:13:15,275 - INFO - [LR]    [73/90] | Learning Rate: 0.000208
+2026-01-14 13:13:24,950 - INFO - [Train] [73/90] | Loss: 0.2093 | Train Acc: 99.70%
+2026-01-14 13:13:27,113 - INFO - [Valid] [73/90] | Loss: 0.5529 | Val Acc: 81.71%
+2026-01-14 13:13:27,125 - INFO - [Metrics for 'abnormal'] | Precision: 0.8065 | Recall: 0.7962 | F1: 0.8013
+2026-01-14 13:13:27,125 - INFO - [Metrics for 'normal'] | Precision: 0.8261 | Recall: 0.8352 | F1: 0.8306
+2026-01-14 13:13:27,129 - INFO - --------------------------------------------------
+2026-01-14 13:13:27,133 - INFO - [LR]    [74/90] | Learning Rate: 0.000197
+2026-01-14 13:13:35,810 - INFO - [Train] [74/90] | Loss: 0.2069 | Train Acc: 99.93%
+2026-01-14 13:13:38,772 - INFO - [Valid] [74/90] | Loss: 0.5455 | Val Acc: 82.01%
+2026-01-14 13:13:38,789 - INFO - [Metrics for 'abnormal'] | Precision: 0.8117 | Recall: 0.7962 | F1: 0.8039
+2026-01-14 13:13:38,793 - INFO - [Metrics for 'normal'] | Precision: 0.8270 | Recall: 0.8407 | F1: 0.8338
+2026-01-14 13:13:38,797 - INFO - --------------------------------------------------
+2026-01-14 13:13:38,803 - INFO - [LR]    [75/90] | Learning Rate: 0.000186
+2026-01-14 13:13:49,657 - INFO - [Train] [75/90] | Loss: 0.2093 | Train Acc: 99.85%
+2026-01-14 13:13:52,597 - INFO - [Valid] [75/90] | Loss: 0.5605 | Val Acc: 80.53%
+2026-01-14 13:13:52,611 - INFO - [Metrics for 'abnormal'] | Precision: 0.7826 | Recall: 0.8025 | F1: 0.7925
+2026-01-14 13:13:52,611 - INFO - [Metrics for 'normal'] | Precision: 0.8258 | Recall: 0.8077 | F1: 0.8167
+2026-01-14 13:13:52,616 - INFO - --------------------------------------------------
+2026-01-14 13:13:52,620 - INFO - [LR]    [76/90] | Learning Rate: 0.000176
+2026-01-14 13:14:00,378 - INFO - [Train] [76/90] | Loss: 0.2113 | Train Acc: 99.63%
+2026-01-14 13:14:02,002 - INFO - [Valid] [76/90] | Loss: 0.5632 | Val Acc: 82.01%
+2026-01-14 13:14:02,009 - INFO - [Metrics for 'abnormal'] | Precision: 0.8077 | Recall: 0.8025 | F1: 0.8051
+2026-01-14 13:14:02,009 - INFO - [Metrics for 'normal'] | Precision: 0.8306 | Recall: 0.8352 | F1: 0.8329
+2026-01-14 13:14:02,012 - INFO - --------------------------------------------------
+2026-01-14 13:14:02,015 - INFO - [LR]    [77/90] | Learning Rate: 0.000166
+2026-01-14 13:14:09,150 - INFO - [Train] [77/90] | Loss: 0.2095 | Train Acc: 99.78%
+2026-01-14 13:14:11,039 - INFO - [Valid] [77/90] | Loss: 0.5420 | Val Acc: 81.71%
+2026-01-14 13:14:11,048 - INFO - [Metrics for 'abnormal'] | Precision: 0.7987 | Recall: 0.8089 | F1: 0.8038
+2026-01-14 13:14:11,049 - INFO - [Metrics for 'normal'] | Precision: 0.8333 | Recall: 0.8242 | F1: 0.8287
+2026-01-14 13:14:11,053 - INFO - --------------------------------------------------
+2026-01-14 13:14:11,055 - INFO - [LR]    [78/90] | Learning Rate: 0.000157
+2026-01-14 13:14:20,506 - INFO - [Train] [78/90] | Loss: 0.2063 | Train Acc: 99.85%
+2026-01-14 13:14:23,099 - INFO - [Valid] [78/90] | Loss: 0.5584 | Val Acc: 81.42%
+2026-01-14 13:14:23,109 - INFO - [Metrics for 'abnormal'] | Precision: 0.7975 | Recall: 0.8025 | F1: 0.8000
+2026-01-14 13:14:23,110 - INFO - [Metrics for 'normal'] | Precision: 0.8287 | Recall: 0.8242 | F1: 0.8264
+2026-01-14 13:14:23,114 - INFO - --------------------------------------------------
+2026-01-14 13:14:23,117 - INFO - [LR]    [79/90] | Learning Rate: 0.000149
+2026-01-14 13:14:29,374 - INFO - [Train] [79/90] | Loss: 0.2065 | Train Acc: 99.85%
+2026-01-14 13:14:31,378 - INFO - [Valid] [79/90] | Loss: 0.5453 | Val Acc: 81.12%
+2026-01-14 13:14:31,388 - INFO - [Metrics for 'abnormal'] | Precision: 0.8079 | Recall: 0.7771 | F1: 0.7922
+2026-01-14 13:14:31,389 - INFO - [Metrics for 'normal'] | Precision: 0.8138 | Recall: 0.8407 | F1: 0.8270
+2026-01-14 13:14:31,392 - INFO - --------------------------------------------------
+2026-01-14 13:14:31,395 - INFO - [LR]    [80/90] | Learning Rate: 0.000141
+2026-01-14 13:14:37,515 - INFO - [Train] [80/90] | Loss: 0.2062 | Train Acc: 99.85%
+2026-01-14 13:14:38,854 - INFO - [Valid] [80/90] | Loss: 0.5796 | Val Acc: 81.71%
+2026-01-14 13:14:38,862 - INFO - [Metrics for 'abnormal'] | Precision: 0.7950 | Recall: 0.8153 | F1: 0.8050
+2026-01-14 13:14:38,862 - INFO - [Metrics for 'normal'] | Precision: 0.8371 | Recall: 0.8187 | F1: 0.8278
+2026-01-14 13:14:38,865 - INFO - --------------------------------------------------
+2026-01-14 13:14:38,867 - INFO - [LR]    [81/90] | Learning Rate: 0.000134
+2026-01-14 13:14:43,621 - INFO - [Train] [81/90] | Loss: 0.2049 | Train Acc: 99.93%
+2026-01-14 13:14:44,909 - INFO - [Valid] [81/90] | Loss: 0.5412 | Val Acc: 82.01%
+2026-01-14 13:14:44,917 - INFO - [Metrics for 'abnormal'] | Precision: 0.8243 | Recall: 0.7771 | F1: 0.8000
+2026-01-14 13:14:44,918 - INFO - [Metrics for 'normal'] | Precision: 0.8168 | Recall: 0.8571 | F1: 0.8365
+2026-01-14 13:14:44,920 - INFO - --------------------------------------------------
+2026-01-14 13:14:44,922 - INFO - [LR]    [82/90] | Learning Rate: 0.000128
+2026-01-14 13:14:49,294 - INFO - [Train] [82/90] | Loss: 0.2036 | Train Acc: 99.93%
+2026-01-14 13:14:50,604 - INFO - [Valid] [82/90] | Loss: 0.5546 | Val Acc: 82.30%
+2026-01-14 13:14:50,613 - INFO - [Metrics for 'abnormal'] | Precision: 0.8299 | Recall: 0.7771 | F1: 0.8026
+2026-01-14 13:14:50,613 - INFO - [Metrics for 'normal'] | Precision: 0.8177 | Recall: 0.8626 | F1: 0.8396
+2026-01-14 13:14:50,616 - INFO - --------------------------------------------------
+2026-01-14 13:14:50,618 - INFO - [LR]    [83/90] | Learning Rate: 0.000122
+2026-01-14 13:14:55,120 - INFO - [Train] [83/90] | Loss: 0.2037 | Train Acc: 99.93%
+2026-01-14 13:14:56,432 - INFO - [Valid] [83/90] | Loss: 0.5781 | Val Acc: 81.71%
+2026-01-14 13:14:56,440 - INFO - [Metrics for 'abnormal'] | Precision: 0.8065 | Recall: 0.7962 | F1: 0.8013
+2026-01-14 13:14:56,440 - INFO - [Metrics for 'normal'] | Precision: 0.8261 | Recall: 0.8352 | F1: 0.8306
+2026-01-14 13:14:56,443 - INFO - --------------------------------------------------
+2026-01-14 13:14:56,445 - INFO - [LR]    [84/90] | Learning Rate: 0.000117
+2026-01-14 13:15:00,658 - INFO - [Train] [84/90] | Loss: 0.2032 | Train Acc: 99.93%
+2026-01-14 13:15:01,975 - INFO - [Valid] [84/90] | Loss: 0.5859 | Val Acc: 81.12%
+2026-01-14 13:15:01,982 - INFO - [Metrics for 'abnormal'] | Precision: 0.7853 | Recall: 0.8153 | F1: 0.8000
+2026-01-14 13:15:01,982 - INFO - [Metrics for 'normal'] | Precision: 0.8352 | Recall: 0.8077 | F1: 0.8212
+2026-01-14 13:15:01,985 - INFO - --------------------------------------------------
+2026-01-14 13:15:01,987 - INFO - [LR]    [85/90] | Learning Rate: 0.000112
+2026-01-14 13:15:06,900 - INFO - [Train] [85/90] | Loss: 0.2039 | Train Acc: 99.93%
+2026-01-14 13:15:08,121 - INFO - [Valid] [85/90] | Loss: 0.5589 | Val Acc: 82.01%
+2026-01-14 13:15:08,130 - INFO - [Metrics for 'abnormal'] | Precision: 0.8158 | Recall: 0.7898 | F1: 0.8026
+2026-01-14 13:15:08,130 - INFO - [Metrics for 'normal'] | Precision: 0.8235 | Recall: 0.8462 | F1: 0.8347
+2026-01-14 13:15:08,133 - INFO - --------------------------------------------------
+2026-01-14 13:15:08,135 - INFO - [LR]    [86/90] | Learning Rate: 0.000109
+2026-01-14 13:15:12,749 - INFO - [Train] [86/90] | Loss: 0.2068 | Train Acc: 99.85%
+2026-01-14 13:15:14,071 - INFO - [Valid] [86/90] | Loss: 0.5678 | Val Acc: 81.12%
+2026-01-14 13:15:14,079 - INFO - [Metrics for 'abnormal'] | Precision: 0.8000 | Recall: 0.7898 | F1: 0.7949
+2026-01-14 13:15:14,080 - INFO - [Metrics for 'normal'] | Precision: 0.8207 | Recall: 0.8297 | F1: 0.8251
+2026-01-14 13:15:14,083 - INFO - --------------------------------------------------
+2026-01-14 13:15:14,084 - INFO - [LR]    [87/90] | Learning Rate: 0.000106
+2026-01-14 13:15:18,486 - INFO - [Train] [87/90] | Loss: 0.2023 | Train Acc: 100.00%
+2026-01-14 13:15:19,630 - INFO - [Valid] [87/90] | Loss: 0.5708 | Val Acc: 81.12%
+2026-01-14 13:15:19,638 - INFO - [Metrics for 'abnormal'] | Precision: 0.7962 | Recall: 0.7962 | F1: 0.7962
+2026-01-14 13:15:19,638 - INFO - [Metrics for 'normal'] | Precision: 0.8242 | Recall: 0.8242 | F1: 0.8242
+2026-01-14 13:15:19,641 - INFO - --------------------------------------------------
+2026-01-14 13:15:19,643 - INFO - [LR]    [88/90] | Learning Rate: 0.000103
+2026-01-14 13:15:24,106 - INFO - [Train] [88/90] | Loss: 0.2032 | Train Acc: 99.85%
+2026-01-14 13:15:25,501 - INFO - [Valid] [88/90] | Loss: 0.5743 | Val Acc: 82.01%
+2026-01-14 13:15:25,510 - INFO - [Metrics for 'abnormal'] | Precision: 0.8000 | Recall: 0.8153 | F1: 0.8076
+2026-01-14 13:15:25,510 - INFO - [Metrics for 'normal'] | Precision: 0.8380 | Recall: 0.8242 | F1: 0.8310
+2026-01-14 13:15:25,513 - INFO - --------------------------------------------------
+2026-01-14 13:15:25,515 - INFO - [LR]    [89/90] | Learning Rate: 0.000101
+2026-01-14 13:15:29,860 - INFO - [Train] [89/90] | Loss: 0.2035 | Train Acc: 99.85%
+2026-01-14 13:15:31,326 - INFO - [Valid] [89/90] | Loss: 0.5840 | Val Acc: 81.42%
+2026-01-14 13:15:31,339 - INFO - [Metrics for 'abnormal'] | Precision: 0.7937 | Recall: 0.8089 | F1: 0.8013
+2026-01-14 13:15:31,339 - INFO - [Metrics for 'normal'] | Precision: 0.8324 | Recall: 0.8187 | F1: 0.8255
+2026-01-14 13:15:31,344 - INFO - --------------------------------------------------
+2026-01-14 13:15:31,347 - INFO - [LR]    [90/90] | Learning Rate: 0.000100
+2026-01-14 13:15:35,411 - INFO - [Train] [90/90] | Loss: 0.2025 | Train Acc: 99.93%
+2026-01-14 13:15:36,801 - INFO - [Valid] [90/90] | Loss: 0.5748 | Val Acc: 82.60%
+2026-01-14 13:15:36,815 - INFO - [Metrics for 'abnormal'] | Precision: 0.8141 | Recall: 0.8089 | F1: 0.8115
+2026-01-14 13:15:36,816 - INFO - [Metrics for 'normal'] | Precision: 0.8361 | Recall: 0.8407 | F1: 0.8384
+2026-01-14 13:15:36,822 - INFO - ==================================================
+2026-01-14 13:15:36,823 - INFO - 훈련 완료. 최고 성능 모델을 불러와 테스트 세트로 최종 평가합니다.
+2026-01-14 13:15:36,823 - INFO - 최종 평가를 위해 새로운 모델 객체를 생성합니다.
+2026-01-14 13:15:36,823 - INFO - Baseline 모델 'mobile_vit_xxs'을(를) 생성합니다 (사전 훈련 가중치: 미사용).
+2026-01-14 13:15:36,901 - INFO - timm 모델(mobile_vit_xxs)의 Attention.forward를 Pruning 호환성을 위해 Monkey-patching 합니다.
+2026-01-14 13:15:36,924 - INFO - 최종 평가 모델에 Pruning 구조를 재적용합니다.
+2026-01-14 13:15:36,927 - INFO - Wanda Pruning을 시작합니다.
+2026-01-14 13:15:36,927 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-01-14 13:15:36,933 - INFO -   - Calibration Samples: 1353 (approx 85 batches)
+2026-01-14 13:15:41,200 - INFO - 분류 레이어 'ClassifierHead'을(를) Pruning 대상에서 제외합니다.
+2026-01-14 13:15:41,201 - INFO - ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.
+2026-01-14 13:15:41,687 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.4756640625)에 맞춰 변경되었습니다.
+2026-01-14 13:15:41,687 - INFO - ==================================================
+2026-01-14 13:15:41,756 - INFO - 최고 성능 모델 가중치를 새로 생성된 모델 객체에 로드 완료: 'log/Sewer-TAPNEW/baseline_mobile_vit_xxs_wanda_20260114_124023/best_model.pth'
+2026-01-14 13:15:41,757 - INFO - ==================================================
+2026-01-14 13:15:41,757 - INFO - Test 모드를 시작합니다.
+2026-01-14 13:15:41,904 - INFO - 연산량 (MACs): 0.0913 GMACs per sample
+2026-01-14 13:15:41,905 - INFO - 연산량 (FLOPs): 0.1826 GFLOPs per sample
+2026-01-14 13:15:41,905 - INFO - ==================================================
+2026-01-14 13:15:41,905 - INFO - GPU 캐시를 비우고 측정을 시작합니다.
+2026-01-14 13:15:43,292 - INFO - 샘플 당 평균 Forward Pass 시간: 8.61ms (std: 1.12ms), FPS: 117.76 (std: 13.11) (1개 샘플 x 100회 반복)
+2026-01-14 13:15:43,293 - INFO - 샘플 당 Forward Pass 시 최대 GPU 메모리 사용량: 44.36 MB
+2026-01-14 13:15:43,293 - INFO - 테스트 데이터셋에 대한 추론을 시작합니다.
+2026-01-14 13:15:45,509 - INFO - [Test] Loss: 0.3940 | Test Acc: 84.07%
+2026-01-14 13:15:45,526 - INFO - [Metrics for 'abnormal'] | Precision: 0.8084 | Recall: 0.8599 | F1: 0.8333
+2026-01-14 13:15:45,526 - INFO - [Metrics for 'normal'] | Precision: 0.8721 | Recall: 0.8242 | F1: 0.8475
+2026-01-14 13:15:46,127 - INFO - ==================================================
+2026-01-14 13:15:46,128 - INFO - 혼동 행렬 저장 완료. 'log/Sewer-TAPNEW/baseline_mobile_vit_xxs_wanda_20260114_124023/confusion_matrix_20260114_124023.png' and 'log/Sewer-TAPNEW/baseline_mobile_vit_xxs_wanda_20260114_124023/confusion_matrix_20260114_124023.pdf'
+2026-01-14 13:15:46,128 - INFO - ==================================================
+2026-01-14 13:15:46,129 - INFO - ONNX 변환 및 평가를 시작합니다.
+2026-01-14 13:15:47,094 - INFO - 모델이 ONNX 형식으로 변환되어 'log/Sewer-TAPNEW/baseline_mobile_vit_xxs_wanda_20260114_124023/model_fp32_20260114_124023.onnx'에 저장되었습니다. (크기: 1.44 MB)
+2026-01-14 13:15:47,525 - INFO - [Model Load] ONNX 모델(FP32) 로드 메모리: 2588.99 MB (증가량: 6.92 MB)
+2026-01-14 13:15:47,525 - INFO - ONNX 런타임의 샘플 당 Forward Pass 시간 측정을 시작합니다...
+2026-01-14 13:15:49,168 - INFO - 샘플 당 평균 Forward Pass 시간 (ONNX, CPU): 12.75ms (std: 2.74ms)
+2026-01-14 13:15:49,168 - INFO - 샘플 당 평균 FPS (ONNX, CPU): 81.80 FPS (std: 16.23) (1개 샘플 x 100회 반복)
+2026-01-14 13:15:49,168 - INFO - [Inference Only] ONNX 런타임 추론 중 최대 CPU 메모리: 2599.09 MB (순수 증가량: 10.09 MB)
+2026-01-14 13:15:49,168 - INFO - [Total Process] ONNX 모델(FP32) 전체 메모리 사용량: 2599.09 MB (전체 증가량: 17.02 MB)
+2026-01-14 13:15:52,250 - INFO - [Test (ONNX)] | Test Acc (ONNX): 84.07%
+2026-01-14 13:15:52,263 - INFO - [Metrics for 'abnormal' (ONNX)] | Precision: 0.8084 | Recall: 0.8599 | F1: 0.8333
+2026-01-14 13:15:52,263 - INFO - [Metrics for 'normal' (ONNX)] | Precision: 0.8721 | Recall: 0.8242 | F1: 0.8475
+2026-01-14 13:15:52,667 - INFO - Val Acc 그래프 저장 완료: 'log/Sewer-TAPNEW/baseline_mobile_vit_xxs_wanda_20260114_124023/graph_20260114_124023/val_acc.png' and 'log/Sewer-TAPNEW/baseline_mobile_vit_xxs_wanda_20260114_124023/graph_20260114_124023/val_acc.pdf'
+2026-01-14 13:15:53,095 - INFO - Train/Val Acc 그래프 저장 완료: 'log/Sewer-TAPNEW/baseline_mobile_vit_xxs_wanda_20260114_124023/graph_20260114_124023/train_val_acc.png' and 'log/Sewer-TAPNEW/baseline_mobile_vit_xxs_wanda_20260114_124023/graph_20260114_124023/train_val_acc.pdf'
+2026-01-14 13:15:53,434 - INFO - F1 (normal) 그래프 저장 완료: 'log/Sewer-TAPNEW/baseline_mobile_vit_xxs_wanda_20260114_124023/graph_20260114_124023/F1_normal.png' and 'log/Sewer-TAPNEW/baseline_mobile_vit_xxs_wanda_20260114_124023/graph_20260114_124023/F1_normal.pdf'
+2026-01-14 13:15:53,858 - INFO - Validation Loss 그래프 저장 완료: 'log/Sewer-TAPNEW/baseline_mobile_vit_xxs_wanda_20260114_124023/graph_20260114_124023/val_loss.png' and 'log/Sewer-TAPNEW/baseline_mobile_vit_xxs_wanda_20260114_124023/graph_20260114_124023/val_loss.pdf'
+2026-01-14 13:15:54,258 - INFO - Learning Rate 그래프 저장 완료: 'log/Sewer-TAPNEW/baseline_mobile_vit_xxs_wanda_20260114_124023/graph_20260114_124023/learning_rate.png' and 'log/Sewer-TAPNEW/baseline_mobile_vit_xxs_wanda_20260114_124023/graph_20260114_124023/learning_rate.pdf'
+2026-01-14 13:15:58,330 - INFO - 종합 그래프 저장 완료: 'log/Sewer-TAPNEW/baseline_mobile_vit_xxs_wanda_20260114_124023/graph_20260114_124023/compile.png' and 'log/Sewer-TAPNEW/baseline_mobile_vit_xxs_wanda_20260114_124023/graph_20260114_124023/compile.pdf'

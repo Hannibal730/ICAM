@@ -1,5 +1,0 @@
-model_name: efficientnet_b0
-pruning_method: l1
-target_type: flops
-target_value: 0.1828
-optimal_sparsity: 0.57427734375

@@ -1,0 +1,130 @@
+2026-01-14 16:00:31,315 - INFO - 로그 파일이 'log/Sewer-TAPNEW/baseline_mobile_vit_xxs_20260114_160031/log_20260114_160031.log'에 저장됩니다.
+2026-01-14 16:00:31,320 - INFO - ==================================================
+2026-01-14 16:00:31,320 - INFO - config.yaml:
+2026-01-14 16:00:31,320 - INFO - 
+run:
+  global_seed: 42
+  cuda: true
+  mode: inference
+  pth_inference_dir: /home/cau/workspace/CHOI/sewer_binary_cls_v9/pretrained/baselines/sewer_tap_new/original/mobile_vit_xxs
+  pth_best_name: best_model.pth
+  evaluate_onnx: true
+  only_inference: false
+  use_fp16_inference: true
+  show_log: true
+  dataset:
+    name: Sewer-TAPNEW
+    type: image_folder
+    train_split_ratio: 0.8
+    paths:
+      train_img_dir: /home/cau/workspace/data/Sewer/Sewer-ML/train
+      valid_img_dir: /home/cau/workspace/data/Sewer/Sewer-ML/valid
+      test_img_dir: /home/cau/workspace/data/Sewer/Sewer-ML/valid
+      train_csv: /home/cau/workspace/data/Sewer/Sewer-ML/SewerML_Train.csv
+      valid_csv: /home/cau/workspace/data/Sewer/Sewer-ML/SewerML_Val.csv
+      test_csv: /home/cau/workspace/data/Sewer/Sewer-ML/SewerML_Val.csv
+      img_folder: /home/cau/workspace/data/Sewer/Sewer-TAPNEW
+  random_sampling_ratio:
+    train: 1.0
+    valid: 1.0
+    test: 1.0
+  num_workers: 16
+training_main:
+  epochs: 90
+  batch_size: 16
+  pre_trained: false
+  optimizer: adamw
+  lr: 0.001
+  weight_decay: 0.0001
+  loss_function: CrossEntropyLoss
+  label_smoothing: 0.1
+  scheduler: cosineannealinglr
+  scheduler_params:
+    T_max: 90
+    eta_min: 0.0001
+  best_model_criterion: val_loss
+training_baseline:
+  epochs: 10
+  batch_size: 16
+  pre_trained: false
+  optimizer: adamw
+  lr: 0.001
+  weight_decay: 0.0001
+  loss_function: CrossEntropyLoss
+  label_smoothing: 0.1
+  scheduler: cosineannealinglr
+  scheduler_params:
+    T_max: 10
+    eta_min: 0.0001
+  best_model_criterion: val_loss
+finetuning_pruned:
+  epochs: 80
+  batch_size: 16
+  optimizer: adamw
+  lr: 0.001
+  weight_decay: 0.0001
+  loss_function: CrossEntropyLoss
+  label_smoothing: 0.1
+  scheduler: cosineannealinglr
+  scheduler_params:
+    T_max: 80
+    eta_min: 0.0001
+  best_model_criterion: val_loss
+model:
+  img_size: 224
+  patch_size: 56
+  stride: 56
+  cnn_feature_extractor:
+    name: efficientnet_b0_feat2
+  featured_patch_dim: 24
+  emb_dim: 24
+  num_heads: 2
+  num_decoder_layers: 2
+  num_decoder_patches: 1
+  adaptive_initial_query: true
+  decoder_ff_ratio: 2
+  dropout: 0.1
+  positional_encoding: true
+  res_attention: true
+  save_attention: true
+  num_plot_attention: 5
+baseline:
+  model_name: mobile_vit_xxs
+
+2026-01-14 16:00:31,320 - INFO - ==================================================
+2026-01-14 16:00:31,506 - INFO - CUDA 사용 가능. GPU 사용을 시작합니다. (Device: NVIDIA RTX PRO 6000 Blackwell Server Edition)
+2026-01-14 16:00:31,507 - INFO - 'Sewer-TAPNEW' 데이터 로드를 시작합니다 (Type: image_folder).
+2026-01-14 16:00:31,507 - INFO - '/home/cau/workspace/data/Sewer/Sewer-TAPNEW' 경로의 데이터를 훈련/테스트셋으로 분할합니다.
+2026-01-14 16:00:31,514 - INFO - 총 1692개 데이터를 훈련용 1353개, 테스트용 339개로 분할합니다 (split_seed=42).
+2026-01-14 16:00:31,515 - INFO - 데이터셋 클래스: ['abnormal', 'normal'] (총 2개)
+2026-01-14 16:00:31,515 - INFO - 훈련 데이터: 1353개, 검증 데이터: 339개, 테스트 데이터: 339개
+2026-01-14 16:00:31,515 - INFO - Baseline 모델 'mobile_vit_xxs'을(를) 생성합니다 (사전 훈련 가중치: 미사용).
+2026-01-14 16:00:31,696 - INFO - timm 모델(mobile_vit_xxs)의 Attention.forward를 Pruning 호환성을 위해 Monkey-patching 합니다.
+2026-01-14 16:00:31,711 - INFO - ==================================================
+2026-01-14 16:00:31,711 - INFO - 모델 파라미터 수:
+2026-01-14 16:00:31,711 - INFO -   - 총 파라미터: 951,666 개
+2026-01-14 16:00:31,711 - INFO -   - 학습 가능한 파라미터: 951,666 개
+2026-01-14 16:00:31,711 - INFO - ==================================================
+2026-01-14 16:00:31,711 - INFO - Inference 모드를 시작합니다.
+2026-01-14 16:00:31,943 - INFO - [Model Load] PyTorch 모델 가중치 로드 메모리: 952.45 MB (증가량: 1.01 MB)
+2026-01-14 16:00:31,943 - INFO - '/home/cau/workspace/CHOI/sewer_binary_cls_v9/pretrained/baselines/sewer_tap_new/original/mobile_vit_xxs/best_model.pth' 가중치 로드 완료.
+2026-01-14 16:00:32,493 - INFO - 연산량 (MACs): 0.2692 GMACs per sample
+2026-01-14 16:00:32,493 - INFO - 연산량 (FLOPs): 0.5384 GFLOPs per sample
+2026-01-14 16:00:32,493 - INFO - ==================================================
+2026-01-14 16:00:32,493 - INFO - FP16 Inference (ONNX via onnxconverter-common)을 적용합니다.
+2026-01-14 16:00:32,493 - INFO - DEBUG: onnxruntime status: Loaded
+2026-01-14 16:00:32,493 - INFO - DEBUG: onnx status: Loaded
+2026-01-14 16:00:32,493 - INFO - DEBUG: float16 (onnxconverter-common) status: Loaded
+2026-01-14 16:00:33,176 - INFO - onnxconverter-common을 사용하여 float16 변환을 수행합니다...
+2026-01-14 16:00:33,385 - INFO - ONNX FP16 모델 저장 완료: log/Sewer-TAPNEW/baseline_mobile_vit_xxs_20260114_160031/best_model_fp16.onnx
+2026-01-14 16:00:33,680 - INFO - [Model Load] ONNX 모델(FP16) 로드 메모리: 1459.68 MB (증가량: 1.61 MB)
+2026-01-14 16:00:33,680 - INFO - ONNX 런타임의 샘플 당 Forward Pass 시간 측정을 시작합니다...
+2026-01-14 16:00:36,748 - INFO - 샘플 당 평균 Forward Pass 시간 (ONNX, CPU): 26.25ms (std: 0.43ms)
+2026-01-14 16:00:36,748 - INFO - 샘플 당 평균 FPS (ONNX, CPU): 38.11 FPS (std: 0.59) (1개 샘플 x 100회 반복)
+2026-01-14 16:00:36,748 - INFO - [Inference Only] ONNX 런타임 추론 중 최대 CPU 메모리: 1475.64 MB (순수 증가량: 11.12 MB)
+2026-01-14 16:00:36,748 - INFO - [Total Process] ONNX 모델(FP16) 전체 메모리 사용량: 1475.64 MB (전체 증가량: 17.58 MB)
+2026-01-14 16:00:44,089 - INFO - [Inference (ONNX FP16)] | Test Acc (ONNX): 82.30%
+2026-01-14 16:00:44,109 - INFO - [Metrics for 'abnormal' (ONNX)] | Precision: 0.8255 | Recall: 0.7834 | F1: 0.8039
+2026-01-14 16:00:44,110 - INFO - [Metrics for 'normal' (ONNX)] | Precision: 0.8211 | Recall: 0.8571 | F1: 0.8387
+2026-01-14 16:00:44,622 - INFO - ==================================================
+2026-01-14 16:00:44,622 - INFO - 혼동 행렬 저장 완료. 'log/Sewer-TAPNEW/baseline_mobile_vit_xxs_20260114_160031/confusion_matrix_20260114_160031.png' and 'log/Sewer-TAPNEW/baseline_mobile_vit_xxs_20260114_160031/confusion_matrix_20260114_160031.pdf'
