@@ -375,10 +375,20 @@ def inference(run_cfg, model_cfg, model, data_loader, device, run_dir_path, time
             return None
         try:
             logging.info(f"ONNX Runtime (v{onnxruntime.__version__})으로 평가를 시작합니다.")
-            onnx_session = onnxruntime.InferenceSession(onnx_inference_path, providers=['CPUExecutionProvider'])
+            
+            gc.collect()
+            process = psutil.Process(os.getpid()) if psutil else None
+            mem_before_load = process.memory_info().rss / (1024 * 1024) if process else 0
+
+            with MemoryMonitor() as mem_mon:
+                onnx_session = onnxruntime.InferenceSession(onnx_inference_path, providers=['CPUExecutionProvider'])
+            if psutil:
+                logging.info(f"[Model Load] ONNX 모델 로드 메모리: {mem_mon.peak_memory:.2f} MB (증가량: {mem_mon.peak_memory - mem_mon.start_memory:.2f} MB)")
 
             dummy_input, _, _ = next(iter(data_loader))
-            measure_onnx_performance(onnx_session, dummy_input)
+            inference_peak = measure_onnx_performance(onnx_session, dummy_input)
+            if psutil and inference_peak:
+                logging.info(f"[Total Process] ONNX 모델 전체 메모리 사용량: {inference_peak:.2f} MB (전체 증가량: {inference_peak - mem_before_load:.2f} MB)")
             evaluate_onnx(run_cfg, onnx_session, data_loader, desc=f"[{mode_name} (ONNX)]", class_names=class_names, log_class_metrics=True)
         except Exception as e:
             logging.error(f"ONNX 모델 평가 중 오류 발생: {e}")
