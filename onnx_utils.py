@@ -8,6 +8,8 @@ from tqdm import tqdm
 from sklearn.metrics import precision_score, recall_score, f1_score
 import threading
 import gc
+import ctypes
+import platform
 
 try:
     import psutil
@@ -134,6 +136,12 @@ def measure_onnx_performance(onnx_session, dummy_input):
 
     # [추가] 정확한 메모리 측정을 위해 가비지 컬렉션 수행
     gc.collect()
+    # [추가] Linux 환경에서 glibc malloc이 잡고 있는 해제된 메모리를 OS에 반환하도록 강제
+    if platform.system() == 'Linux':
+        try:
+            ctypes.CDLL('libc.so.6').malloc_trim(0)
+        except Exception:
+            pass
     
     # [수정] MemoryMonitor를 사용하여 Warm-up 및 추론 루프 전체의 피크 메모리 측정
     with MemoryMonitor(interval=0.0001) as mem_mon:
@@ -198,6 +206,11 @@ def measure_cpu_peak_memory_during_inference(session, data_loader, device):
 
     # [추가] 정확한 메모리 측정을 위해 가비지 컬렉션 수행
     gc.collect()
+    if platform.system() == 'Linux':
+        try:
+            ctypes.CDLL('libc.so.6').malloc_trim(0)
+        except Exception:
+            pass
     
     with MemoryMonitor(interval=0.0001) as mem_mon:
         # Warm-up (10회)

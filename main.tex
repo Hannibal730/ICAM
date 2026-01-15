@@ -1,0 +1,1252 @@
+
+%% 
+%% Copyright 2007-2020 Elsevier Ltd
+%% 
+%% This file is part of the 'Elsarticle Bundle'.
+%% ---------------------------------------------
+%% 
+%% It may be distributed under the conditions of the LaTeX Project Public
+%% License, either version 1.2 of this license or (at your option) any
+%% later version.  The latest version of this license is in
+%%    http://www.latex-project.org/lppl.txt
+%% and version 1.2 or later is part of all distributions of LaTeX
+%% version 1999/12/01 or later.
+%% 
+%% The list of all files belonging to the 'Elsarticle Bundle' is
+%% given in the file `manifest.txt'.
+%% 
+%% Template article for Elsevier's document class `elsarticle'
+%% with harvard style bibliographic references
+
+\documentclass[preprint,12pt,authoryear]{elsarticle}
+
+%% Use the option review to obtain double line spacing
+%% \documentclass[authoryear,preprint,review,12pt]{elsarticle}
+
+%% Use the options 1p,twocolumn; 3p; 3p,twocolumn; 5p; or 5p,twocolumn
+%% for a journal layout:
+%% \documentclass[final,1p,times,authoryear]{elsarticle}
+%% \documentclass[final,1p,times,twocolumn,authoryear]{elsarticle}
+%% \documentclass[final,3p,times,authoryear]{elsarticle}
+%% \documentclass[final,3p,times,twocolumn,authoryear]{elsarticle}
+%% \documentclass[final,5p,times,authoryear]{elsarticle}
+%% \documentclass[final,5p,times,twocolumn,authoryear]{elsarticle}
+
+%% For including figures, graphicx.sty has been loaded in
+%% elsarticle.cls. If you prefer to use the old commands
+%% please give \usepackage{epsfig}
+
+%% The amssymb package provides various useful mathematical symbols
+% \usepackage{amssymb}
+% \usepackage[ruled,vlined]{algorithm2e}
+\usepackage{algorithm}
+\usepackage{algorithmicx}
+\usepackage{algpseudocode}
+\usepackage{pifont}
+\input{math_commands.tex}
+%% The amsthm package provides extended theorem environments
+%% \usepackage{amsthm}
+
+%% The lineno packages adds line numbers. Start line numbering with
+%% \begin{linenumbers}, end it with \end{linenumbers}. Or switch it on
+%% for the whole article with \linenumbers.
+%% \usepackage{lineno}
+\usepackage{wrapfig}  % 텍스트가 감싸는 표/그림을 만들기 위해 필수
+\usepackage{graphicx} % resizebox를 위해 필요
+\usepackage{subcaption} % for \subcaption command
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage[utf8]{inputenc}
+\usepackage{soul}
+\usepackage{verbatim}
+\usepackage[USenglish, nodayofweek]{datetime}
+\usepackage{url}
+\usepackage{graphics}
+%\usepackage{subfig}
+\usepackage{makecell}
+\usepackage{multirow}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{graphicx}
+\usepackage{tabularx}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{hyperref}
+\usepackage{rotating}
+\usepackage{geometry}
+\usepackage{pdflscape}
+\usepackage{afterpage}
+\usepackage{placeins}
+\usepackage[table]{xcolor}
+\hypersetup{colorlinks = true, linkcolor = blue, anchorcolor =red, citecolor = blue, filecolor = red, urlcolor = red, pdfauthor=author}
+
+\journal{Engineering Applications of Artificial Intelligence}
+
+\begin{document}
+
+\begin{frontmatter}
+
+%% Title, authors and addresses
+
+%% use the tnoteref command within \title for footnotes;
+%% use the tnotetext command for theassociated footnote;
+%% use the fnref command within \author or \affiliation for footnotes;
+%% use the fntext command for theassociated footnote;
+%% use the corref command within \author for corresponding author footnotes;
+%% use the cortext command for theassociated footnote;
+%% use the ead command for the email address,
+%% and the form \ead[url] for the home page:
+%% \title{Title\tnoteref{label1}}
+%% \tnotetext[label1]{}
+%% \author{Name\corref{cor1}\fnref{label2}}
+%% \ead{email address}
+%% \ead[url]{home page}
+%% \fntext[label2]{}
+%% \cortext[cor1]{}
+%% \affiliation{organization={},
+%%            addressline={}, 
+%%            city={},
+%%            postcode={}, 
+%%            state={},
+%%            country={}}
+%% \fntext[label3]{}
+
+% \title{On-Device Friendly Sewer Defect Inspection via Query-conditioned Cross-Attention Model}
+% \title{ICAM: Lightweight Input-conditioned Query Cross-Attention for On-device Sewer Defect Inspection}
+% \title{On-device Friendly Sewer Defect Inspection via Query-conditioned Cross-Attention Model}
+\title{On-device Friendly Sewer Defect Inspection via Instance-adaptive Cross-Attention Model}
+
+%% use optional labels to link authors explicitly to addresses:
+
+% \begin{highlights}
+% %\item
+% %\item 
+% %\item 
+% %\item 
+% \end{highlights}
+\author[b]{Deaseung Choi}
+\author[a]{Mincheol Kim}
+\author[a]{Jaeseong Kim}
+\author[c]{Seungjin Ko}
+\author[c]{Jaeeun Heo}
+\author[a]{Hoki Kim\corref{cor1}}
+\cortext[cor1]{corresponding author}
+\ead{hokikim@cau.ac.kr}
+\affiliation[a]{organization={Chung-Ang University},
+            addressline={84 Heukseok-ro},
+            city={Seoul},
+            postcode={06974}, 
+            country={Republic of Korea}}
+            
+\affiliation[b]{organization={Konkuk University},
+            addressline={120-1 Neungdong-ro}, 
+            city={Seoul},
+            postcode={05030}, 
+            country={Republic of Korea}}
+\affiliation[c]{organization={TAP Electronics Co.,Ltd.},
+            addressline={9 Gukasan-daero 30-gil}, 
+            city={Daegu},
+            postcode={43008}, 
+            country={Republic of Korea}}
+
+\begin{abstract}
+%Accurate sewer defect inspection is critical for structural health monitoring, yet most high-performing vision models are too computationally heavy for deployment on resource-constrained inspection robots. We propose the \emph{Instance-adaptive Cross-Attention Model} (ICAM), an on-device friendly framework for real-time sewer defect classification. ICAM avoids quadratic-cost self-attention by using a small set of learnable queries that interact with patch tokens only through cross-attention, reducing attention complexity from $O(N^2)$ to $O(NN_q)$. To make shallow decoders effective under tight budgets, ICAM introduces an \emph{instance-adaptive query initialization} step that conditions the queries on each input via an initial cross-attention pass, providing an informative starting state before iterative refinement. On a real-world private sewer dataset (1,692 images), ICAM achieves 88.20\% accuracy and 87.42\% F1 on the abnormal class, outperforming lightweight CNN, ViT and domain-specific baselines. Despite strong accuracy, ICAM is extremely compact (31K parameters, 0.18 GFLOPs, 0.19\,MB ONNX) and runs in real time on a Raspberry Pi 5 (57.37 FPS), demonstrating a practical accuracy--efficiency trade-off for embedded sewer inspection.
+\end{abstract}
+
+\begin{keyword}
+
+Sewer defect \sep Structural health monitoring (SHM) \sep On-device AI \sep Resource-constrained deployment \sep Cross-attention \sep Instance-adaptive queries
+
+\end{keyword}
+
+\end{frontmatter}
+
+\section{Introduction}
+\label{sec:intro}
+
+Civil infrastructure comprises essential public utilities that support modern society and improve our quality of life \citep{fu2025optimizing}. Although these systems deliver long-term service, their performance inevitably degrades with age and continuous operation. This motivates the need for structural health monitoring (SHM) systems, such as detecting damage and ensuring operational reliability \citep{cha2024deep}.
+
+Recent progress in deep learning has further accelerated the development of smart \citep{fu2025optimizing, malekloo2022machine, hsieh2020machine}. Numerous studies have demonstrated that deep learning substantially enhances the accuracy in SHM \citep{malekloo2022machine, qiu2023real}. Comprehensive reviews \citep{dong2021review, hsieh2020machine, panella2022semantic} have highlighted these advancements; for example, quantitative evaluation frameworks have shown that deep learning–based crack analysis outperforms traditional image-processing and classical machine-learning approaches.
+
+Among various civil infrastructures, sewer systems are particularly critical because they support essential water and sanitation functions \citep{jo2022sewerage, haurum2021sewer}. Similar to other civil infrastructures, sewer networks require periodic inspection and maintenance since they can have defects such as cracks, joint displacements, root intrusions, and structural deformation over time, which leads to the requirement of SHM. Early detection of these defects is crucial for preventing failures and ensuring safe, continuous operation. The 2025 Infrastructure Report Card released by the American Society of Civil Engineers assigned a grade of D+ to the U.S. wastewater system. Specifically, failures per 100 miles of pipe remained stable at roughly 2 from 2017 onward but surged to 3.3 in 2021, while the costs associated with repairing or replacing aging pipelines continue to increase.
+Therefore, sewer maintenance is a critical task for ensuring public safety, as undetected sewer defects can lead to urban failures such as sinkholes and groundwater or soil contamination, which in turn pose serious public health risks \citep{yang2026structural}. 
+
+To diagnose the condition of sewer systems, remotely operated robots are used to record the interior of sewer pipes, and domain experts then inspect the recorded images \citep{nguyen2025sewer}. This manual inspection process is time-consuming and labor-intensive \citep{wang2021towards}. Moreover, \citet{dirksen2013consistency} reported that human inspectors failed to correctly classify approximately 25\% of sewer defects in datasets from Germany, the Netherlands, France, and Austria. To address these limitations, previous studies have proposed sewer defect detection systems based on conventional machine-learning techniques \citep{makar1999diagnostic}. More recently, \citet{kumar2018automated} proposed a deep learning based sewer defect detection system, and with the rapid progress of deep learning, such methods are now being actively investigated \citep{nashat2025hybrid}.
+Despite recent progress, a critical gap remains between the computational demands of state-of-the-art inspection models and the physical constraints of deployment environments.
+Deep learning–based inspection systems still demand substantial computational resources, memory, and power to process complex sewer-assessment tasks \citep{shuvo2022efficient}.
+These requirements are particularly problematic in the sewer infrastructure, where inspection robots operate in harsh and confined environments with limited access to high-speed communication or cloud servers.
+
+\begin{figure}
+    \centering
+    \includegraphics[width=0.8\linewidth]{figures/intro.pdf}
+    \caption{Challenges in deploying heavy, high-performance models on resource-constrained environments.}
+    \label{fig:intro}
+\end{figure}
+
+Figure~\ref{fig:intro} illustrates these deployment challenges, highlighting the significant gap between the substantial computational demands of high-performance models and the strictly limited resources of confined inspection environments. Consequently, deploying accurate sewer defect detection models directly on edge or embedded devices remains a challenging task due to these hardware constraints \citep{ma2022training}.
+
+In this paper, we propose an on-device friendly sewer defect inspection framework that enables efficient inference under limited computational budgets. Specifically, the proposed architecture, \textbf{Instance-adaptive Cross-Attention Model (ICAM)}, adopts (i) Instance-adaptive query initialization and (ii) Patch-wise cross-attention layers, allowing the model to selectively retrieve salient defect-related features without relying on computationally expensive self-attention. Extensive experiments on a real-world dataset show that ICAM is a highly efficient yet discriminative representation and well suited for real-time on-device sewer inspection applications.
+
+This paper is organized as follows. Section~\ref{sec:related} reviews prior work on sewer defect inspection and architectures. Section~\ref{sec:method} motivates the need for efficient on-device inspection systems and introduces the proposed Instance-adaptive Cross-Attention Model (ICAM) in detail, including the patch-wise encoder and memory-query mechanism. Section~\ref{sec:exp} presents the experimental results. We evaluate ICAM using both (i) public sewer inspection datasets and (ii) a newly gathered practical private dataset collected from real sewer pipelines to accurately reflect practical deployment scenarios. The proposed model consistently outperforms existing lightweight baselines while maintaining strict computational budgets suitable for edge devices. We further analyze the model through ablation studies, qualitative defect localization, and latency–accuracy trade-off evaluations. Finally, Section~\ref{sec:con} concludes the paper and discusses potential directions for future on-device inspection research.
+
+% Our main contributions are as follows:
+% \begin{itemize}
+% \item We identify the reliance on computationally heavy components in existing sewer defect inspection models and show that such complexity limits their practicality for deployment on edge platforms.
+
+% \item We propose the Query-conditioned Cross-Attention Model (ICAM), a new architecture that integrates a memory-driven query mechanism with a shared visual encoder, enabling efficient yet highly discriminative feature extraction for sewer defect inspection.
+
+% % \item We establish a new dataset collected from real operational sewer environments. Furthermore, we demonstrate that ICAM achieves competitive accuracy while substantially reducing FLOPs and latency, outperforming existing lightweight baselines on both public sewer inspection dataset and self-collected sewer dataset.
+
+% \item We establish a new dataset collected from real operational sewer environments. Furthermore, we demonstrate that ICAM achieves competitive accuracy while substantially reducing FLOPs and latency, outperforming existing lightweight baselines on self-collected sewer dataset.
+
+% \end{itemize}
+
+\section{Related Work}
+\label{sec:related}
+\subsection{Sewer Defect Inspection in Civil Infrastructure}
+
+As sewer systems age, deterioration of sewer pipes can occur, potentially leading to urban infrastructure failures such as sinkholes and flooding \citep{yang2026structural, yusuf2024deep}. Sewer defects can also cause serious public health problems, including contamination of drinking water and the spread of waterborne diseases \citep{nguyen2025sewer, myrans2018automated}. To address these issues, regular maintenance of sewer systems is essential to prevent hazardous and costly failures \citep{hassan2019underground, wang2022monitoring}.
+
+Traditionally, human inspectors entered sewer systems and manually inspected the interior to detect defects; however, this approach is dangerous, time-consuming, and costly \citep{nguyen2025sewer}. Currently, closed-circuit television (CCTV) is commonly used to inspect the interior of sewers and to prevent structural issues \citep{wirahadikusumah1998assessment, wang2022monitoring}. In particular, with advances in robotics, manually controlled CCTV robots have been adopted to investigate sewer systems more safely \citep{seet2018design, jang2022review, kolvenbach2020towards}. On-site operators deploy the robot into the sewer pipes and control it to record the pipe interior, after which off-site inspectors review the recorded CCTV videos to detect defects \citep{yin2021automation, john2022pipe}. Nevertheless, even skilled inspectors often misclassify defect images due to human biases \citep{dirksen2013consistency, yang2024weakly, iyer2005robust}. Considering the effort and time required to review entire videos, automated sewer defect detection systems are highly desirable \citep{wang2021towards, guo2009automated}.
+
+Recently, advances in deep learning for computer vision have led to active development of deep learning–based methods for sewer condition diagnosis \citep{nashat2025hybrid}. \citet{cheng2018automated} utilized Faster R-CNN to detect roots, cracks, infiltration, and deposits in sewer CCTV images. \citet{kumar2018automated} adopted a deep CNN to classify sewer defects such as root intrusion, deposits, and cracks. \citet{yin2020deep} used YOLOv3 as an object detector to detect sewer defects (i.e., broken pipes, holes, deposits, cracks, fractures, and roots). \citet{li2019sewer} introduced a hierarchical classification method based on ResNet-18 to address imbalanced datasets, where a high-level task detects defect images and a low-level task estimates the probabilities of each defect class. \citet{moradi2020automated} employed a support vector machine (SVM) together with maximally stable extremal regions (MSER) to detect sewer defects. \citet{xie2019automatic} proposed a two-level hierarchical deep CNN for both binary and multiclass classification, where the first level performs binary classification and the second level performs multiclass defect classification.
+
+Research on developing sewer defect datasets has also been conducted. Sewer-ML is a benchmark sewer defect dataset consisting of 1.3 million sewer images. \citet{xie2019automatic} achieved the highest F1-score of 91.08\% on the validation set and 90.62\% on the test set, demonstrating the strong performance of the proposed binary classifier \citep{haurum2021sewer}. Although these approaches have improved the performance of defect classification, existing CNN architectures for sewer inspection typically contain a large number of parameters and therefore require substantial computational resources and inference time \citep{wang2025classification, yang2021attention}. Thus, there is a need to develop models for sewer diagnosis that achieve lower computational cost while further improving performance, making them suitable for automatic real-time diagnosis system of sewer pipelines \citep{lu2025real}.
+
+Although these approaches have improved the performance of defect classification, existing CNN architectures for sewer inspection typically contain a large number of parameters and therefore require substantial computational resources and inference time \citep{wang2025classification, yang2021attention}. Thus, there is a need to develop models for sewer diagnosis that achieve lower computational cost while further improving performance, making them suitable for automatic real-time diagnosis system of sewer pipelines \citep{lu2025real}.
+
+\subsection{Deep Learning and On-device Adaptation}
+
+Regular condition assessment of civil infrastructure is essential for preventing catastrophic urban failures \citep{koch2015review}. With advances in deep learning, CNN-based methods have been widely adopted for defect inspection and monitoring, often outperforming classical image-processing pipelines such as Canny and Sobel edge detection \citep{cha2017deep}. Deep learning-based structural health monitoring (SHM) can reduce human labor and inspection cost while enabling automated systems that improve infrastructure safety \citep{zaurin2009integration, spencer2019advances}. However, deep learning inference typically demands substantial computation; offloading to the cloud can introduce prohibitive latency \citep{chen2019deep}. Consequently, edge intelligence—performing inference on edge devices immediately after data acquisition—has become increasingly important in vision-heavy domains \citep{zhou2019edge, deng2020edge}. In recent years, substantial effort has focused on deploying real-time deep learning vision modules on edge devices \citep{ananthanarayanan2017real, zhang2017live}. Yet, running deep neural networks (DNNs) on embedded platforms remains challenging due to model complexity, intensive computation, and high memory consumption \citep{han2015deep, jacob2018quantization, wang2020convergence}.
+
+To reduce the parameter and computational footprint of DNNs, lightweight backbones tailored for mobile and edge deployment have emerged. MobileNet leverages depthwise separable convolutions to reduce computation \citep{howard2017mobilenets}. By factorizing a standard convolution into a depthwise convolution for spatial filtering and a pointwise convolution for channel mixing, MobileNet substantially reduces parameter count and floating-point operations (FLOPs). EfficientNet emphasizes principled model scaling rather than introducing only new architectural blocks \citep{tan2019efficientnet}; it proposes compound scaling that jointly adjusts network width, depth, and input resolution with a fixed coefficient, improving the accuracy--efficiency trade-off under resource constraints. Such lightweight designs enable deployment on resource-constrained edge devices and help mitigate the computation and memory limitations of embedded platforms \citep{qiu2025trends}. For example, CR-YOLO enables real-time detection of hazardous bridge surface cracks on an NVIDIA Jetson Xavier NX and demonstrates strong speed and accuracy on both public and self-collected datasets \citep{zhang2022automated}. A YOLOv2-based model has also been deployed on an AMD Zynq-7000 SoC for rail fastener inspection, achieving 24 FPS and indic ating suitability for real-time edge deployment \citep{xiao2023real, redmon2017yolo9000}. Lite-V2, a lightweight CNN for crack detection and surface-type prediction, has been implemented on low-cost Raspberry Pi platforms and achieves an F1-score of 0.93 with only 0.28M parameters on an open-source concrete crack dataset \citep{zhang2023edge, raza2025efficient}. Collectively, these studies highlight the promise of deep learning-enabled SHM systems for automated, real-time inspection directly on edge devices, while underscoring the need to maintain reliability under evolving deployment conditions.
+
+
+\subsection{Model Compression}
+
+Beyond architectural design, model compression has been actively studied to further reduce inference cost. Unstructured pruning removes individual weights with small magnitudes, producing sparse weight matrices, but often fails to deliver practical speedups on standard GPUs due to irregular memory access patterns \citep{han2015deep}. To mitigate this limitation, structured pruning removes entire filters—commonly based on L1-norm criteria—thereby preserving dense computation and enabling acceleration on general-purpose hardware without specialized implementations \citep{filters2016pruning}. However, norm-based criteria can be limited when small-norm filters still contribute meaningfully to performance. Filter Pruning via Geometric Median (FPGM) addresses this issue by identifying redundant filters based on geometric relationships rather than magnitude alone \citep{he2019filter}. More recently, Wanda (Pruning by Weights and Activations) introduces an activation-aware metric that estimates weight importance by combining weight magnitude with the L2-norm of input activations \citep{sun2023simple}. Although motivated by emergent activation outliers in large language models, Wanda has also shown strong performance on vision architectures such as ConvNeXt and DeiT (Data-efficient Image Transformer), outperforming standard magnitude pruning.
+
+Complementing weight-reduction strategies, lowering numerical precision is another key pillar of model compression. Reduced-precision representations can substantially decrease memory footprint and improve throughput without changing network topology. Half-precision floating point (FP16) halves memory usage while maintaining numerical stability, and is now standard in modern high-performance inference \citep{micikevicius2017mixed}. Quantization can further reduce latency by mapping values to low-bit integers such as INT8, which is particularly beneficial for inference on edge devices \citep{jacob2018quantization}. Together, pruning and precision optimization can significantly reduce model size and inference cost, improving the feasibility of real-time on-device deployment in resource-constrained settings \citep{choudhary2020comprehensive, deng2020model}.
+
+Despite these benefits, \citet{hooker2020compressed} show that compressed models can exhibit heightened sensitivity to common image corruptions and natural distribution shifts. On benchmarks such as ImageNet-C \citep{hendrycks2019benchmarking}, which contains algorithmically generated corruptions (e.g., noise and weather effects), both pruned and quantized networks become more brittle—an effect that can be obscured by stable aggregate accuracy. This suggests that capacity removed during compression may be important for robustness on challenging and atypical inputs. Consequently, compression can impair generalization to long-tail rare instances and noisy samples that frequently arise in real-world deployments.
+
+
+\section{Methodology}
+\label{sec:method}
+
+\subsection{Revisiting Limitations of Vision Transformer}
+
+% Existing Vision Transformer (ViT) models and their variants have recently demonstrated strong performance across a wide range of computer vision tasks. These methods rely on a patching mechanism that divides an input image into patches and applies self-attention to model interactions among patches \citep{dosovitskiy2020image}.
+In recent years, computer vision has advanced rapidly with the success of deep learning. Convolutional neural networks (CNNs), which learn hierarchical spatial representations \citep{lecun2002gradient}, achieved a major breakthrough in large-scale recognition with AlexNet \citep{krizhevsky2012imagenet}. More recently, the Vision Transformer (ViT) transferred the self-attention mechanism from natural language processing to vision by representing an image as a sequence of patch tokens, enabling the model to capture global relationships among patches \citep{vaswani2017attention, dosovitskiy2020image}. ViT and its variants have since demonstrated strong performance across a wide range of vision tasks \citep{han2022survey, khan2022transformers}.
+
+
+% Despite their effectiveness, ViT-based approaches often incur high computational cost because self-attention scales quadratically with the number of input patches.
+Despite these successes, ViT-based models that rely on global self-attention often incur high computational cost because self-attention scales quadratically with the number of input patches: it computes attention scores for all pairs of tokens \citep{liu2021swin}.
+This quadratic complexity hinders deployment in resource-constrained settings such as edge devices and embedded autonomous systems \citep{papa2024survey}. Moreover, because the cost grows with token length, ViTs are generally slower than lightweight CNNs, which can become a bottleneck for real-time inference on mobile devices \citep{li2022efficientformer}. As shown by \citet{mehta2021mobilevit}, even when scaled down, ViT models can underperform lightweight CNNs under typical mobile resource constraints, limiting their applicability in edge scenarios.
+
+
+
+
+\subsection{ICAM: Instance-adaptive Cross-Attention Model}
+In this section, to overcome the limitation of existing methods, i.e., the trade-off between computational burden and performance, we propose a new architecture, Instance-adaptive Cross-Attention Model (ICAM).
+Figure~\ref{fig:algorithm} provides an overview of the proposed architecture.
+ICAM is designed to be on-device friendly and consists of two core components: (i) \emph{instance-adaptive query initialization} and (ii) \emph{patch-wise cross-attention layers}.
+The overall inference procedure is summarized in Algorithm~\ref{alg:main}.
+
+\begin{algorithm}[t!]
+\caption{Proposed Method}
+\label{alg:main}
+\begin{algorithmic}[1]
+\renewcommand{\algorithmicrequire}{\textbf{Input:}}
+\renewcommand{\algorithmicensure}{\textbf{Output:}}
+
+\Require Image batch $I \in \mathbb{R}^{B \times C \times H \times W}$, learnable queries $Q_{\text{learn}} \in \mathbb{R}^{N_q \times D_{\text{feat}}}$
+\Ensure Class logits $Y \in \mathbb{R}^{B \times N_{\text{cls}}}$
+
+\Statex
+
+\Statex \textbf{1. Patch-wise Encoder}
+\State Extract patches $\mathcal{P} = \{P_1, \dots, P_N\}$ from $I$ with patch size $p$ and stride $s$
+\State $F_{\text{local}} \leftarrow \text{PatchEmbed}(\mathcal{P}) \in \mathbb{R}^{B \times N \times D_{\text{feat}}}$ \Comment{Project patches to feature space}
+\State $X_{\text{enc}} \leftarrow \text{LN}(\text{SpatialMix}(F_{\text{local}})) \in \mathbb{R}^{B \times N \times D_{\text{feat}}}$ \Comment{Aggregate local spatial context}
+
+\Statex
+\Statex \textbf{2. Instance-adaptive Query Initialization}
+\State $K \leftarrow X_{\text{enc}} W_{\text{init}K} + \text{PE} \in \mathbb{R}^{B \times N \times D_{\text{model}}}$ \Comment{Add 2D sinusoidal PE}
+\State $V \leftarrow X_{\text{enc}} W_{\text{init}V} \in \mathbb{R}^{B \times N \times D_{\text{model}}}$ 
+\State $Q_{\text{latent}} \leftarrow Q_{\text{learn}} W_{\text{init}Q} \in \mathbb{R}^{N_q \times D_{\text{model}}}$ 
+\State $A \leftarrow \text{Softmax}\left( \frac{Q_{\text{latent}} K^\top}{\sqrt{D_{\text{model}}}} \right) \in \mathbb{R}^{B \times N_q \times N}$ \Comment{Attention map}
+\State $Q^{(0)} \leftarrow A \cdot V \in \mathbb{R}^{B \times N_q \times D_{\text{model}}}$ \Comment{Instance-adaptive initial query}
+
+\Statex
+\Statex \textbf{3. Multi-Head Cross-Attention Decoder}
+\For{$l = 1, \dots, L$}
+\State $\hat{Q} \leftarrow \text{LN}\left( Q^{(l-1)} + \text{MHCA}(Q^{(l-1)}, K, V) \right) \in \mathbb{R}^{B \times N_q \times D_{\text{model}}}$
+\State $Q^{(l)} \leftarrow \text{LN}\left( \hat{Q} + \text{FFN}(\hat{Q}) \right) \in \mathbb{R}^{B \times N_q \times D_{\text{model}}}$
+\EndFor
+
+\Statex
+\Statex \textbf{4. Classification Head}
+\State $Z \leftarrow \text{Linear}(Q^{(L)}) \in \mathbb{R}^{B \times N_q \times D_{\text{feat}}}$
+\State $Y \leftarrow \text{MLP}_{\text{cls}}(Z) \in \mathbb{R}^{B \times N_{\text{cls}}}$
+\State \Return $Y$
+
+\end{algorithmic}
+\end{algorithm}
+
+
+% \paragraph{Trainable memory query}
+\paragraph{Instance-adaptive query initialization}
+
+Vision Transformers (ViT) represent an image as a sequence of patch embeddings processed by a Transformer encoder \citep{dosovitskiy2020image}. However, global self-attention over all tokens scales quadratically with sequence length, motivating architectures that interact with the input through a smaller set of latent or query tokens \citep{jaegle2021perceiver}.
+
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=1.0\linewidth]{figures/algorithm.pdf}
+    \caption{Overview of ICAM. Patch features are extracted by a lightweight convolutional encoder and spatially mixed via depth-wise convolutions. Learned seed queries are initialized through instance-adaptive cross-attention over patch tokens, then refined by $L$ patch-wise multi-head cross-attention layers (without self-attention) and an MLP head for classification.}
+    \label{fig:algorithm}
+\end{figure}
+
+Perceiver addresses this cost through asymmetric cross-attention that projects the input token array into a fixed-size latent bottleneck: queries are produced from a learned latent array, while keys and values are derived from the input tokens \citep{jaegle2021perceiver}. The resulting latent representations are subsequently refined via self-attention in latent space \citep{jaegle2021perceiver}. DETR similarly employs a fixed set of learned ``object queries'' that are iteratively updated in the decoder through decoder self-attention and encoder--decoder cross-attention to image features \citep{carion2020end}.
+
+In both Perceiver and DETR, the latent or query embeddings are global learned parameters shared across samples and become instance-specific only through subsequent attention updates \citep{carion2020end,jaegle2021perceiver}. As a consequence, early decoder layers must simultaneously perform instance conditioning and representation refinement, placing a substantial burden on iterative decoding. Recent work on detection transformers has explicitly highlighted this inefficiency, demonstrating that initializing queries with dense priors \citep{yao2021efficient} or conditioning them on spatial context \citep{meng2021conditional} significantly accelerates convergence by narrowing the search space and reducing the need for prolonged refinement.
+The burden of iterative refinement becomes particularly pronounced in resource-constrained scenarios where decoder depth and parameter budgets are severely restricted. Empirical studies have shown that reducing decoder depth while relying on static query initialization leads to a sharp performance degradation, as shallow decoders lack sufficient capacity to correct suboptimal initial query states through iterative refinement alone \citep{yao2021efficient}.
+Consequently, explicitly conditioning queries on the input prior to decoding is not merely an optimization but a critical requirement for compact architectures, enabling effective instance-specific reasoning despite limited model depth.
+
+Motivated by this observation, we introduce an instance-adaptive query initialization stage. Each learned seed query first performs cross-attention over patch-wise encoder features to produce an input-conditioned initial query state, and the decoder begins from these instance-adaptive states rather than from static learned embeddings. This provides an informative, instance-aware starting point for decoding, allowing the query set to specialize to each image prior to iterative refinement while preserving a fixed-size, compact set of learned query seeds.
+To ensure that the initial queries capture informative local structures, we aggregate local context using a lightweight spatial mixing module based on depth-wise convolutions \citep{liu2022convnet,trockman2022patches} before constructing patch-wise keys and values. This is followed by fixed sine--cosine positional encodings \citep{carion2020end}. Unlike Perceiver’s latent-space self-attention and DETR’s decoder self-attention, our architecture contains no self-attention layers: all token interactions are mediated exclusively by cross-attention between a small set of learnable queries ($N_q \ll N$) and patch tokens. This design reduces the attention cost from $O(N^2)$ to $O(NN_q)$ while retaining an input-adaptive global readout, making the approach well suited to resource-constrained and edge-deployed settings.
+
+\begin{table}[t]
+    \centering
+    \caption{Detailed breakdown of trainable parameters in our proposed architecture.}
+    \label{tab:param_breakdown}
+
+    \resizebox{0.72\columnwidth}{!}{%
+        \begin{tabular}{lr}
+            \toprule
+            \textbf{Component} & \textbf{Parameters} \\
+            \midrule
+            \midrule
+            \addlinespace[0.5em] 
+            
+            \textbf{Visual Encoder} & \textbf{19,402} \\
+            \quad Patch Embedding (EfficientNet-B0 based) & 19,090 \\
+            \quad Spatial Mixer (Depthwise Conv) & 264 \\
+            \quad Normalization (LayerNorm) & 48 \\
+            \addlinespace 
+            
+            \textbf{Decoder (Cross-Attention-based)} & \textbf{11,616} \\
+            \quad Feature Projection ($W_{\text{emb}}$) & 600 \\
+            \quad Init Query Proj ($W_{\text{init}Q}$) & 600 \\
+            \quad Init Key Proj ($W_{\text{init}K}$) & 600 \\
+            \quad Init Value Proj ($W_{\text{init}V}$) & 600 \\
+            \quad Learnable Queries ($N_q=1$) & 24 \\
+            \quad Decoder Layers (Cross-Attention) & 8,592 \\
+            \quad Output Projection & 600 \\
+            \addlinespace 
+            
+            \textbf{Classification Head} & \textbf{353} \\
+            
+            \addlinespace[0.5em] 
+            \midrule 
+            \textbf{Total Model Parameters} & \textbf{31,371} \\
+            \bottomrule
+        \end{tabular}%
+    }
+\end{table}
+
+
+\paragraph{Patch-wise cross-attention layers}
+
+Starting from the instance-adaptive query state, the decoder progressively refines task-relevant representations for classification via patch-wise cross-attention. We maintain a small, fixed set of queries throughout decoding. Keys and values are drawn from the same mixed patch representation used during initialization, ensuring a consistent patch-wise feature space across layers.
+
+The decoder comprises $L$ identical layers, each consisting of a Multi-Head Cross-Attention (MHCA) block followed by a Feed-Forward Network (FFN). Each sub-layer uses residual connections and Layer Normalization. Unlike the initialization step, each MHCA layer has its own learnable projection matrices for queries, keys, and values. The FFN is implemented as an MLP with a GEGLU activation. The output of the final decoder layer is fed to a lightweight MLP classifier to produce class logits.
+
+As shown in Table~\ref{tab:param_breakdown}, the model has 31K trainable parameters. Most parameters (62\%) reside in the convolutional encoder, indicating that the overall parameter budget is largely determined by the feature extractor. Consequently, replacing the encoder with a lighter backbone would further reduce the total size of ICAM, while the cross-attention decoder remains intentionally compact to minimize overhead. This design makes ICAM well suited to resource-constrained settings, where efficient local feature extraction and low-cost global aggregation are both critical.
+
+
+
+
+\section{Experiments}
+\label{sec:exp}
+
+We conducted experiments to validate the effectiveness and efficiency of the proposed method.
+Section~\ref{sec:exp_datasets} introduces the public and private sewer datasets used in this study.
+Section~\ref{sec:exp_baselines} introduces the baseline methods and
+Section~\ref{sec:exp_implementation} describes the implementation details and training protocol.
+Section~\ref{sec:exp_metrics} presents the evaluation metrics used to assess both performance and efficiency.
+Finally, Section~\ref{sec:exp_results} compares ICAM with the baselines under several experimental settings.
+
+
+
+
+% 아래 서브섹션 검토 완료
+\subsection{Dataset}
+\label{sec:exp_datasets}
+We evaluate the proposed ICAM on both a large-scale public benchmark and a real-world private dataset, assessing performance against established baselines and robustness under operational conditions.
+
+\paragraph{Public Dataset}
+We use Sewer-ML \citep{haurum2021sewer} as the public benchmark. Sewer-ML contains approximately 1.3 million sewer images annotated with defect codes by certified sewer inspectors from three companies over nine years. The original video resolutions vary substantially (e.g., $352 \times 288$ and $720 \times 576$). Figure~\ref{fig:sewer-ml_samples} shows representative normal and abnormal examples. The dataset covers 18 defect types, and a single image may have multiple defect codes. For our experiments, we formulate a binary classification task: an image is labeled \textit{Abnormal} if it contains at least one defect code; otherwise, it is labeled \textit{Normal}. The resulting training and test splits after binarization are summarized in Table~\ref{tab:sewer_ml_status}.
+
+\begin{figure}[t!]
+    \centering
+    \subfloat[Normal\label{fig:img1}]{
+        \includegraphics[width=0.23\linewidth]{figures/00603609.pdf}
+    }
+    \hfill
+    \subfloat[\centering Abnormal \\ (OB, FS, AF)\label{fig:img2}]{
+        \includegraphics[width=0.23\linewidth]{figures/00507651.pdf}
+    }
+    \hfill
+    \subfloat[Abnormal \\ (AF)\label{fig:img3}]{
+        \includegraphics[width=0.23\linewidth]{figures/01039052.pdf}
+    }
+    \hfill
+    \subfloat[Abnormal \\ (FS, BE)\label{fig:img4}]{
+        \includegraphics[width=0.23\linewidth]{figures/00482857.pdf}
+    }
+    \caption{Samples from the Sewer-ML dataset.
+    (a) A normal sewer pipe.
+    (b)--(d) Abnormal sewer pipes containing defects with specific defect codes
+    (e.g., OB: surface damage, FS: displaced joint, AF: settled deposits, BE: attached deposits).}
+    \label{fig:sewer-ml_samples}
+\end{figure}
+
+
+\begin{table}[t]
+    \centering
+    \caption{Statistics of the Sewer-ML dataset used in this study.}
+    \resizebox{0.52\columnwidth}{!}{%
+    \label{tab:sewer_ml_status}
+    \begin{tabular}{lrrr}
+        \toprule
+        \textbf{Class Type} & \textbf{Training} & \textbf{Test} & \textbf{Total} \\
+        \midrule
+        \midrule
+        Normal   & 552,820   & 68,681  & 621,501 \\
+        Abnormal & 487,309   & 61,365  & 548,674 \\
+        \cmidrule{1-4}
+        Total    & 1,040,129 & 130,046 & 1,170,175 \\
+        \bottomrule
+    \end{tabular}}
+\end{table}
+
+\paragraph{Private Dataset}
+We also collected a private sewer inspection dataset from operational pipelines to evaluate ICAM under deployment-like conditions. The raw data consist of continuous CCTV inspection videos captured by a robotic crawler camera traversing sewer pipes. Data collection was conducted from August to September 2025 in collaboration with an industry partner. From 137 videos, multiple annotators extracted approximately 1{,}500 axial (front-view) still frames. For traceability, each extracted image is linked to its source video identifier at the capture-event level.
+
+As shown in Figure~\ref{fig:private_dataset_samples}, the extracted frames predominantly present an axial viewpoint (i.e., the circular pipe cross-section is centered) and are annotated as \textit{Normal} or \textit{Abnormal}. We target roughly 900 normal and 600 abnormal frames to maintain a manageable class balance. To mitigate sampling bias and improve generalization, we do not restrict \textit{Normal} frames to visually pristine pipes: frames exhibiting typical aging patterns (e.g., discoloration or mild contamination) are labeled as normal as long as no reportable defects are present. The \textit{Abnormal} class follows a standardized defect taxonomy aligned with the Korean national standard for sewer conduit/manhole inspection and condition rating (Mar.\ 2025 revision provided to annotators), which defines 24 defect types (e.g., joint damage/displacement, adverse slope, collapse, and lining-related defects). When feasible, we aim to cover diverse defect types with an approximately balanced distribution across categories.
+
+Annotators followed a consistent frame-extraction protocol that mirrors the inspection and reporting workflow used by practicing engineers. Specifically, they first identify visually normal segments or clear defect cases in full-length videos and then capture representative frames in which the target condition is centered and unambiguous, prioritizing morphologically informative appearances over fleeting or ambiguous scenes.
+To reduce label noise, we apply quality-control procedures, including viewpoint auditing to remove non-axial frames and filename/metadata validation to ensure consistency. All images are stored at a resolution of $1280 \times 720$ to preserve visual details, and frames with substantial camera rotation that induce lateral/side views are excluded to reduce viewpoint-induced domain shift. We split the dataset into training and test sets using an 8:2 ratio; detailed statistics are provided in Table~\ref{tab:private_stats}.
+
+\begin{figure}[t!]
+    \centering
+    % --- (a) Normal ---
+    \begin{subfigure}[b]{0.32\linewidth}
+        \centering
+        \includegraphics[width=\linewidth]{figures/12-1358.3-A.mp4_20190321144656.pdf}
+        \caption{Normal}
+        \label{fig:normal_private}
+    \end{subfigure}
+    \hfill
+    % --- (b) Abnormal (DS) ---
+    \begin{subfigure}[b]{0.32\linewidth}
+        \centering
+        \includegraphics[width=\linewidth]{figures/62830.mp4_20250624093311_DS_.pdf}
+        \caption{Abnormal (DS)}
+        \label{fig:abnormal_ds}
+    \end{subfigure}
+    \hfill
+    % --- (c) Abnormal (BK) ---
+    \begin{subfigure}[b]{0.32\linewidth}
+        \centering
+        % BK 이미지 경로를 넣어주세요
+        \includegraphics[width=\linewidth]{figures/12-08193-B.mp4_20190321190238_BK.pdf} 
+        \caption{Abnormal (BK)}
+        \label{fig:abnormal_bk}
+    \end{subfigure}
+    
+    \caption{Samples from the private sewer dataset. (a) A normal sewer pipe. (b) An abnormal sewer image showing Deposits/Silty (DS), defined as an accumulation of soil, gravel, or silt within the pipe, often caused by the inflow of external fill material due to pipe breakage. (c) An abnormal sewer image showing Breakage (BK), defined as a structural defect where the pipe wall is fractured or pieces are missing, often caused by external pressure or ground movement.}
+    \label{fig:private_dataset_samples}
+\end{figure}
+
+\begin{table}[t]
+    \centering
+    \caption{Statistics of the private dataset used in this study.}
+    \resizebox{0.46\columnwidth}{!}{%
+    \label{tab:private_stats}
+    \begin{tabular}{lrrr}
+        \toprule
+        \textbf{Class Type} & \textbf{Training} & \textbf{Test} & \textbf{Total} \\
+        \midrule
+        \midrule
+        Normal   & 700   & 177  & 877 \\
+        Abnormal & 653   & 162  & 815 \\
+        \cmidrule{1-4}
+        Total    & 1,353 & 339 & 1,692 \\
+        \bottomrule
+    \end{tabular}}
+\end{table}
+
+
+\subsection{Baselines}
+\label{sec:exp_baselines}
+
+This section describes the baselines used to compare against ICAM.
+
+\paragraph{Lightweight CNNs}
+CNNs designed for on-device inference are typically compact and efficient. We consider EfficientNet-B0, which uses compound scaling and MBConv blocks to balance accuracy and computational cost. We also include MobileNetV4-S, which adopts Universal Inverted Bottleneck (UIB) blocks and neural architecture search (NAS) targeting low-latency mobile accelerators. MobileNetV4-S improves efficiency over prior lightweight CNN variants \citep{qin2404mobilenetv4}. We therefore use EfficientNet-B0 and MobileNetV4-S as representative lightweight CNN baselines.
+
+\paragraph{Lightweight ViTs}
+Vision Transformers (ViTs) perform strongly across many vision tasks. As a lightweight ViT baseline, we use DeiT, which introduces a distillation token enabling effective knowledge distillation via self-attention over the teacher outputs, improving accuracy and data efficiency relative to earlier transformer variants \citep{touvron2021training}.
+
+\paragraph{Hybrid CNN--Transformer model}
+MobileViT is a mobile-oriented hybrid architecture that combines lightweight CNNs for local feature extraction with transformer blocks for global context modeling, and is therefore conceptually close to ICAM. We use MobileViT-XXS, the smallest MobileViT variant, as our key hybrid baseline \citep{mehta2021mobilevit}.
+
+\paragraph{Domain-specific model}
+\citet{xie2019automatic} propose a CNN tailored to defect classification in sewer imagery. On the binary classification task of Sewer-ML, this method achieves the best performance among general-purpose models and sewer-specific approaches reported in \citet{haurum2021sewer}. We include \citet{xie2019automatic} as a domain-specialized baseline to assess practical deployment capability relative to ICAM.
+
+% 아래 서브섹션 검토 완료
+\subsection{Implementation Details}
+\label{sec:exp_implementation}
+For model configuration, we use a compact cross-attention decoder with two layers and a single learnable query. Each input image is partitioned into non-overlapping patches using patch size $p=56$ and stride $s=56$. Each patch is then processed by a lightweight CNN feature extractor whose weights are shared across patches to reduce parameters. The extractor is derived from the early stages of EfficientNet-B0 \citep{tan2019efficientnet} and relies on Mobile Inverted Bottleneck Convolution (MBConv) blocks, which reduce computation while preserving representational capacity via depthwise separable convolutions and inverted residual connections \citep{sandler2018mobilenetv2}.
+
+For training, we follow the Sewer-ML preprocessing protocol and train ICAM and all baselines from scratch for 90 epochs, consistent with the standard Sewer-ML training schedule \citep{haurum2021sewer}. To account for differences in dataset scale, we use a batch size of 256 for Sewer-ML and 16 for the private dataset to stabilize optimization under limited data. We minimize the cross-entropy loss using AdamW with an initial learning rate of $1 \times 10^{-4}$ and weight decay of $1 \times 10^{-2}$, together with a cosine annealing learning-rate schedule. To mitigate overconfident predictions on ambiguous or visually subtle defects, we apply label smoothing \citep{szegedy2016rethinking, muller2019does}. Training is performed on a single NVIDIA RTX 5090 GPU.
+
+% 아래 서브섹션 검토 완료
+\subsection{Metrics and Comparison Strategy}
+\label{sec:exp_metrics}
+This section describes the evaluation metrics and comparison protocol used to assess the feasibility of deploying models in resource-constrained environments.
+
+\paragraph{Performance Metrics}
+We report Top-1 accuracy over all classes, as well as precision, recall, and F1-score for the abnormal class. Following \citet{haurum2021sewer}, we emphasize abnormal-class metrics because false negatives (i.e., missed defects) incur higher economic risk than false positives in automated sewer inspection. Recall alone is insufficient, however, since frequent false alarms (low precision) can reduce system reliability and increase manual verification cost \citep{chandola2009anomaly}. We therefore report precision and F1-score in addition to recall to provide a balanced assessment.
+
+\paragraph{Efficiency Metrics}
+To evaluate the on-device deployability of ICAM, we measure model size, latency, and peak memory usage. To reflect a practical deployment pipeline, we convert trained PyTorch checkpoints (\texttt{.pth}) to ONNX and run all efficiency measurements using ONNX Runtime (v1.23.2). All measurements are performed on a \textbf{Raspberry Pi 5} (4GB RAM) with a Broadcom BCM2712 SoC (quad-core ARM Cortex-A76 CPU) and LPDDR4X memory. This platform is widely used in industrial edge computing and robotics and provides a realistic testbed under power and thermal constraints, in contrast to proxy efficiency metrics collected on server-class GPUs \citep{mathe2024comprehensive}.
+For latency, we use a single-sample batch size ($B=1$) to simulate real-time processing.
+The protocol consists of a warm-up phase (10 runs), followed by a measurement phase (100 runs) on the same input.
+We exclude the warm-up runs from the latency calculation to remove initialization effects such as JIT compilation, cache warming, and dynamic frequency scaling, motivated by the evaluation protocols established by the MLPerf Inference benchmark \citep{reddi2020mlperf}. We measure elapsed time with \texttt{time.perf\_counter()} and report the mean per-inference latency.
+
+For memory usage, we measure both the static model footprint and the dynamic memory overhead.
+The static footprint is recorded as the peak Resident Set Size (RSS) during model loading. This metric is critical for edge deployment, as excessive static memory allocation---referred to as persistent memory in embedded inference frameworks---can hinder system multitasking and lead to out-of-memory failures on low-RAM devices \citep{david2021tensorflow}.
+For peak memory usage, we record the maximum memory consumption during the inference phase (including warm-up) and subtract the baseline memory measured immediately before the first inference.
+Such a distinction between persistent and non-persistent (transient) memory is essential for conducting a comprehensive performance evaluation of resource overhead in resource-constrained TinyML systems \citep{david2021tensorflow}.
+
+\paragraph{Comparison Strategy}
+We benchmark ICAM against the diverse baseline architectures introduced in Section~\ref{sec:exp_baselines}. Given that these models differ substantially in their native resource requirements, direct comparison can be inequitable. To ensure fair comparisons across architectures, we apply a unified pruning protocol to all baselines under two budget settings. In the computational-budget setting, each baseline is pruned to match the computational cost of ICAM, measured in floating-point operations (FLOPs).
+FLOPs are a common proxy for efficiency in lightweight models and often correlate with inference latency and energy consumption on resource-constrained devices \citep{howard2017mobilenets}. As a result, benchmarking under a fixed computational budget (the \textit{iso-FLOPs} setting) is standard practice for evaluating efficient architectures \citep{sandler2018mobilenetv2,tan2019efficientnet,zhang2018shufflenet}. Following this convention, we constrain all baselines to the same FLOPs level as ICAM (approximately 0.18\,GFLOPs) to compare representational efficiency under an identical arithmetic budget. We compute FLOPs as $2\times$ the number of multiply--accumulate operations (MACs), thereby fixing the convention and avoiding ambiguity with reports that use MAC counts directly.
+
+However, FLOPs alone do not fully characterize deployability because they ignore static hardware constraints on edge devices, where parameter count can be the primary determinant of whether a model fits in on-chip memory \citep{iandola2016squeezenet}. Moreover, memory access can consume orders of magnitude more energy than arithmetic computation \citep{han2015deep}, and the bandwidth required to fetch parameters may dominate runtime and energy on battery-powered platforms \citep{chen2016eyeriss}.
+Accordingly, we additionally evaluate models under a fixed parameter budget (the \textit{iso-Params} setting), scaling each baseline to match ICAM (approximately 31K parameters). This approach follows prior comparative evaluations that control for parameter count to isolate gains from architectural design rather than increased capacity \citep{howard2017mobilenets}. Parameter matching enforces an equivalent static memory footprint and better reflects practical deployment constraints on resource-limited devices \citep{iandola2016squeezenet,howard2017mobilenets}.
+
+To enforce these FLOPs and parameter budgets consistently across diverse architectures, we use a unified pruning procedure based on \texttt{torch-pruning}. This library employs the Dependency Graph (DepGraph) algorithm \citep{fang2023depgraph} to preserve dimensional consistency across coupled layers (e.g., residual connections). We evaluate three widely used pruning criteria. First, we consider two data-free methods: L1-norm pruning and Filter Pruning via Geometric Median (FPGM). L1-norm pruning ranks filters by the sum of absolute weight values and removes those with the smallest magnitudes, under the common assumption that small-magnitude filters contribute less \citep{filters2016pruning}. FPGM instead identifies redundancy by computing the geometric median of filters within a layer and pruning filters closest to that median, which are deemed most replaceable \citep{he2019filter}.
+In addition, we evaluate Wanda (Pruning by Weights and Activations) \citep{sun2023simple}, which estimates importance by combining weight magnitude with the $\ell_2$-norm of input activations. Wanda requires a calibration set to estimate activation statistics. For the large-scale Sewer-ML dataset, we use 4{,}096 calibration samples randomly drawn from the training set, following \citet{sun2023simple}, who observed that this size was sufficient for the pruning metric to converge on ImageNet-1K. For our private dataset (1{,}353 training images), we use the full training set for calibration. Because Wanda is unsupervised and does not use labels, this does not induce label-driven overfitting; instead, it reduces sampling bias and yields more stable activation statistics on limited data.
+
+Concretely, we first train each baseline for 10 epochs (out of a 90-epoch schedule) to estimate importance scores. We then perform a binary search (up to 100 iterations) over the global sparsity ratio to meet the target FLOPs or parameter budget, prune the model accordingly, and train the pruned model for the remaining 80 epochs.
+This early-pruning protocol aligns with the Lottery Ticket Hypothesis \citep{frankle2018lottery} and leverages the finding of \citet{you2019drawing} that utilizing only 6.25\%--12.5\% of the training schedule is sufficient to identify high-quality subnetworks.
+While DepGraph automatically groups coupled layers to preserve structural integrity, we explicitly exclude the final classification layer and, for transformer-based models, the query--key--value (QKV) projection layers to further ensure training stability.
+Overall, this pruning protocol provides a standardized basis for comparing ICAM with all baselines under matched resource constraints.
+
+Finally, to assess robustness under varying numerical precision—a critical factor for deployment on NPU/DSP accelerators \citep{sze2017efficient}—we compare ICAM and baselines under three inference regimes: FP32, FP16, and INT8.
+For FP16, we convert the trained FP32 ONNX graph to IEEE~754 half precision.
+For INT8, we apply post-training quantization (PTQ) \citep{krishnamoorthi2018quantizing}.
+Prior to quantization, we apply standard graph optimizations, including batch-normalization folding and operator fusion, to improve numerical stability and maintain parity between training and inference \citep{jacob2018quantization}.
+To maximize throughput on resource-constrained hardware, we use static rather than dynamic quantization. Unlike dynamic approaches, which incur runtime overhead by computing activation statistics on the fly, static quantization enables integer-only inference and more effectively leverages high-throughput low-precision hardware \citep{gholami2022survey}.
+
+For static INT8, we adopt the integer-only inference formulation of \citet{jacob2018quantization}, quantizing weights to signed 8-bit integers (QInt8) and activations to unsigned 8-bit integers (QUInt8).
+We export in Quantize--DeQuantize (QDQ) format with per-channel weight quantization, which has been shown to better preserve accuracy even after batch-normalization folding \citep{wu2020integer}.
+Quantization parameters (scale and zero-point) are estimated using a calibration set of 512 randomly selected training images, consistent with the NVIDIA TensorRT developer guide stating that approximately 500 samples are sufficient even for large-scale benchmarks like ImageNet. We use percentile-based calibration at the 99.99th percentile, which sets clipping thresholds by discarding extreme activation values beyond this percentile, mitigating the impact of outliers on the quantization scale while preserving resolution for the bulk of the activation distribution \citep{li2019fully}.
+
+\subsection{Results}
+\label{sec:exp_results}
+In this section, we validate the practical feasibility of ICAM by comparing it with baselines under standardized resource constraints.
+
+
+\paragraph{Performance of Unpruned Models}
+
+Table~\ref{tab:original_pi5} compares the resource utilization of ICAM with baselines on the Raspberry Pi 5.
+The most distinctive advantage of ICAM is its extremely small number of parameters.
+It operates with only 0.03M parameters and 0.18 GFLOPs, corresponding to an 83$\times$ reduction in parameter count compared to MobileNetV4-S.
+This results in an ultra-compact storage footprint of 0.19~MB in ONNX format, enabling ICAM to be deployed on edge devices with severely limited storage.
+
+\begin{table}[h!]
+    \centering
+    \caption{Performance comparison of unpruned models. FLOPs are reported assuming $2 \times$ FLOPs per MAC. Size (.onnx) denote the physical storage requirements of the converted ONNX file. Inference metrics (Static Memory used to load model, Inference Peak Memory, Latency, FPS) are measured on a Raspberry Pi 5 using ONNX Runtime.} 
+    \label{tab:original_pi5}
+    
+    \resizebox{\columnwidth}{!}{%
+        \begin{tabular}{l c c c c c c c}
+            \toprule
+            \multirow{2}{*}{\textbf{Model}} & \textbf{FLOPs} & \textbf{Params} & \textbf{Size (.onnx)} & \textbf{Static Mem.} & \textbf{Peak Mem.} & \textbf{Latency} & \multirow{2}{*}{\textbf{FPS}} \\
+             & \textbf{(G)} & \textbf{(M)} & \textbf{(MB)} & \textbf{(MB)} & \textbf{(MB)} & \textbf{(ms)} & \\
+            \midrule
+            \midrule
+            EfficientNet-B0 & 0.83 & 4.01 & 15.29 & 36.80 & 21.06 & 40.73 $\pm$ 1.53 & 24.58 $\pm$ 0.85 \\
+            MobileNetV4-S   & 0.39 & 2.50 & 9.49  & 15.14 & \textbf{1.11} & \textbf{10.20 $\pm$ 0.59} & \textbf{98.36 $\pm$ 5.64} \\
+            Xie2019         & 2.87 & 9.16 & 34.95 & 46.86 & 28.91 & 43.64 $\pm$ 1.57 & 22.94 $\pm$ 0.73 \\
+            DeiT-Tiny       & 2.15 & 5.52 & 21.23 & 45.61 & 3.86 & 44.91 $\pm$ 3.72 & 22.40 $\pm$ 1.61 \\
+            MobileViT-XXS   & 0.54 & 0.95 & 3.87  & 15.73 & 12.94 & 27.72 $\pm$ 1.39 & 36.16 $\pm$ 1.56 \\
+            \midrule
+            Ours            & \textbf{0.18} & \textbf{0.03} & \textbf{0.19} & \textbf{5.83} & 17.33 & 19.53 $\pm$ 0.49 & 51.24 $\pm$ 1.31 \\
+            \bottomrule
+        \end{tabular}%
+    }
+\end{table}
+
+
+\begin{table}[h!]
+    \centering
+    % === Table 4 (Sewer-ML) ===
+    \caption{Performance comparison of unpruned models on the Sewer-ML dataset. All metrics (Acc., Prec., Rec., F1) represent performance on the abnormal class.}
+    \label{tab:sewer_ml_original}
+    \resizebox{0.75\columnwidth}{!}{%
+        \begin{tabular}{l c c c c}
+            \toprule
+            \textbf{Model} & \textbf{Acc. (\%)} & \textbf{Prec. (\%)} & \textbf{Rec. (\%)} & \textbf{F1 (\%)} \\
+            \midrule
+            \midrule
+            EfficientNet-B0 & \textbf{92.06} & \textbf{90.55} & \textbf{92.86} & \textbf{91.69} \\
+            MobileNetV4-S   & 90.48 & 89.40 & 90.56 & 89.97 \\
+            Xie2019         & 89.59 & 88.90 & 89.05 & 88.98 \\
+            DeiT-Tiny       & 89.34 & 88.19 & 89.37 & 88.78 \\
+            MobileViT-XXS   & 91.24 & 89.45 & 92.33 & 90.87 \\ 
+            \midrule
+            Ours            & 90.92 & 88.86 & 92.33 & 90.56 \\
+            \bottomrule
+        \end{tabular}%
+    }
+    
+    \vspace{0.5cm} 
+    
+    % === Table 5 (Private) ===
+    \caption{Performance comparison of unpruned models on the Private dataset. All metrics represent performance on the abnormal class.}
+    \label{tab:private_original}
+    \resizebox{0.75\columnwidth}{!}{%
+        \begin{tabular}{l c c c c}
+            \toprule
+            \textbf{Model} & \textbf{Acc. (\%)} & \textbf{Prec. (\%)} & \textbf{Rec. (\%)} & \textbf{F1 (\%)} \\
+            \midrule
+            \midrule
+            EfficientNet-B0 & 83.19 & 85.21 & 77.07 & 80.94 \\
+            MobileNetV4-S   & 84.07 & 83.23 & 82.17 & 82.69 \\
+            Xie2019         & 81.71 & 81.05 & 78.98 & 80.00 \\
+            DeiT-Tiny       & 80.53 & 77.25 & 82.17 & 79.63 \\
+            MobileViT-XXS   & 82.30 & 82.55 & 78.34 & 80.39 \\
+            \midrule
+            Ours            & \textbf{88.20} & \textbf{86.34} & \textbf{88.54} & \textbf{87.42} \\
+            \bottomrule
+        \end{tabular}%
+    }
+\end{table}
+
+
+
+Table~\ref{tab:sewer_ml_original} shows the performance comparison of unpruned models on the Sewer-ML dataset.
+
+% 여기 작성 필요
+
+Table~\ref{tab:private_original} presents the performance comparison of unpruned models on the Private dataset.
+Our proposed ICAM outperforms all baselines across all metrics, achieving an accuracy of 88.20\% and an F1-score of 87.42\%.
+Notably, compared to MobileNetV4-S, which serves as a highly competitive lightweight CNN, ICAM achieves a substantial improvement of 3.11 percentage points in precision while maintaining the highest recall rate of 88.54\%.
+This indicates that our model effectively minimizes false positives (i.e., cases predicted as abnormal but actually normal) without missing actual defects.
+Furthermore, while the transformer-based DeiT-Tiny demonstrates a high recall comparable to MobileNetV4-S, its performance is constrained by a significantly low precision of 77.25\%.
+ICAM also outperforms the domain-specific baseline Xie2019 by a margin of 7.42 percentage points in F1-score.
+
+
+
+
+
+\begin{table}[t]
+    \centering
+    % === First Table (Sewer-ML: Inference Precision) ===
+    \caption{Comparison of model robustness across different inference precisions on the Sewer-ML dataset. Metrics represent performance on the abnormal class.}
+    \label{tab:sewer_ml_inference_precision}
+    
+    \resizebox{0.9\columnwidth}{!}{%
+        \begin{tabular}{l l c c c c}
+            \toprule
+            \textbf{Inf. Precision} & \textbf{Model} & \textbf{Acc. (\%)} & \textbf{Prec. (\%)} & \textbf{Rec. (\%)} & \textbf{F1 (\%)} \\
+            \midrule
+            \midrule
+            \multirow{6}{*}{FP16} 
+              & EfficientNet-B0 & \textbf{92.05} & \textbf{90.55} & \textbf{92.85} & \textbf{91.69} \\
+              & MobileNetV4-S   & 90.47 & 89.39 & 90.56 & 89.97 \\
+              & Xie2019         & 89.58 & 88.90 & 89.04 & 88.97 \\
+              & DeiT-Tiny       & 89.34 & 88.19 & 89.37 & 88.78 \\
+              & MobileViT-XXS   & 91.24 & 89.44 & 92.33 & 90.86 \\
+              \cmidrule{2-6}
+              & Ours            & 90.92 & 88.88 & 92.31 & 90.56 \\
+            \midrule
+            \multirow{6}{*}{INT8} 
+              & EfficientNet-B0 & \textbf{91.41} & \textbf{92.07} & 89.50 & \textbf{90.77} \\
+              & MobileNetV4-S   & 90.44 & 89.43 & 90.43 & 89.93 \\
+              & Xie2019         & 89.56 & 88.98 & 88.90 & 88.94 \\
+              & DeiT-Tiny       & 87.40 & 83.52 & \textbf{91.30} & 87.24 \\
+              & MobileViT-XXS   & 90.95 & 89.93 & 91.01 & 90.47 \\
+              \cmidrule{2-6}
+              & Ours            & 88.95 & 87.34 & 89.58 & 88.44 \\
+            \bottomrule
+        \end{tabular}%
+    }
+\end{table}
+
+\begin{table}[h!]
+    \centering
+    % === Second Table (Private: Inference Precision) ===
+    \caption{Comparison of model robustness across different inference precisions on the Private dataset. Metrics represent performance on the abnormal class.}
+    \label{tab:private_inference_precision}
+    
+    \resizebox{0.9\columnwidth}{!}{%
+        \begin{tabular}{l l c c c c}
+            \toprule
+            \textbf{Inf. Precision} & \textbf{Model} & \textbf{Acc. (\%)} & \textbf{Prec. (\%)} & \textbf{Rec. (\%)} & \textbf{F1 (\%)} \\
+            \midrule
+            \midrule
+            \multirow{6}{*}{FP16} 
+              & EfficientNet-B0 & 83.19 & 85.21 & 77.07 & 80.94 \\
+              & MobileNetV4-S   & 83.78 & 82.69 & 82.17 & 82.43 \\
+              & Xie2019         & 81.71 & 81.05 & 78.98 & 80.00 \\
+              & DeiT-Tiny       & 80.53 & 77.25 & 82.17 & 79.63 \\
+              & MobileViT-XXS   & 82.30 & 82.55 & 78.34 & 80.39 \\
+              \cmidrule{2-6}
+              & Ours            & \textbf{88.20} & \textbf{86.34} & \textbf{88.54} & \textbf{87.42} \\
+            \midrule
+            \multirow{6}{*}{INT8} 
+              & EfficientNet-B0 & 82.30 & 84.40 & 75.80 & 79.87 \\
+              & MobileNetV4-S   & 84.07 & 82.80 & \textbf{82.80} & 82.80 \\
+              & Xie2019         & 81.42 & 80.92 & 78.34 & 79.61 \\
+              & DeiT-Tiny       & 75.52 & 83.64 & 58.60 & 68.91 \\
+              & MobileViT-XXS   & 82.60 & \textbf{84.51} & 76.43 & 80.27 \\
+              \cmidrule{2-6}
+              & Ours            & \textbf{87.02} & 82.29 & 91.72 & \textbf{86.75} \\
+            \bottomrule
+        \end{tabular}%
+    }
+\end{table}
+
+
+
+
+
+
+
+
+We also assess practical deployability on hardware accelerators that rely on reduced-precision arithmetic.
+Tables~\ref{tab:sewer_ml_inference_precision} and \ref{tab:private_inference_precision} compare the robustness of ICAM and baselines when subjected to Post-Training Quantization (PTQ) for FP16 and INT8 inference formats.
+Table~\ref{tab:sewer_ml_inference_precision} shows the comparison of ICAM baselines on the Sewer-ML dataset, which conducted reduction of inference precision.
+Table~\ref{tab:private_inference_precision} shows the comparison of ICAM baselines on the private dataset, which conducted reduction of inference precision.
+
+
+To ensure a fair comparison under standardized resource constraints, we prune all baseline models to match the computational complexity (FLOPs) and model size (parameters) of ICAM.
+Table~\ref{tab:sparsity_ratios} details the specific sparsity ratios, determined via a 100-iteration binary search, applied to achieve these constraints.
+
+
+\begin{table}[t]
+    \centering
+    \caption{Target sparsity ratios (\%) determined via binary search. 
+    With the updated measurements, all pruning methods (L1, FPGM, Wanda) share identical sparsity targets under both \textit{iso-FLOPs} and \textit{iso-Params} constraints to strictly match the resource budgets.}
+    \label{tab:sparsity_ratios}
+    \resizebox{0.55\columnwidth}{!}{%
+        \begin{tabular}{l c c} 
+            \toprule
+            \multirow{2}{*}{\textbf{Model}} & \textbf{iso-FLOPs} & \textbf{iso-Params} \\
+             & \textbf{Sparsity (\%)} & \textbf{Sparsity (\%)} \\
+            \midrule
+            \midrule
+            EfficientNet-B0 & 57.38 & 93.44 \\ 
+            MobileNetV4-S   & 32.34 & 90.25 \\
+            Xie2019         & 92.14 & 93.88 \\
+            DeiT-Tiny       & 81.69 & 98.52 \\
+            MobileViT-XXS   & 47.57 & 90.49 \\
+            \bottomrule
+        \end{tabular}%
+    }
+\end{table}
+
+
+\FloatBarrier
+\paragraph{Comparison under Iso-FLOPs}
+
+We evaluate each model under the fixed computational budget.
+Table~\ref{tab:sewer_ml_iso_flops} shows the performance comparison of unpruned models on the Sewer-ML dataset.
+% 여기 작성 필요
+
+Table~\ref{tab:private_iso_flops} summarizes the performance of baselines on the private dataset, which pruned to match the computational complexity (FLOPs) of ICAM.
+Under this iso-FLOPs constraint ($\approx$ 0.18~G), most baselines maintain competitive performance, indicating that L1-norm, FPGM and Wanda pruning can effectively remove filters without severely degrading feature representations.
+
+
+\begin{table}[t]
+    \centering
+    % === 첫 번째 표 (Sewer-ML: iso-FLOPs) ===
+    \caption{Performance comparison on the Sewer-ML dataset under FLOPs constraint (iso-FLOPs). Baseline models are pruned to match ICAM's computational cost ($\approx$ 0.18~G). Metrics represent performance on the abnormal class.}
+    \label{tab:sewer_ml_iso_flops}
+    
+    \resizebox{0.7\columnwidth}{!}{%
+        \begin{tabular}{l l c c c c}
+            \toprule
+            \multirow{2}{*}{\textbf{Model}} & \textbf{Pruning} & \multirow{2}{*}{\textbf{Acc. (\%)}} & \multirow{2}{*}{\textbf{Prec. (\%)}} & \multirow{2}{*}{\textbf{Rec. (\%)}} & \multirow{2}{*}{\textbf{F1 (\%)}} \\
+             & \textbf{(iso-FLOPs)} & & & & \\
+            \midrule
+            \midrule
+            \multirow{3}{*}{EfficientNet-B0} 
+             & L1-norm & - & - & - & - \\
+             & FPGM & - & - & - & - \\
+             & Wanda & - & - & - & - \\
+            \cmidrule{1-6}
+            \multirow{3}{*}{MobileNetV4-S} 
+             & L1-norm & - & - & - & - \\
+             & FPGM & - & - & - & - \\
+             & Wanda & - & - & - & - \\
+            \cmidrule{1-6}
+            \multirow{3}{*}{Xie2019} 
+             & L1-norm & - & - & - & - \\
+             & FPGM & - & - & - & - \\
+             & Wanda & - & - & - & - \\
+            \cmidrule{1-6}
+            \multirow{3}{*}{DeiT-Tiny} 
+             & L1-norm & - & - & - & - \\
+             & FPGM & - & - & - & - \\
+             & Wanda & - & - & - & - \\
+            \cmidrule{1-6}
+            \multirow{3}{*}{MobileViT-XXS} 
+             & L1-norm & - & - & - & - \\
+             & FPGM & - & - & - & - \\
+             & Wanda & - & - & - & - \\
+            \cmidrule{1-6}
+            Ours &  & 90.92 & 88.87 & 92.32 & 90.56 \\
+            \bottomrule
+        \end{tabular}%
+    }
+\end{table}
+
+\begin{table}[t]
+    \centering
+    % === 두 번째 표 (Private: iso-FLOPs) ===
+    \caption{Performance comparison on the Private dataset under FLOPs constraint (iso-FLOPs). Baseline models are pruned to match ICAM's computational cost ($\approx$ 0.18~G). Metrics represent performance on the abnormal class.}
+    \label{tab:private_iso_flops}
+    
+    \resizebox{0.7\columnwidth}{!}{%
+        \begin{tabular}{l l c c c c}
+            \toprule
+            \multirow{2}{*}{\textbf{Model}} & \textbf{Pruning} & \multirow{2}{*}{\textbf{Acc. (\%)}} & \multirow{2}{*}{\textbf{Prec. (\%)}} & \multirow{2}{*}{\textbf{Rec. (\%)}} & \multirow{2}{*}{\textbf{F1 (\%)}} \\
+             & \textbf{(iso-FLOPs)} & & & & \\
+            \midrule
+            \midrule
+            \multirow{3}{*}{EfficientNet-B0} 
+             & L1-norm & 82.01 & 78.57 & 84.08 & 81.23 \\
+             & FPGM & 87.91 & 87.18 & 86.62 & 86.90 \\
+             & Wanda & 86.43 & 83.64 & 87.90 & 85.71 \\
+            \cmidrule{1-6}
+            \multirow{3}{*}{MobileNetV4-S} 
+             & L1-norm & 81.42 & 80.52 & 78.98 & 79.74 \\
+             & FPGM & 83.19 & 86.76 & 75.16 & 80.55 \\
+             & Wanda & 80.24 & 84.62 & 70.06 & 76.66 \\
+            \cmidrule{1-6}
+            \multirow{3}{*}{Xie2019} 
+             & L1-norm & 81.71 & 79.87 & 80.89 & 80.38 \\
+             & FPGM & 82.30 & 82.55 & 78.34 & 80.39 \\
+             & Wanda & 81.12 & 77.84 & 82.80 & 80.25 \\
+            \cmidrule{1-6}
+            \multirow{3}{*}{DeiT-Tiny} 
+             & L1-norm & 81.42 & 80.92 & 78.34 & 79.61 \\
+             & FPGM & 80.83 & 81.08 & 76.43 & 78.69 \\
+             & Wanda & 82.89 & 81.13 & 82.17 & 81.65 \\
+            \cmidrule{1-6}
+            \multirow{3}{*}{MobileViT-XXS} 
+             & L1-norm & 82.30 & 80.12 & 82.17 & 81.13 \\
+             & FPGM & 82.60 & 81.41 & 80.89 & 81.15 \\
+             & Wanda & 84.07 & 80.84 & 85.99 & 83.33 \\
+            \cmidrule{1-6}
+            Ours &  & 88.20 & 86.34 & 88.54 & 87.42 \\
+            \bottomrule
+        \end{tabular}%
+    }
+\end{table}
+
+
+
+\begin{table}[h!]
+    \centering
+    \caption{Efficiency comparison under FLOPs constraint (iso-FLOPs). 
+    Baseline models are pruned to match ICAM's computational cost ($\approx$ 0.18~G). 
+    Inference metrics (Static Memory used to load model, Inference Peak Memory, Latency, FPS) are measured on a Raspberry Pi 5 using ONNX Runtime.}
+    \label{tab:efficiency_iso_flops}
+    \resizebox{\columnwidth}{!}{%
+        \begin{tabular}{l l c c c c c}
+            \toprule
+            \multirow{2}{*}{\textbf{Model}} & \textbf{Method} & \textbf{Params} & \textbf{Static Mem.} & \textbf{Peak Mem.} & \textbf{Latency} & \multirow{2}{*}{\textbf{FPS}} \\
+             & \textbf{(iso-FLOPs)} & \textbf{(M)} & \textbf{(MB)} & \textbf{(MB)} & \textbf{(ms)} & \\
+            \midrule
+            \midrule
+            \multirow{3}{*}{EfficientNet-B0} 
+             & L1-norm & 4.01 & 13.69 & 10.88 & 13.81 $\pm$ 0.87 & 72.67 $\pm$ 4.54 \\
+             & FPGM    & 4.01 & 13.72 & 10.91 & 13.62 $\pm$ 0.67 & 73.60 $\pm$ 3.68 \\
+             & Wanda   & 4.01 & 13.78 & 10.77 & 14.20 $\pm$ 2.36 & 71.67 $\pm$ 7.74 \\
+            \cmidrule{1-7}
+            \multirow{3}{*}{MobileNetV4-S} 
+             & L1-norm & 2.50 & 10.05 & 2.38 & 5.85 $\pm$ 0.53 & 172.33 $\pm$ 15.01 \\
+             & FPGM    & 2.50 & 10.08 & 2.38 & 5.60 $\pm$ 0.38 & 179.35 $\pm$ 13.74 \\
+             & Wanda   & 2.50 & 10.08 & 2.38 & 5.86 $\pm$ 0.48 & 171.98 $\pm$ 16.26 \\
+            \cmidrule{1-7}
+            \multirow{3}{*}{Xie2019} 
+             & L1-norm & 9.16 & 2.06 & 3.47 & 5.82 $\pm$ 0.13 & 171.90 $\pm$ 4.48 \\
+             & FPGM    & 9.16 & 2.05 & 3.47 & 5.88 $\pm$ 0.32 & 170.49 $\pm$ 8.50 \\
+             & Wanda   & 9.16 & 2.05 & 3.45 & 5.78 $\pm$ 0.36 & 173.65 $\pm$ 8.77 \\
+            \cmidrule{1-7}
+            \multirow{3}{*}{DeiT-Tiny} 
+             & L1-norm & 5.52 & 13.20 & 3.69 & 16.95 $\pm$ 1.84 & 59.58 $\pm$ 5.56 \\
+             & FPGM    & 5.52 & 13.25 & 3.70 & 15.30 $\pm$ 1.04 & 65.65 $\pm$ 4.17 \\
+             & Wanda   & 5.52 & 13.23 & 3.70 & 16.53 $\pm$ 2.40 & 61.43 $\pm$ 6.93 \\
+            \cmidrule{1-7}
+            \multirow{3}{*}{MobileViT-XXS} 
+             & L1-norm & 0.95 & 12.48 & 12.48 & 17.91 $\pm$ 1.60 & 56.22 $\pm$ 4.45 \\
+             & FPGM    & 0.95 & 12.41 & 12.48 & 17.33 $\pm$ 1.76 & 58.19 $\pm$ 5.09 \\
+             & Wanda   & 0.95 & 12.42 & 12.48 & 18.92 $\pm$ 2.17 & 53.37 $\pm$ 4.46 \\
+            \cmidrule{1-7}
+            Ours & & 0.03 & 5.83 & 17.33 & 19.53 $\pm$ 0.49 & 51.24 $\pm$ 1.31 \\
+            \bottomrule
+        \end{tabular}%
+    }
+\end{table}
+
+
+
+
+\FloatBarrier
+\paragraph{Comparison under Iso-Params}
+
+We further simulate strict edge storage constraints by limiting the model size.
+Tables~\ref{tab:swer_ml_iso_params} and \ref{tab:private_iso_params} present the comparison results where all baselines are heavily pruned to match the parameter count of ICAM ($\approx$ 31K parameters).
+
+
+\begin{table}[t]
+    \centering
+    % === 첫 번째 표 (Sewer-ML: iso-Params) ===
+    \caption{Performance comparison on the Sewer-ML dataset under parameter constraint (iso-Params). Baseline models are pruned to match ICAM's parameter count ($\approx$ 0.03~M). Metrics represent performance on the abnormal class.}
+    \label{tab:swer_ml_iso_params}
+
+    \resizebox{0.7\columnwidth}{!}{%
+        \begin{tabular}{l l c c c c}
+            \toprule
+            \multirow{2}{*}{\textbf{Model}} & \textbf{Pruning} & \multirow{2}{*}{\textbf{Acc. (\%)}} & \multirow{2}{*}{\textbf{Prec. (\%)}} & \multirow{2}{*}{\textbf{Rec. (\%)}} & \multirow{2}{*}{\textbf{F1 (\%)}} \\
+             & \textbf{(iso-Params)} & & & & \\
+            \midrule
+            \midrule
+            \multirow{3}{*}{EfficientNet-B0} 
+             & L1-norm & - & - & - & - \\
+             & FPGM & - & - & - & - \\
+             & Wanda & - & - & - & - \\
+            \cmidrule{1-6}
+            \multirow{3}{*}{MobileNetV4-S} 
+             & L1-norm & - & - & - & - \\
+             & FPGM & - & - & - & - \\
+             & Wanda & - & - & - & - \\
+            \cmidrule{1-6}
+            \multirow{3}{*}{Xie2019} 
+             & L1-norm & - & - & - & - \\
+             & FPGM & - & - & - & - \\
+             & Wanda & - & - & - & - \\
+            \cmidrule{1-6}
+            \multirow{3}{*}{DeiT-Tiny} 
+             & L1-norm & - & - & - & - \\
+             & FPGM & - & - & - & - \\
+             & Wanda & - & - & - & - \\
+            \cmidrule{1-6}
+            \multirow{3}{*}{MobileViT-XXS} 
+             & L1-norm & - & - & - & - \\
+             & FPGM & - & - & - & - \\
+             & Wanda & - & - & - & - \\
+            \cmidrule{1-6}
+            Ours &  & 90.92 & 88.87 & 92.32 & 90.56 \\
+            \bottomrule
+        \end{tabular}%
+    }
+\end{table}
+
+\begin{table}[h!]
+    \centering
+    % === 두 번째 표 (Private: iso-Params) ===
+    \caption{Performance comparison on the Private dataset under parameter constraint (iso-Params). Baseline models are pruned to match ICAM's parameter count ($\approx$ 0.03~M). Metrics represent performance on the abnormal class.} 
+    \label{tab:private_iso_params}
+    
+    \resizebox{0.7\columnwidth}{!}{%
+        \begin{tabular}{l l c c c c}
+            \toprule
+            \multirow{2}{*}{\textbf{Model}} & \textbf{Pruning} & \multirow{2}{*}{\textbf{Acc. (\%)}} & \multirow{2}{*}{\textbf{Prec. (\%)}} & \multirow{2}{*}{\textbf{Rec. (\%)}} & \multirow{2}{*}{\textbf{F1 (\%)}} \\
+             & \textbf{(iso-Params)} & & & & \\
+            \midrule
+            \midrule
+            \multirow{3}{*}{EfficientNet-B0} 
+             & L1-norm & 80.53 & 76.61 & 83.44 & 79.88 \\
+             & FPGM & 81.71 & 80.65 & 79.62 & 80.13 \\
+             & Wanda & 83.48 & 80.24 & 85.35 & 82.72 \\
+            \cmidrule{1-6}
+            \multirow{3}{*}{MobileNetV4-S} 
+             & L1-norm & 81.71 & 81.05 & 78.98 & 80.00 \\
+             & FPGM & 81.42 & 77.65 & 84.08 & 80.73 \\
+             & Wanda & 78.76 & 77.07 & 77.07 & 77.07 \\
+            \cmidrule{1-6}
+            \multirow{3}{*}{Xie2019} 
+             & L1-norm & 81.71 & 78.79 & 82.80 & 80.75 \\
+             & FPGM & 80.83 & 78.40 & 80.89 & 79.62 \\
+             & Wanda & 82.30 & 81.70 & 79.62 & 80.65 \\
+            \cmidrule{1-6}
+            \multirow{3}{*}{DeiT-Tiny} 
+             & L1-norm & 65.19 & 60.10 & 73.89 & 66.29 \\
+             & FPGM & 53.69 & 0.00 & 0.00 & 0.00 \\
+             & Wanda & 61.65 & 55.17 & \textbf{91.72} & 68.90 \\
+            \cmidrule{1-6}
+            \multirow{3}{*}{MobileViT-XXS} 
+             & L1-norm & 78.76 & 77.42 & 76.43 & 76.92 \\
+             & FPGM & 78.47 & 76.58 & 77.07 & 76.83 \\
+             & Wanda & 76.40 & 73.62 & 76.43 & 75.00 \\
+            \cmidrule{1-6}
+            Ours &  & 88.20 & 86.34 & 88.54 & 87.42 \\
+            \bottomrule
+        \end{tabular}%
+    }
+\end{table}
+
+
+
+\begin{table}[h!]
+    \centering
+    \caption{Efficiency comparison under parameter constraint (iso-Params). 
+    Baseline models are pruned to match ICAM's parameter count ($\approx$ 0.03~M). 
+    Inference metrics (Static Memory used to load model, Inference Peak Memory, Latency, FPS) are measured on a Raspberry Pi 5 using ONNX Runtime.}
+    \label{tab:efficiency_iso_params}
+    
+    \resizebox{\columnwidth}{!}{%
+        \begin{tabular}{l l c c c c c}
+            \toprule
+            \multirow{2}{*}{\textbf{Model}} & \textbf{Method} & \textbf{FLOPs} & \textbf{Static Mem.} & \textbf{Peak Mem.} & \textbf{Latency} & \multirow{2}{*}{\textbf{FPS}} \\
+             & \textbf{(iso-Params)} & \textbf{(G)} & \textbf{(MB)} & \textbf{(MB)} & \textbf{(ms)} & \\
+            \midrule
+            \midrule
+            \multirow{3}{*}{EfficientNet-B0} 
+             & L1-norm & 0.01 & 3.03 & 2.45 & 2.95 $\pm$ 0.24 & 342.34 $\pm$ 38.03 \\
+             & FPGM    & 0.01 & 3.03 & 2.44 & 2.47 $\pm$ 0.14 & 406.46 $\pm$ 24.84 \\
+             & Wanda   & 0.01 & 3.03 & 2.48 & 2.33 $\pm$ 0.11 & 429.41 $\pm$ 23.09 \\
+            \cmidrule{1-7}
+            \multirow{3}{*}{MobileNetV4-S} 
+             & L1-norm & 0.01 & 2.23 & 1.58 & 0.85 $\pm$ 0.10 & 473.52 $\pm$ 2.23 \\
+             & FPGM    & 0.01 & 2.22 & 1.56 & 0.97 $\pm$ 0.03 & 473.48 $\pm$ 2.22 \\
+             & Wanda   & 0.01 & 2.23 & 1.56 & 0.85 $\pm$ 0.06 & 1188.56 $\pm$ 103.21 \\
+            \cmidrule{1-7}
+            \multirow{3}{*}{Xie2019} 
+             & L1-norm & 0.11 & 1.84 & 2.30 & 5.00 $\pm$ 0.04 & 200.00 $\pm$ 1.52 \\
+             & FPGM    & 0.11 & 1.84 & 2.28 & 5.09 $\pm$ 0.47 & 197.56 $\pm$ 10.41 \\
+             & Wanda   & 0.11 & 1.84 & 2.28 & 4.98 $\pm$ 0.15 & 201.11 $\pm$ 5.81 \\
+            \cmidrule{1-7}
+            \multirow{3}{*}{DeiT-Tiny} 
+             & L1-norm & 0.01 & 4.47 & 3.67 & 12.81 $\pm$ 1.34 & 78.90 $\pm$ 7.88 \\
+             & FPGM    & 0.01 & 4.45 & 3.64 & 12.17 $\pm$ 1.18 & 82.89 $\pm$ 7.51 \\
+             & Wanda   & 0.01 & 4.45 & 3.66 & 10.78 $\pm$ 0.42 & 92.88 $\pm$ 3.38 \\
+            \cmidrule{1-7}
+            \multirow{3}{*}{MobileViT-XXS} 
+             & L1-norm & 0.02 & 10.70 & 11.22 & 9.79 $\pm$ 0.37 & 102.31 $\pm$ 3.84 \\
+             & FPGM    & 0.02 & 10.80 & 11.27 & 10.69 $\pm$ 0.76 & 94.04 $\pm$ 6.98 \\
+             & Wanda   & 0.02 & 10.69 & 11.28 & 10.21 $\pm$ 1.85 & 99.53 $\pm$ 9.83 \\
+            \cmidrule{1-7}
+            Ours & & 0.03 & 5.83 & 17.33 & 19.53 $\pm$ 0.49 & 51.24 $\pm$ 1.31 \\
+            \bottomrule
+        \end{tabular}%
+    }
+\end{table}
+
+
+
+
+Table~\ref{tab:swer_ml_iso_params} shows the performance of baselines on the Sewer-ML dataset, which pruned to match the parameter level of ICAM.
+
+
+Table~\ref{tab:private_iso_params} shows the performance of baselines on the private dataset, which pruned to match the parameter level of ICAM.
+It reveals a distinct pattern under the stricter parameter budget (iso-Params, $\approx$ 0.03~M).
+While CNN-based models such as MobileNetV4-S and Xie2019 exhibit resilience with only moderate performance degradation, the vision transformer-based distillation model DeiT-Tiny suffers a catastrophic performance collapse: its precision, recall, and F1-score drop to 0.00\% across both pruning methods.
+This observation aligns with previous findings by \citet{kuznedelev2023cap}, who experimentally demonstrated that DeiT models experience significantly larger accuracy drops than CNNs when subjected to magnitude-based pruning at high sparsity levels.
+Compared to these baselines, ICAM, which is inherently designed at this compact scale, achieves an F1-score of 87.42\%, outperforming even the best pruned CNN baseline (EfficientNet-B0, FPGM) by a margin of 6.51 percentage points.
+
+
+
+
+
+\FloatBarrier
+\section{Ablation Study}
+\label{sec:exp_ablation}
+
+To validate the effectiveness of the proposed instance-adaptive query Initialization mechanism, we conduct an ablation study on the Private dataset.
+We compare our approach against a baseline using static learnable queries, which is a standard initialization strategy.
+In the static setting, queries are optimized as fixed parameters, independent of the input instance.
+As shown in Table~\ref{tab:ablation_adaptive_query}, the instance-adaptive query strategy yields consistently superior performance compared to the static baseline.
+This improvement suggests that, while static queries capture global dataset statistics, they lack the flexibility to adapt to the diverse visual characteristics of individual sewer defects.
+In contrast, our mechanism conditions the queries on the encoder output via an initial cross-attention step, generating instance-specific queries.
+This allows the lightweight decoder to focus on defect-relevant regions more effectively from the start, compensating for its limited depth.
+
+
+\begin{table}[t]
+    \centering
+    % Caption must be OUTSIDE the resizebox to avoid "Illegal unit of measure"
+    \caption{Ablation study on the effectiveness of the instance-adaptive query Initialization mechanism.}
+    \label{tab:ablation_adaptive_query}
+
+
+    \resizebox{0.7\columnwidth}{!}{
+        \begin{tabular}{c c c c c}
+            \toprule
+            \textbf{Instance-adaptive} & \multirow{2}{*}{\textbf{Acc. (\%)}} & \multirow{2}{*}{\textbf{Prec. (\%)}} & \multirow{2}{*}{\textbf{Rec. (\%)}} & \multirow{2}{*}{\textbf{F1 (\%)}} \\
+            \textbf{initial query} & & & & \\
+            \midrule
+            \midrule
+            \ding{51} & 88.20 & 86.34 & 88.54 & 87.42 \\
+            \ding{55} & 85.84 & 84.28 & 85.35 & 84.81 \\ 
+            \bottomrule
+        \end{tabular}%
+    }
+
+\end{table}
+
+\begin{figure}[h!] 
+    \centering
+    % --- (a) Input Image ---
+    \begin{minipage}[b]{0.32\linewidth}
+        \centering
+        \includegraphics[width=\linewidth]{figures/original/62910.mp4_20250416133851_LP__original.pdf}
+        \subcaption{Input image}
+        \label{fig:ablation_input_lp}
+    \end{minipage}
+    \hfill 
+    % --- (b) Ours (Input-Conditioned) ---
+    \begin{minipage}[b]{0.32\linewidth}
+        \centering
+        \includegraphics[width=\linewidth]{figures/ICAM/62910.mp4_20250416133851_LP__avg.pdf}
+        \subcaption{Ours (Instance-adaptive)}
+        \label{fig:ablation_ours}
+    \end{minipage}
+    \hfill 
+    % --- (c) Baseline (Static) ---
+    \begin{minipage}[b]{0.32\linewidth}
+        \centering
+        \includegraphics[width=\linewidth]{figures/ablation/62910.mp4_20250416133851_LP__avg.pdf}
+        \subcaption{Baseline (Static queries)}
+        \label{fig:ablation_static}
+    \end{minipage}
+
+    \vspace{-0.5em}
+    \caption{(a) Input sewer image showing a Lateral Protruding defect (LP), defined as an anomaly where a lateral connection pipe intrudes into the interior of the primary sewer line. (b) Our instance-adaptive strategy enables the model to focus on the protruded pipe. (c) The static baseline fails to focus on the defect.}
+    \label{fig:ablation_LP}
+\end{figure}
+
+
+
+\begin{figure}[h!] 
+    \centering
+    % --- (a) Input Image ---
+    \begin{minipage}[b]{0.32\linewidth}
+        \centering
+        \includegraphics[width=\linewidth]{figures/original/12-08410-B.mp4_20190321182857_CL_original.pdf}
+        \subcaption{Input image}
+        \label{fig:ablation_input_cl}
+    \end{minipage}
+    \hfill 
+    % --- (b) Ours (Input-Conditioned) ---
+    \begin{minipage}[b]{0.32\linewidth}
+        \centering
+        \includegraphics[width=\linewidth]{figures/ICAM/12-08410-B.mp4_20190321182857_CL_avg.pdf}
+        \subcaption{Ours (Instance-adaptive)}
+        \label{fig:ablation_ours}
+    \end{minipage}
+    \hfill 
+    % --- (c) Baseline (Static) ---
+    \begin{minipage}[b]{0.32\linewidth}
+        \centering
+        \includegraphics[width=\linewidth]{figures/ablation/12-08410-B.mp4_20190321182857_CL_avg.pdf}
+        \subcaption{Baseline (Static queries)}
+        \label{fig:ablation_static}
+    \end{minipage}
+
+    \vspace{-0.5em}
+    \caption{(a) Input sewer image showing Crack. Longitudinal (CL), defined as a crack that runs parallel to the pipe's axis. (b) Our instance-adaptive strategy enables the model to focus on the areas where pipe cracks are present. (c) The static baseline does not detect all of these areas.}
+    \label{fig:ablation_CL}
+\end{figure}
+
+\begin{figure}[h!] 
+    \centering
+    % --- (a) Input Image ---
+    \begin{minipage}[b]{0.32\linewidth}
+        \centering
+        \includegraphics[width=\linewidth]{figures/original/1753901.mp4_20230105085902_TO__original.pdf}
+        \subcaption{Input image}
+        \label{fig:ablation_input_to}
+    \end{minipage}
+    \hfill 
+    % --- (b) Ours (Input-Conditioned) ---
+    \begin{minipage}[b]{0.32\linewidth}
+        \centering
+        \includegraphics[width=\linewidth]{figures/ICAM/1753901.mp4_20230105085902_TO__avg.pdf}
+        \subcaption{Ours (Instance-adaptive)}
+        \label{fig:ablation_ours}
+    \end{minipage}
+    \hfill 
+    % --- (c) Baseline (Static) ---
+    \begin{minipage}[b]{0.32\linewidth}
+        \centering
+        \includegraphics[width=\linewidth]{figures/ablation/1753901.mp4_20230105085902_TO__avg.pdf}
+        \subcaption{Baseline (Static queries)}
+        \label{fig:ablation_static}
+    \end{minipage}
+
+    \vspace{-0.5em}
+    \caption{(a) Input sewer image showing Temporary Obstructions (TO), defined as obstructions that are not permanently attached or sedimented on the pipe wall and can be removed. (b) Our instance-adaptive strategy enables the model to focuses on distinct parts of the obstruction. (c) The static baseline exhibits diffuse attention patterns, covering nearly half of the background area.}
+    \label{fig:ablation_TO}
+\end{figure}
+
+To complement these quantitative results, we visualize the cross-attention maps extracted from the final decoder layer in Figures~\ref{fig:ablation_LP}, \ref{fig:ablation_TO}, and \ref{fig:ablation_CL}.
+For a representative view, we average the attention weights across all heads, where warm colors indicate higher attention weights.
+The visualizations show that the model with input-conditioned initial queries assigns significantly higher attention weights to the regions corresponding to the defect codes compared to the static query baseline.
+This qualitative evidence confirms that our instance-specific query initialization enables the model to localize and focus on critical defect features more accurately, leading to the observed performance gains.
+
+
+\section{Conclusion}\label{sec:con}
+
+In this paper, we proposed the Instance-adaptive Cross-Attention Model (ICAM) to address the challenge of deploying accurate deep learning–based sewer inspection algorithms on resource-constrained platforms such as edge devices.
+ICAM leverages an Instance-adaptive query Initialization mechanism to efficiently extract defect-relevant features with minimal computational overhead.
+We compared ICAM against a variety of baseline models, including domain-tailored architectures as well as lightweight CNNs and ViTs designed for deployment on mobile devices.
+Furthermore, we evaluated not only performance metrics but also efficiency metrics—such as FLOPs, model size, latency, and peak memory usage on the Sewer-ML dataset and self-collected private sewer pipeline dataset deployed on a Raspberry Pi 5, in order to assess practical applicability in real-world environments.
+As a result, ICAM consistently outperformed the baselines, highlighting its effectiveness as a practical solution for automated sewer inspection and helping to bridge the gap between methods designed for high-performance hardware and deployment in resource-limited environments.
+Future work will explore multi-class inspection models that detect diverse defect types using lightweight deep learning architectures.
+
+
+
+
+% \section*{Acknowledgement}
+
+% This work was supported by the National Research
+% Foundation of Korea (NRF) Grant funded by the Korean Government (Ministry of Science and Information \& Communications
+% Technology, MSIT) (Nos. 2019R1A2C2002358, 2022R1F1A1074393, and RS-2023-00208412).
+
+%% The Appendices part is started with the command \appendix;
+%% appendix sections are then done as normal sections
+%% \appendix
+
+%% \section{}
+%% \label{}
+
+%% If you have bibdatabase file and want bibtex to generate the
+%% bibitems, please use
+%%
+\bibliographystyle{elsarticle-harv} 
+\bibliography{ref}
+
+%% else use the following coding to input the bibitems directly in the
+%% TeX file.
+
+% \begin{thebibliography}{ref}
+%% \bibitem[Author(year)]{label}
+%% Text of bibliographic item
+% \bibitem[ ()]{}
+% \end{thebibliography}
+
+\end{document}
+
+\endinput
+%%
+%% End of file `elsarticle-template-harv.tex'
