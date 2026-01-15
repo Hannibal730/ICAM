@@ -119,8 +119,18 @@ class PatchConvEncoder(nn.Module):
     def forward(self, x):
         B, C, H, W = x.shape
         # 이미지를 패치로 분할
-        patches = x.unfold(2, self.patch_size, self.stride).unfold(3, self.patch_size, self.stride)
-        patches = patches.permute(0, 2, 3, 1, 4, 5).contiguous().view(-1, C, self.patch_size, self.patch_size)
+        # [Optimization] stride == patch_size인 경우 unfold 대신 view/permute 사용 (메모리 효율성 향상)
+        if self.patch_size == self.stride:
+            patches = x.view(B, C, H // self.patch_size, self.patch_size, W // self.patch_size, self.patch_size)
+            # [Fix] Remove NHWC round-trip to improve latency. Use standard NCHW layout.
+            # (B, C, H_p, p, W_p, p) -> (B, H_p, W_p, C, p, p)
+            patches = patches.permute(0, 2, 4, 1, 3, 5).contiguous()
+            patches = patches.view(-1, C, self.patch_size, self.patch_size)
+        else:
+            patches = x.unfold(2, self.patch_size, self.stride).unfold(3, self.patch_size, self.stride)
+            # [Optimization] Produce channels_last layout
+            patches = patches.permute(0, 2, 3, 4, 5, 1).contiguous()
+            patches = patches.view(-1, self.patch_size, self.patch_size, C).permute(0, 3, 1, 2)
         # patches: [B * num_patches, C, patch_size, patch_size]
         
         # 각 패치별 특징 추출
@@ -365,15 +375,19 @@ class _MultiheadAttention(nn.Module):
         k_s = self.W_K(K).view(bs, -1, self.num_heads, self.head_dim).permute(0, 2, 1, 3)
         v_s = self.W_V(V).view(bs, -1, self.num_heads, self.head_dim).permute(0, 2, 1, 3)
 
-        attn_scores = torch.einsum('bhqd, bhkd -> bhqk', q_s, k_s) * self.scale
+        # [Optimization] einsum 대신 matmul 사용 (속도 향상)
+        # attn_scores = torch.einsum('bhqd, bhkd -> bhqk', q_s, k_s) * self.scale
+        attn_scores = torch.matmul(q_s, k_s.transpose(-1, -2)) * self.scale
         
         if prev is not None: attn_scores = attn_scores + prev
         
         attn_weights = F.softmax(attn_scores, dim=-1)
         attn_weights = self.attn_dropout(attn_weights)
 
-        output = torch.einsum('bhqk, bhkd -> bhqd', attn_weights, v_s)
-        output = output.permute(0, 2, 1, 3).contiguous().view(bs, -1, self.num_heads * self.head_dim)
+        # output = torch.einsum('bhqk, bhkd -> bhqd', attn_weights, v_s)
+        output = torch.matmul(attn_weights, v_s)
+        # [Optimization] Use reshape instead of contiguous().view() to avoid copy if possible
+        output = output.permute(0, 2, 1, 3).reshape(bs, -1, self.num_heads * self.head_dim)
         
         output = self.concatheads2emb(output)
 

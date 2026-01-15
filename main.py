@@ -412,9 +412,17 @@ def inference(run_cfg, model_cfg, model, data_loader, device, run_dir_path, time
 
     model.eval()
 
+    # [Optimization] CPU 추론 시 Channels Last 메모리 포맷 적용 (속도 향상 및 메모리 효율화)
+    if device.type == 'cpu':
+        model = model.to(memory_format=torch.channels_last)
+
     # --- PyTorch 모델 성능 지표 측정 (FLOPS 및 더미 입력 생성) ---
     dummy_input = measure_model_flops(model, device, data_loader)
     single_dummy_input = dummy_input[0].unsqueeze(0) if dummy_input.shape[0] > 1 else dummy_input
+    
+    # [Optimization] 입력 데이터도 Channels Last로 변환
+    if device.type == 'cpu':
+        single_dummy_input = single_dummy_input.to(memory_format=torch.channels_last)
 
     # --- 양자화(Quantization) 적용 ---
     use_fp16 = getattr(run_cfg, 'use_fp16_inference', False)
