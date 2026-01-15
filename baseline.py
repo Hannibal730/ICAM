@@ -66,7 +66,7 @@ except ImportError:
     quantize_fx = None
     get_default_qconfig_mapping = None
 
-from onnx_utils import evaluate_onnx, measure_onnx_performance, measure_model_flops, ONNXCalibrationDataReader, MemoryMonitor
+from onnx_utils import evaluate_onnx, measure_onnx_performance, measure_model_flops, ONNXCalibrationDataReader, MemoryMonitor, flush_memory
 
 # [수정] torch_pruning을 전역 스코프에서 import하여 모든 함수에서 접근 가능하게 함
 try:
@@ -507,19 +507,19 @@ def inference(run_cfg, model_cfg, model, data_loader, device, run_dir_path, time
         try:
             logging.info(f"ONNX Runtime (v{onnxruntime.__version__})으로 평가를 시작합니다.")
             
-            gc.collect()
+            flush_memory() # [수정]
             process = psutil.Process(os.getpid()) if psutil else None
             mem_before_load = process.memory_info().rss / (1024 * 1024) if process else 0
 
             with MemoryMonitor() as mem_mon:
                 onnx_session = onnxruntime.InferenceSession(onnx_inference_path, providers=['CPUExecutionProvider'])
             if psutil:
-                logging.info(f"[Model Load] ONNX 모델 로드 메모리: {mem_mon.peak_memory:.2f} MB (증가량: {mem_mon.peak_memory - mem_mon.start_memory:.2f} MB)")
+                logging.info(f"[Model Load] ONNX 모델 로드 중 피크 메모리 - 모델 로드 전 청소 직후 메모리: {mem_mon.peak_memory - mem_mon.start_memory:.2f} MB")
             
             dummy_input, _, _ = next(iter(data_loader))
             inference_peak = measure_onnx_performance(onnx_session, dummy_input)
             if psutil and inference_peak:
-                logging.info(f"[Total Process] ONNX 모델 전체 메모리 사용량: {inference_peak:.2f} MB (전체 증가량: {inference_peak - mem_before_load:.2f} MB)")
+                logging.info(f"[Total] 추론 중 피크 메모리 - 모델 로드 전 청소 직후 메모리: {inference_peak - mem_before_load:.2f} MB")
             evaluate_onnx(run_cfg, onnx_session, data_loader, desc=f"[{mode_name} (ONNX)]", class_names=class_names, log_class_metrics=True)
         except Exception as e:
             logging.error(f"ONNX 모델 평가 중 오류 발생: {e}")
@@ -538,11 +538,11 @@ def inference(run_cfg, model_cfg, model, data_loader, device, run_dir_path, time
             return None # final_acc가 None이 되도록 반환
         try:
             # [수정] main 함수에서 Pruning이 재적용된 모델에 가중치를 로드합니다.
-            gc.collect()
+            flush_memory() # [수정]
             with MemoryMonitor() as mem_mon:
                 model.load_state_dict(torch.load(model_path, map_location=device))
             if psutil:
-                logging.info(f"[Model Load] PyTorch 모델 가중치 로드 메모리: {mem_mon.peak_memory:.2f} MB (증가량: {mem_mon.peak_memory - mem_mon.start_memory:.2f} MB)")
+                logging.info(f"[Model Load] PyTorch 모델 가중치 로드 중 피크 메모리 - 모델 로드 전 청소 직후 메모리: {mem_mon.peak_memory - mem_mon.start_memory:.2f} MB")
             logging.info(f"'{model_path}' 가중치 로드 완료.")
         except RuntimeError as e:
             logging.error(f"모델 가중치 로딩 중 런타임 오류 발생: {e}")
@@ -655,18 +655,18 @@ def inference(run_cfg, model_cfg, model, data_loader, device, run_dir_path, time
         sess_options = onnxruntime.SessionOptions()
         sess_options.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_ENABLE_ALL
         
-        gc.collect()
+        flush_memory() # [수정]
         process = psutil.Process(os.getpid()) if psutil else None
         mem_before_load = process.memory_info().rss / (1024 * 1024) if process else 0
 
         with MemoryMonitor() as mem_mon:
             onnx_session = onnxruntime.InferenceSession(int8_onnx_path, sess_options=sess_options, providers=['CPUExecutionProvider'])
         if psutil:
-            logging.info(f"[Model Load] ONNX 모델(INT8) 로드 메모리: {mem_mon.peak_memory:.2f} MB (증가량: {mem_mon.peak_memory - mem_mon.start_memory:.2f} MB)")
+            logging.info(f"[Model Load] ONNX 모델(INT8) 로드 중 피크 메모리 - 모델 로드 전 청소 직후 메모리: {mem_mon.peak_memory - mem_mon.start_memory:.2f} MB")
 
         inference_peak = measure_onnx_performance(onnx_session, dummy_input_cpu)
         if psutil and inference_peak:
-            logging.info(f"[Total Process] ONNX 모델(INT8) 전체 메모리 사용량: {inference_peak:.2f} MB (전체 증가량: {inference_peak - mem_before_load:.2f} MB)")
+            logging.info(f"[Total] (INT8) 추론 중 피크 메모리 - 모델 로드 전 청소 직후 메모리: {inference_peak - mem_before_load:.2f} MB")
         eval_results = evaluate_onnx(run_cfg, onnx_session, data_loader, desc=f"[{mode_name} (ONNX INT8)]", class_names=class_names, log_class_metrics=True)
         
         if eval_results['labels'] and eval_results['preds']:
@@ -715,18 +715,18 @@ def inference(run_cfg, model_cfg, model, data_loader, device, run_dir_path, time
         sess_options = onnxruntime.SessionOptions()
         sess_options.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_DISABLE_ALL
         # [수정] 사용자의 요청에 따라 CPUExecutionProvider로 고정
-        gc.collect()
+        flush_memory() # [수정]
         process = psutil.Process(os.getpid()) if psutil else None
         mem_before_load = process.memory_info().rss / (1024 * 1024) if process else 0
 
         with MemoryMonitor() as mem_mon:
             onnx_session = onnxruntime.InferenceSession(fp16_onnx_path, sess_options=sess_options, providers=['CPUExecutionProvider'])
         if psutil:
-            logging.info(f"[Model Load] ONNX 모델(FP16) 로드 메모리: {mem_mon.peak_memory:.2f} MB (증가량: {mem_mon.peak_memory - mem_mon.start_memory:.2f} MB)")
+            logging.info(f"[Model Load] ONNX 모델(FP16) 로드 중 피크 메모리 - 모델 로드 전 청소 직후 메모리: {mem_mon.peak_memory - mem_mon.start_memory:.2f} MB")
 
         inference_peak = measure_onnx_performance(onnx_session, dummy_input_cpu)
         if psutil and inference_peak:
-            logging.info(f"[Total Process] ONNX 모델(FP16) 전체 메모리 사용량: {inference_peak:.2f} MB (전체 증가량: {inference_peak - mem_before_load:.2f} MB)")
+            logging.info(f"[Total] (FP16) 추론 중 피크 메모리 - 모델 로드 전 청소 직후 메모리: {inference_peak - mem_before_load:.2f} MB")
         eval_results = evaluate_onnx(run_cfg, onnx_session, data_loader, desc=f"[{mode_name} (ONNX FP16)]", class_names=class_names, log_class_metrics=True)
 
         if eval_results['labels'] and eval_results['preds']:
@@ -740,7 +740,7 @@ def inference(run_cfg, model_cfg, model, data_loader, device, run_dir_path, time
     logging.info("GPU 캐시를 비우고 측정을 시작합니다.")
     if device.type == 'cuda' and torch.cuda.is_available():
         # [추가] GC 및 CUDA 캐시 정리
-        gc.collect()
+        flush_memory() # [수정]
         torch.cuda.empty_cache()
         torch.cuda.reset_peak_memory_stats(device)
 
@@ -749,7 +749,7 @@ def inference(run_cfg, model_cfg, model, data_loader, device, run_dir_path, time
             for _ in range(10):
                 _ = model(single_dummy_input)
         
-        gc.collect() # [추가]
+        flush_memory() # [수정]
 
         # 실제 시간 측정
         num_iterations = 100
@@ -870,18 +870,18 @@ def inference(run_cfg, model_cfg, model, data_loader, device, run_dir_path, time
                 logging.info(f"모델이 ONNX 형식으로 변환되어 '{onnx_path}'에 저장되었습니다. (크기: {onnx_file_size_mb:.2f} MB)")
 
                 # [수정] 사용자의 요청에 따라 CPUExecutionProvider로 고정
-                gc.collect()
+                flush_memory() # [수정]
                 process = psutil.Process(os.getpid()) if psutil else None
                 mem_before_load = process.memory_info().rss / (1024 * 1024) if process else 0
 
                 with MemoryMonitor() as mem_mon:
                     onnx_session = onnxruntime.InferenceSession(onnx_path, sess_options=sess_options, providers=['CPUExecutionProvider'])
                 if psutil:
-                    logging.info(f"[Model Load] ONNX 모델(FP32) 로드 메모리: {mem_mon.peak_memory:.2f} MB (증가량: {mem_mon.peak_memory - mem_mon.start_memory:.2f} MB)")
+                    logging.info(f"[Model Load] ONNX 모델(FP32) 로드 중 피크 메모리 - 모델 로드 전 청소 직후 메모리: {mem_mon.peak_memory - mem_mon.start_memory:.2f} MB")
 
                 inference_peak = measure_onnx_performance(onnx_session, dummy_input)
                 if psutil and inference_peak:
-                    logging.info(f"[Total Process] ONNX 모델(FP32) 전체 메모리 사용량: {inference_peak:.2f} MB (전체 증가량: {inference_peak - mem_before_load:.2f} MB)")
+                    logging.info(f"[Total] (FP32) 추론 중 피크 메모리 - 모델 로드 전 청소 직후 메모리: {inference_peak - mem_before_load:.2f} MB")
                 evaluate_onnx(run_cfg, onnx_session, data_loader, desc=f"[{mode_name} (ONNX)]", class_names=class_names, log_class_metrics=True)
 
             except Exception as e:

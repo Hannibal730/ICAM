@@ -28,6 +28,16 @@ try:
 except ImportError:
     profile = None
 
+# [추가] 메모리 정리 함수 (GC 및 malloc_trim)
+def flush_memory():
+    """가비지 컬렉션 및 malloc_trim을 수행하여 메모리를 정리합니다."""
+    gc.collect()
+    if platform.system() == 'Linux':
+        try:
+            ctypes.CDLL('libc.so.6').malloc_trim(0)
+        except Exception:
+            pass
+
 # [추가] SCI급 논문용 정밀 메모리 측정 클래스 (Context Manager)
 class MemoryMonitor:
     def __init__(self, interval=0.001):
@@ -135,13 +145,7 @@ def measure_onnx_performance(onnx_session, dummy_input):
         single_dummy_input_np = single_dummy_input_np.astype(np.float16)
 
     # [추가] 정확한 메모리 측정을 위해 가비지 컬렉션 수행
-    gc.collect()
-    # [추가] Linux 환경에서 glibc malloc이 잡고 있는 해제된 메모리를 OS에 반환하도록 강제
-    if platform.system() == 'Linux':
-        try:
-            ctypes.CDLL('libc.so.6').malloc_trim(0)
-        except Exception:
-            pass
+    flush_memory()
     
     # [수정] MemoryMonitor를 사용하여 Warm-up 및 추론 루프 전체의 피크 메모리 측정
     with MemoryMonitor(interval=0.0001) as mem_mon:
@@ -174,7 +178,7 @@ def measure_onnx_performance(onnx_session, dummy_input):
     # [추가] 추론 중 메모리 사용량 로깅
     peak_mem = 0
     if psutil:
-        logging.info(f"[Inference Only] ONNX 런타임 추론 중 최대 CPU 메모리: {mem_mon.peak_memory:.2f} MB (순수 증가량: {mem_mon.peak_memory - mem_mon.start_memory:.2f} MB)")
+        logging.info(f"[Inference] 추론 중 피크 메모리 - 모델 로드 후 메모리 정리 직후 메모리: {mem_mon.peak_memory - mem_mon.start_memory:.2f} MB")
         peak_mem = mem_mon.peak_memory
     else:
         logging.warning("psutil 모듈이 없어 메모리 측정을 수행하지 못했습니다.")
@@ -205,12 +209,7 @@ def measure_cpu_peak_memory_during_inference(session, data_loader, device):
         return
 
     # [추가] 정확한 메모리 측정을 위해 가비지 컬렉션 수행
-    gc.collect()
-    if platform.system() == 'Linux':
-        try:
-            ctypes.CDLL('libc.so.6').malloc_trim(0)
-        except Exception:
-            pass
+    flush_memory()
     
     with MemoryMonitor(interval=0.0001) as mem_mon:
         # Warm-up (10회)
