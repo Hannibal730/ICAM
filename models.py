@@ -279,7 +279,7 @@ class Embedding4Decoder(nn.Module):
             learnable_queries = self.W_Q_init(self.learnable_queries)
             seq_decoder_patches = learnable_queries.unsqueeze(0).repeat(bs, 1, 1)
 
-        return seq_encoder_patches, seq_decoder_patches
+        return seq_encoder_patches, x_clean, seq_decoder_patches
             
 
 class Projection4Classifier(nn.Module):
@@ -303,13 +303,13 @@ class Decoder(nn.Module):
                                                         res_attention=res_attention, save_attention=save_attention) for i in range(num_decoder_layers)])
         self.res_attention = res_attention
 
-    def forward(self, seq_encoder:Tensor, seq_decoder:Tensor):
+    def forward(self, seq_encoder_k:Tensor, seq_encoder_v:Tensor, seq_decoder:Tensor):
         scores = None
         if self.res_attention:
-            for mod in self.layers: _, seq_decoder, scores = mod(seq_encoder, seq_decoder, prev=scores)
+            for mod in self.layers: _, seq_decoder, scores = mod(seq_encoder_k, seq_encoder_v, seq_decoder, prev=scores)
             return seq_decoder
         else:
-            for mod in self.layers: _, seq_decoder = mod(seq_encoder, seq_decoder)
+            for mod in self.layers: _, seq_decoder = mod(seq_encoder_k, seq_encoder_v, seq_decoder)
             return seq_decoder
 
 class DecoderLayer(nn.Module):
@@ -332,11 +332,11 @@ class DecoderLayer(nn.Module):
         
         self.save_attention = save_attention
 
-    def forward(self, seq_encoder:Tensor, seq_decoder:Tensor, prev=None) -> Tensor:
+    def forward(self, seq_encoder_k:Tensor, seq_encoder_v:Tensor, seq_decoder:Tensor, prev=None) -> Tensor:
         if self.res_attention:
-            decoder_out, attn, scores = self.cross_attn(seq_decoder, seq_encoder, seq_encoder, prev)
+            decoder_out, attn, scores = self.cross_attn(seq_decoder, seq_encoder_k, seq_encoder_v, prev)
         else:
-            decoder_out, attn = self.cross_attn(seq_decoder, seq_encoder, seq_encoder)
+            decoder_out, attn = self.cross_attn(seq_decoder, seq_encoder_k, seq_encoder_v)
         
         if self.save_attention:
             self.attn = attn
@@ -349,7 +349,7 @@ class DecoderLayer(nn.Module):
         seq_decoder = self.norm_ffn(seq_decoder)
         
         if self.res_attention: return seq_encoder, seq_decoder, scores
-        else: return seq_encoder, seq_decoder
+        else: return seq_encoder_k, seq_decoder
 
 class _MultiheadAttention(nn.Module):
     def __init__(self, emb_dim, num_heads, res_attention=False, attn_dropout=0., proj_dropout=0., qkv_bias=True, **kwargs):
@@ -435,8 +435,8 @@ class Model(nn.Module):
         # x: [B, num_encoder_patches, featured_patch_dim]
         # (PatchConvEncoder의 출력이 여기로 들어옴)
         
-        seq_encoder_patches, seq_decoder_patches = self.embedding4decoder(x)
-        z = self.embedding4decoder.decoder(seq_encoder_patches, seq_decoder_patches)
+        seq_encoder_patches, seq_encoder_clean, seq_decoder_patches = self.embedding4decoder(x)
+        z = self.embedding4decoder.decoder(seq_encoder_patches, seq_encoder_clean, seq_decoder_patches)
         features = self.projection4classifier(z)
         return features
 
