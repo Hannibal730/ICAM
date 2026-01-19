@@ -1,88 +1,284 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""benchmark_onnx.py
+"""
+onnx_benchmark.py
 
-SCI/EAAI 제출용 ONNX Runtime(ORT) CPU inference 벤치마크 스크립트.
+SCI/EAAI 투고용 ONNX Runtime(ORT) CPU inference 벤치마크 스크립트 (Raspberry Pi 5 포함).
 
-목표
-- 라즈베리파이(ARM) 같은 환경에서도 재현 가능한 latency / memory 측정
-- 측정 구간(로드/워밍업/실측)을 명확히 분리하고, 보고 지표를 표준화
-- latency 측정과 memory 측정을 분리 실행할 수 있게 설계(교란 최소화)
+핵심 목표: "통제 강한" 실험 조건 설정 + 지표 정의 명확화 + 재현성.
 
-권장 사용법(가장 '국룰'에 가까운 방식)
-- Peak RSS(Max resident set size)는 외부에서 측정:
-  /usr/bin/time -v python3 benchmark_onnx.py --mode latency --onnx model.onnx ...
-  /usr/bin/time -v python3 benchmark_onnx.py --mode memory  --onnx model.onnx ...
+주요 기능
+- (선택) CPU affinity 고정: --cpu-affinity "0-3"  (taskset과 동일한 효과)
+- ORT 스레드/실행 모드 고정: --intra / --inter / --execution-mode
+- (선택) 외부 스레딩 라이브러리 환경변수 고정: OMP/OPENBLAS/MKL/NUMEXPR/VECLIB
+- latency / memory 측정 분리: --mode latency|memory|both
+- (선택) fresh-process 반복 실행: --repeat N --fresh-process true
 
-- latency는 내부 통계 출력(mean/std/p50/p95/p99)
-- memory 모드는 내부적으로도 RSS 샘플링 기반 peak를 제공(보조 지표)
+권장(투고용) 실행 예시 (Pi5, 4 cores)
+
+
+
+1) Latency (통제 강함):
+OMP_NUM_THREADS=4 OPENBLAS_NUM_THREADS=4 \
+python3 onnx_benchmark.py \
+  --onnx /path/to/model.onnx \
+  --mode latency \
+  --cpu-affinity 0-3 \
+  --intra 4 --inter 1 --execution-mode sequential \
+  --warmup 50 --runs 1000 \
+  --repeat 5 --fresh-process true
+
+2) Peak RSS (paper-grade):
+for i in 1 2 3 4 5; do
+  /usr/bin/time -v python3 onnx_benchmark.py --onnx model.onnx --mode latency \
+    --cpu-affinity 0-3 --intra 4 --inter 1 --execution-mode sequential \
+    --warmup 50 --runs 1000 \
+    --json-out onnx_benchmark_run${i}.json \
+    1> out_${i}.txt 2> time_${i}.txt
+done
+
+or
+
+/usr/bin/time -v python3 onnx_benchmark.py \
+  --onnx /path/to/model.onnx \
+  --mode latency \
+  --cpu-affinity 0-3 \
+  --intra 4 --inter 1 --execution-mode sequential \
+  --warmup 50 --runs 1000
+
+
+
+3) Memory (내부 RSS 샘플링, 보조지표):
+python3 onnx_benchmark.py \
+  --onnx /path/to/model.onnx \
+  --mode memory \
+  --cpu-affinity 0-3 \
+  --intra 4 --inter 1 --execution-mode sequential \
+  --warmup 50 --runs 1000 \
+  --mem-interval-ms 1 \
+  --mem-include-warmup true \
+  --repeat 5 --fresh-process true
+
+
 
 주의
-- 이 스크립트는 GPU 측정이 아니라 CPU EP 기준을 기본으로 합니다.
-- dynamic shape 모델이면 --input-shape 를 명시하세요.
-
+- 본 스크립트 내부 RSS 샘플링(--mode memory)은 보조 지표입니다.
+  논문 본문 Peak RSS는 /usr/bin/time -v의 Maximum RSS를 우선 권장합니다.
 """
 
 from __future__ import annotations
 
 import argparse
+import datetime
 import json
 import os
-import statistics
+import platform
+import subprocess
 import sys
-import threading
 import time
-from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-import numpy as np
 
-try:
-    import onnxruntime as ort
-except Exception as e:
-    print("ERROR: onnxruntime import failed:", e, file=sys.stderr)
-    raise
-
-try:
-    import psutil
-except Exception as e:
-    print("ERROR: psutil import failed (pip install psutil):", e, file=sys.stderr)
-    raise
-
-
-# -------------------------------
-# Utilities
-# -------------------------------
+# -------------------------
+# Basic utilities (no heavy imports)
+# -------------------------
 
 def now_iso() -> str:
     return time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime())
 
 
-def set_env_threads(omp: Optional[int], mkl: Optional[int]) -> None:
-    """Set environment variables that can influence CPU kernels."""
-    if omp is not None:
-        os.environ["OMP_NUM_THREADS"] = str(omp)
-    if mkl is not None:
-        os.environ["MKL_NUM_THREADS"] = str(mkl)
+def str2bool(v: Any) -> bool:
+    if isinstance(v, bool):
+        return v
+    s = str(v).strip().lower()
+    if s in ("true", "t", "1", "yes", "y", "on"):
+        return True
+    if s in ("false", "f", "0", "no", "n", "off"):
+        return False
+    raise argparse.ArgumentTypeError(f"Expected boolean (true/false), got: {v!r}")
 
 
-def parse_shape(s: str) -> List[int]:
-    """Parse shape string like '1,3,224,224' -> [1,3,224,224]."""
+def parse_cpu_affinity(s: str) -> List[int]:
+    """
+    Parse cpu list/range:
+      "0-3" -> [0,1,2,3]
+      "0,2,3" -> [0,2,3]
+      "0-2,4" -> [0,1,2,4]
+    """
+    s = s.strip()
+    if not s:
+        raise ValueError("Empty --cpu-affinity")
+
+    cpus: List[int] = []
     parts = [p.strip() for p in s.split(",") if p.strip()]
-    if not parts:
-        raise ValueError("Empty --input-shape")
-    out: List[int] = []
     for p in parts:
-        if p in ("-1", "?", "None"):
-            out.append(-1)
+        if "-" in p:
+            a, b = p.split("-", 1)
+            a_i = int(a.strip())
+            b_i = int(b.strip())
+            if b_i < a_i:
+                raise ValueError(f"Invalid range in --cpu-affinity: {p}")
+            cpus.extend(list(range(a_i, b_i + 1)))
         else:
-            out.append(int(p))
+            cpus.append(int(p))
+    # unique + sorted
+    cpus = sorted(set(cpus))
+    return cpus
+
+
+def apply_cpu_affinity(cpus: List[int]) -> None:
+    """Apply CPU affinity for current process (taskset equivalent)."""
+    if not cpus:
+        return
+    try:
+        os.sched_setaffinity(0, set(cpus))  # Linux only
+        return
+    except Exception:
+        pass
+    # Fallback: psutil if available
+    try:
+        import psutil  # type: ignore
+        psutil.Process(os.getpid()).cpu_affinity(cpus)
+    except Exception as e:
+        raise RuntimeError(f"Failed to set CPU affinity. cpus={cpus}. Error: {e}") from e
+
+
+def set_env_threads_auto(intra_threads: int, explicit: Dict[str, Optional[int]]) -> Dict[str, Optional[int]]:
+    """
+    If user enabled env thread control and did not set explicit values,
+    set common env vars to intra_threads (or to cpu_count if intra=0).
+    """
+    cpu_cnt = os.cpu_count() or 1
+    base = intra_threads if intra_threads and intra_threads > 0 else cpu_cnt
+
+    out = dict(explicit)
+    def _fill(key: str) -> None:
+        if out.get(key) is None:
+            out[key] = base
+
+    _fill("OMP_NUM_THREADS")
+    _fill("OPENBLAS_NUM_THREADS")
+    _fill("MKL_NUM_THREADS")
+    _fill("NUMEXPR_NUM_THREADS")
+    _fill("VECLIB_MAXIMUM_THREADS")
     return out
 
 
-def dtype_from_onnx(elem_type: str) -> np.dtype:
-    """Best-effort mapping from ORT type string to numpy dtype."""
-    # Examples: 'tensor(float)', 'tensor(float16)', 'tensor(int64)'
+def apply_env_thread_vars(vals: Dict[str, Optional[int]]) -> None:
+    for k, v in vals.items():
+        if v is None:
+            continue
+        os.environ[k] = str(int(v))
+
+
+
+def read_cpu_governor() -> Optional[str]:
+    # Works on many Linux systems (including Pi) if cpufreq is available
+    p = "/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor"
+    try:
+        with open(p, "r", encoding="utf-8") as f:
+            return f.read().strip()
+    except Exception:
+        return None
+
+
+def _read_int_file(path: str) -> Optional[int]:
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            s = f.read().strip()
+        return int(s)
+    except Exception:
+        return None
+
+
+def read_cpu_freq_khz() -> Optional[Dict[str, Any]]:
+    """
+    Return per-core current frequency in kHz if available.
+    On Raspberry Pi, scaling_cur_freq/cpuinfo_cur_freq may exist depending on kernel config.
+    """
+    base = "/sys/devices/system/cpu"
+    if not os.path.isdir(base):
+        return None
+
+    per_core: Dict[int, Optional[int]] = {}
+    for i in range(os.cpu_count() or 1):
+        # Prefer scaling_cur_freq, fallback cpuinfo_cur_freq
+        p1 = f"{base}/cpu{i}/cpufreq/scaling_cur_freq"
+        p2 = f"{base}/cpu{i}/cpufreq/cpuinfo_cur_freq"
+        v = _read_int_file(p1)
+        if v is None:
+            v = _read_int_file(p2)
+        per_core[i] = v
+
+    vals = [v for v in per_core.values() if isinstance(v, int)]
+    if not vals:
+        return None
+
+    return {
+        "per_core_khz": {str(k): v for k, v in per_core.items()},
+        "avg_khz": sum(vals) / len(vals),
+        "min_khz": min(vals),
+        "max_khz": max(vals),
+    }
+
+
+def read_cpu_temperature_c() -> Optional[float]:
+    """
+    Raspberry Pi typical: /sys/class/thermal/thermal_zone0/temp in millidegree C.
+    """
+    v = _read_int_file("/sys/class/thermal/thermal_zone0/temp")
+    if v is None:
+        return None
+    # millidegree C -> C
+    return v / 1000.0
+
+
+def capture_telemetry() -> Dict[str, Any]:
+    """
+    Capture governor/clock/temp snapshot. Safe to call on non-Pi too.
+    """
+    return {
+        "cpu_governor": read_cpu_governor(),
+        "cpu_freq": read_cpu_freq_khz(),
+        "cpu_temp_c": read_cpu_temperature_c(),
+    }
+
+
+def default_json_name(ts_iso: Optional[str] = None) -> str:
+    """
+    Default filename: onnx_benchmark_YYYYMMDD_HHMMSS.json
+    """
+    if ts_iso is None:
+        ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    else:
+        # ts_iso: YYYY-MM-DDTHH:MM:SS
+        ts = ts_iso.replace("-", "").replace(":", "").replace("T", "_")
+    return f"onnx_benchmark_{ts}.json"
+
+
+# -------------------------
+# Heavy imports (after env/affinity)
+# -------------------------
+
+def lazy_imports():
+    import gc
+    import statistics
+    import threading
+    from dataclasses import dataclass
+    from typing import Sequence
+
+    import numpy as np
+    import psutil
+    import onnxruntime as ort
+
+    return gc, statistics, threading, dataclass, Sequence, np, psutil, ort
+
+
+# -------------------------
+# Core compute helpers
+# -------------------------
+
+def dtype_from_onnx(elem_type: str, np) -> Any:
     t = elem_type.lower()
     if "float16" in t:
         return np.float16
@@ -100,70 +296,23 @@ def dtype_from_onnx(elem_type: str) -> np.dtype:
         return np.uint8
     if "bool" in t:
         return np.bool_
-    # Default
     return np.float32
 
 
-def safe_int(x: Any, default: int = 1) -> int:
-    try:
-        v = int(x)
-        return v
-    except Exception:
-        return default
+def parse_shape(s: str) -> List[int]:
+    parts = [p.strip() for p in s.split(",") if p.strip()]
+    if not parts:
+        raise ValueError("Empty --input-shape")
+    out: List[int] = []
+    for p in parts:
+        if p in ("-1", "?", "None"):
+            out.append(-1)
+        else:
+            out.append(int(p))
+    return out
 
 
-@dataclass
-class RssStats:
-    rss_before: int
-    rss_after: int
-    peak_rss: int
-
-    @property
-    def delta_bytes(self) -> int:
-        return int(self.rss_after - self.rss_before)
-
-
-class RssSampler:
-    """Background RSS sampler (psutil) to estimate peak RSS within a region."""
-
-    def __init__(self, interval_ms: float = 5.0):
-        self.interval_s = max(interval_ms / 1000.0, 0.001)
-        self._stop = threading.Event()
-        self._thread: Optional[threading.Thread] = None
-        self._proc = psutil.Process(os.getpid())
-        self.peak_rss = 0
-
-    def start(self) -> None:
-        self.peak_rss = self._proc.memory_info().rss
-        self._stop.clear()
-
-        def _run() -> None:
-            while not self._stop.is_set():
-                rss = self._proc.memory_info().rss
-                if rss > self.peak_rss:
-                    self.peak_rss = rss
-                time.sleep(self.interval_s)
-
-        self._thread = threading.Thread(target=_run, daemon=True)
-        self._thread.start()
-
-    def stop(self) -> int:
-        self._stop.set()
-        if self._thread is not None:
-            self._thread.join(timeout=1.0)
-        # final sample
-        rss = self._proc.memory_info().rss
-        if rss > self.peak_rss:
-            self.peak_rss = rss
-        return self.peak_rss
-
-
-def mb(x_bytes: int) -> float:
-    return x_bytes / (1024.0 * 1024.0)
-
-
-def percentile(values: Sequence[float], p: float) -> float:
-    """Compute percentile with linear interpolation."""
+def percentile(values: Sequence[float], p: float, np) -> float:
     if not values:
         return float("nan")
     xs = sorted(values)
@@ -181,124 +330,124 @@ def percentile(values: Sequence[float], p: float) -> float:
     return d0 + d1
 
 
-# -------------------------------
-# ORT session & input generation
-# -------------------------------
+def mb(x_bytes: int) -> float:
+    return x_bytes / (1024.0 * 1024.0)
 
-def create_session(
-    onnx_path: str,
-    intra_threads: int,
-    inter_threads: int,
-    execution_mode: str,
-    opt_level: str,
-    enable_mem_pattern: bool,
-    enable_cpu_mem_arena: bool,
-    providers: Optional[List[str]] = None,
-) -> ort.InferenceSession:
+
+class RssSampler:
+    """Background RSS sampler (psutil) to estimate peak RSS within a region."""
+    def __init__(self, interval_ms: float, psutil, threading):
+        self.interval_s = max(interval_ms / 1000.0, 0.001)
+        self._stop = threading.Event()
+        self._thread = None
+        self._proc = psutil.Process(os.getpid())
+        self.peak_rss = 0
+        self._psutil = psutil
+
+    def start(self, threading):
+        self.peak_rss = self._proc.memory_info().rss
+        self._stop.clear()
+
+        def _run():
+            while not self._stop.is_set():
+                rss = self._proc.memory_info().rss
+                if rss > self.peak_rss:
+                    self.peak_rss = rss
+                time.sleep(self.interval_s)
+
+        self._thread = threading.Thread(target=_run, daemon=True)
+        self._thread.start()
+
+    def stop(self) -> int:
+        self._stop.set()
+        if self._thread is not None:
+            self._thread.join(timeout=1.0)
+        rss = self._proc.memory_info().rss
+        if rss > self.peak_rss:
+            self.peak_rss = rss
+        return self.peak_rss
+
+
+def create_session(onnx_path: str, args, ort):
     so = ort.SessionOptions()
 
-    # threads
-    if intra_threads > 0:
-        so.intra_op_num_threads = int(intra_threads)
-    if inter_threads > 0:
-        so.inter_op_num_threads = int(inter_threads)
+    if args.intra_threads > 0:
+        so.intra_op_num_threads = int(args.intra_threads)
+    if args.inter_threads > 0:
+        so.inter_op_num_threads = int(args.inter_threads)
 
-    # execution mode
-    em = execution_mode.strip().lower()
-    if em == "sequential":
+    if args.execution_mode == "sequential":
         so.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
-    elif em == "parallel":
+    else:
         so.execution_mode = ort.ExecutionMode.ORT_PARALLEL
-    else:
-        raise ValueError(f"Unknown --execution-mode: {execution_mode}")
 
-    # graph optimization
-    ol = opt_level.strip().lower()
-    if ol in ("disable", "none", "0"):
+    ol = args.opt_level
+    if ol == "disable":
         so.graph_optimization_level = ort.GraphOptimizationLevel.ORT_DISABLE_ALL
-    elif ol in ("basic", "1"):
+    elif ol == "basic":
         so.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_BASIC
-    elif ol in ("extended", "2"):
+    elif ol == "extended":
         so.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_EXTENDED
-    elif ol in ("all", "3"):
-        so.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
     else:
-        raise ValueError(f"Unknown --opt-level: {opt_level}")
+        so.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
 
-    # memory behavior
-    so.enable_mem_pattern = bool(enable_mem_pattern)
-    so.enable_cpu_mem_arena = bool(enable_cpu_mem_arena)
+    so.enable_mem_pattern = bool(args.mem_pattern)
+    so.enable_cpu_mem_arena = bool(args.cpu_arena)
 
-    # providers
-    if providers is None:
-        providers = ["CPUExecutionProvider"]
-
-    sess = ort.InferenceSession(onnx_path, sess_options=so, providers=providers)
-    return sess
+    providers = ["CPUExecutionProvider"]
+    return ort.InferenceSession(onnx_path, sess_options=so, providers=providers)
 
 
-def resolve_input_spec(
-    sess: ort.InferenceSession,
-    input_name: Optional[str],
-    input_shape: Optional[List[int]],
-    input_dtype: Optional[str],
-) -> Tuple[str, List[int], np.dtype]:
+def resolve_input_spec(sess, args, np) -> Tuple[str, List[int], Any]:
     inputs = sess.get_inputs()
     if not inputs:
         raise RuntimeError("Model has no inputs")
 
-    # pick input
-    if input_name is None:
+    if args.input_name is None:
         chosen = inputs[0]
     else:
-        found = None
+        chosen = None
         for it in inputs:
-            if it.name == input_name:
-                found = it
+            if it.name == args.input_name:
+                chosen = it
                 break
-        if found is None:
+        if chosen is None:
             names = [it.name for it in inputs]
-            raise ValueError(f"Input '{input_name}' not found. Available: {names}")
-        chosen = found
+            raise ValueError(f"Input '{args.input_name}' not found. Available: {names}")
 
-    # dtype
-    if input_dtype is None:
-        np_dt = dtype_from_onnx(chosen.type)
+    if args.input_dtype is None:
+        np_dt = dtype_from_onnx(chosen.type, np)
     else:
-        t = input_dtype.lower()
+        t = args.input_dtype.lower()
         if t in ("fp32", "float", "float32"):
             np_dt = np.float32
         elif t in ("fp16", "float16"):
             np_dt = np.float16
-        elif t in ("int64",):
+        elif t == "int64":
             np_dt = np.int64
-        elif t in ("int32",):
+        elif t == "int32":
             np_dt = np.int32
-        elif t in ("uint8",):
+        elif t == "uint8":
             np_dt = np.uint8
         else:
-            raise ValueError(f"Unknown --input-dtype: {input_dtype}")
+            raise ValueError(f"Unknown --input-dtype: {args.input_dtype}")
 
-    # shape
-    model_shape = []
+    model_shape: List[int] = []
     for d in chosen.shape:
         if isinstance(d, str) or d is None:
             model_shape.append(-1)
         else:
-            model_shape.append(safe_int(d, -1))
+            model_shape.append(int(d))
 
-    if input_shape is None:
-        # Fill dynamic dims with 1 by default (safe but may be wrong)
+    if args.input_shape is None:
         concrete = [1 if d == -1 else int(d) for d in model_shape]
     else:
-        if len(input_shape) != len(model_shape):
-            raise ValueError(
-                f"--input-shape rank mismatch. Model rank={len(model_shape)}, got={len(input_shape)}"
-            )
+        user_shape = parse_shape(args.input_shape)
+        if len(user_shape) != len(model_shape):
+            raise ValueError(f"--input-shape rank mismatch. Model rank={len(model_shape)}, got={len(user_shape)}")
         concrete = []
-        for ms, us in zip(model_shape, input_shape):
+        for ms, us in zip(model_shape, user_shape):
             if us == -1:
-                # user left as dynamic -> fill with 1
                 concrete.append(1 if ms == -1 else int(ms))
             else:
                 concrete.append(int(us))
@@ -306,267 +455,40 @@ def resolve_input_spec(
     return chosen.name, concrete, np_dt
 
 
-def make_input_array(shape: List[int], dtype: np.dtype, seed: int, fill: str) -> np.ndarray:
-    rng = np.random.default_rng(seed)
-    if fill == "random":
+def make_input_array(shape: List[int], dtype, args, np):
+    rng = np.random.default_rng(args.seed)
+    if args.fill == "random":
         if np.issubdtype(dtype, np.floating):
             return rng.standard_normal(size=shape).astype(dtype)
-        # int-like
         return rng.integers(low=0, high=127, size=shape, dtype=dtype)
-    if fill == "zeros":
+    if args.fill == "zeros":
         return np.zeros(shape, dtype=dtype)
-    if fill == "ones":
+    if args.fill == "ones":
         return np.ones(shape, dtype=dtype)
-    raise ValueError(f"Unknown --fill: {fill}")
+    raise ValueError(f"Unknown --fill: {args.fill}")
 
 
-# -------------------------------
-# Bench modes
-# -------------------------------
+# -------------------------
+# Single-run worker (child)
+# -------------------------
 
-@dataclass
-class LatencyReport:
-    warmup: int
-    runs: int
-    times_ms: List[float]
+def run_single(args) -> Dict[str, Any]:
+    gc, statistics, threading, dataclass, Sequence, np, psutil, ort = lazy_imports()
 
-    def summary(self) -> Dict[str, float]:
-        xs = self.times_ms
-        if not xs:
-            return {}
-        mean = statistics.mean(xs)
-        stdev = statistics.pstdev(xs) if len(xs) > 1 else 0.0
-        return {
-            "mean_ms": mean,
-            "std_ms": stdev,
-            "min_ms": min(xs),
-            "max_ms": max(xs),
-            "p50_ms": percentile(xs, 50),
-            "p95_ms": percentile(xs, 95),
-            "p99_ms": percentile(xs, 99),
-        }
-
-
-def run_latency(
-    sess: ort.InferenceSession,
-    feeds: Dict[str, np.ndarray],
-    warmup: int,
-    runs: int,
-    sync_barrier: bool,
-) -> LatencyReport:
-    # warmup (not measured)
-    for _ in range(max(0, warmup)):
-        _ = sess.run(None, feeds)
-
-    # small optional barrier (to reduce OS scheduling noise)
-    if sync_barrier:
-        time.sleep(0.05)
-
-    times_ms: List[float] = []
-    for _ in range(max(0, runs)):
-        t0 = time.perf_counter_ns()
-        _ = sess.run(None, feeds)
-        t1 = time.perf_counter_ns()
-        times_ms.append((t1 - t0) / 1e6)
-
-    return LatencyReport(warmup=warmup, runs=runs, times_ms=times_ms)
-
-
-@dataclass
-class MemoryReport:
-    rss_before_load: int
-    rss_after_load: int
-    peak_rss_during_load: int
-    rss_before_infer: int
-    peak_rss_during_infer: int
-    rss_after_infer: int
-    include_warmup_in_peak: bool
-
-    def as_dict(self) -> Dict[str, Any]:
-        return {
-            "rss_before_load_mb": mb(self.rss_before_load),
-            "rss_after_load_mb": mb(self.rss_after_load),
-            "delta_load_mb": mb(self.rss_after_load - self.rss_before_load),
-            "peak_rss_during_load_mb": mb(self.peak_rss_during_load),
-            "rss_before_infer_mb": mb(self.rss_before_infer),
-            "rss_after_infer_mb": mb(self.rss_after_infer),
-            "peak_rss_during_infer_mb": mb(self.peak_rss_during_infer),
-            "delta_peak_infer_from_before_infer_mb": mb(self.peak_rss_during_infer - self.rss_before_infer),
-            "delta_peak_total_from_before_load_mb": mb(self.peak_rss_during_infer - self.rss_before_load),
-            "include_warmup_in_peak": self.include_warmup_in_peak,
-        }
-
-
-def run_memory(
-    onnx_path: str,
-    sess_kwargs: Dict[str, Any],
-    feeds: Dict[str, np.ndarray],
-    warmup: int,
-    runs: int,
-    sample_interval_ms: float,
-    include_warmup_in_peak: bool,
-) -> MemoryReport:
     proc = psutil.Process(os.getpid())
 
-    # -------- load phase --------
-    rss_before_load = proc.memory_info().rss
-    load_sampler = RssSampler(interval_ms=sample_interval_ms)
-    load_sampler.start()
-    sess = create_session(onnx_path=onnx_path, **sess_kwargs)
-    peak_rss_during_load = load_sampler.stop()
-    rss_after_load = proc.memory_info().rss
-
-    # -------- inference phase --------
-    rss_before_infer = proc.memory_info().rss
-    infer_sampler = RssSampler(interval_ms=sample_interval_ms)
-    infer_sampler.start()
-
-    if include_warmup_in_peak:
-        for _ in range(max(0, warmup)):
-            _ = sess.run(None, feeds)
-    else:
-        # warmup outside the monitored window
-        for _ in range(max(0, warmup)):
-            _ = sess.run(None, feeds)
-        # restart sampler for steady-state peak
-        infer_sampler.stop()
-        infer_sampler = RssSampler(interval_ms=sample_interval_ms)
-        rss_before_infer = proc.memory_info().rss
-        infer_sampler.start()
-
-    for _ in range(max(0, runs)):
-        _ = sess.run(None, feeds)
-
-    peak_rss_during_infer = infer_sampler.stop()
-    rss_after_infer = proc.memory_info().rss
-
-    return MemoryReport(
-        rss_before_load=rss_before_load,
-        rss_after_load=rss_after_load,
-        peak_rss_during_load=peak_rss_during_load,
-        rss_before_infer=rss_before_infer,
-        peak_rss_during_infer=peak_rss_during_infer,
-        rss_after_infer=rss_after_infer,
-        include_warmup_in_peak=include_warmup_in_peak,
-    )
-
-
-# -------------------------------
-# Main
-# -------------------------------
-
-def main(argv: Optional[Sequence[str]] = None) -> int:
-    p = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-
-    p.add_argument("--onnx", required=True, help="Path to ONNX model")
-
-    # mode
-    p.add_argument(
-        "--mode",
-        choices=["latency", "memory", "both"],
-        default="latency",
-        help="What to measure. Use separate runs for best practice: latency then memory.",
-    )
-
-    # input
-    p.add_argument("--input-name", default=None, help="Model input name (default: first input)")
-    p.add_argument(
-        "--input-shape",
-        default=None,
-        help="Comma-separated shape, e.g. 1,3,224,224. Required for dynamic shapes.",
-    )
-    p.add_argument(
-        "--input-dtype",
-        default=None,
-        help="Override input dtype: fp32|fp16|int64|int32|uint8",
-    )
-    p.add_argument("--fill", choices=["random", "zeros", "ones"], default="random")
-    p.add_argument("--seed", type=int, default=0)
-
-    # repetitions
-    p.add_argument("--warmup", type=int, default=10)
-    p.add_argument("--runs", type=int, default=200)
-
-    # ORT session options
-    p.add_argument("--intra-threads", type=int, default=0, help="0 = ORT default")
-    p.add_argument("--inter-threads", type=int, default=0, help="0 = ORT default")
-    p.add_argument("--execution-mode", choices=["sequential", "parallel"], default="sequential")
-    p.add_argument("--opt-level", choices=["disable", "basic", "extended", "all"], default="all")
-    p.add_argument("--mem-pattern", type=int, default=1, help="1=enable (default), 0=disable")
-    p.add_argument("--cpu-arena", type=int, default=1, help="1=enable (default), 0=disable")
-
-    # env threads (affects underlying kernels)
-    p.add_argument("--omp-threads", type=int, default=None)
-    p.add_argument("--mkl-threads", type=int, default=None)
-
-    # memory measurement knobs
-    p.add_argument("--mem-sample-ms", type=float, default=5.0, help="RSS sampler interval (ms)")
-    p.add_argument(
-        "--mem-include-warmup",
-        action="store_true",
-        help="If set, peak RSS during inference includes warmup phase (cold/first-run peak)",
-    )
-
-    # misc
-    p.add_argument("--sync-barrier", action="store_true", help="Small sleep before timing runs")
-    p.add_argument(
-        "--json-out",
-        default=None,
-        help="If set, write full report JSON to this path.",
-    )
-
-    args = p.parse_args(argv)
-
-    set_env_threads(args.omp_threads, args.mkl_threads)
-
-    enable_mem_pattern = bool(args.mem_pattern)
-    enable_cpu_mem_arena = bool(args.cpu_arena)
-
-    sess_kwargs = dict(
-        intra_threads=args.intra_threads,
-        inter_threads=args.inter_threads,
-        execution_mode=args.execution_mode,
-        opt_level=args.opt_level,
-        enable_mem_pattern=enable_mem_pattern,
-        enable_cpu_mem_arena=enable_cpu_mem_arena,
-        providers=["CPUExecutionProvider"],
-    )
-
-    # create a session once for latency/both (memory mode creates its own to isolate load-phase)
-    sess = None
-    if args.mode in ("latency", "both"):
-        sess = create_session(args.onnx, **sess_kwargs)
-
-    # determine input spec
-    if sess is None:
-        # temp session to query input spec (memory mode will recreate for measured phases)
-        tmp = create_session(args.onnx, **sess_kwargs)
-        sess_for_spec = tmp
-    else:
-        sess_for_spec = sess
-
-    input_shape = parse_shape(args.input_shape) if args.input_shape else None
-    in_name, in_shape, in_dtype = resolve_input_spec(
-        sess_for_spec,
-        input_name=args.input_name,
-        input_shape=input_shape,
-        input_dtype=args.input_dtype,
-    )
-
-    x = make_input_array(in_shape, in_dtype, seed=args.seed, fill=args.fill)
-    feeds = {in_name: x}
-
-    # build report
     report: Dict[str, Any] = {
         "timestamp": now_iso(),
         "onnx": os.path.abspath(args.onnx),
         "mode": args.mode,
-        "input": {
-            "name": in_name,
-            "shape": in_shape,
-            "dtype": str(in_dtype),
-            "fill": args.fill,
-            "seed": args.seed,
+        "platform": {
+            "python": sys.version.split()[0],
+            "os": platform.platform(),
+            "machine": platform.machine(),
+            "processor": platform.processor(),
+            "cpu_count": os.cpu_count(),
+            "cpu_affinity": sorted(list(os.sched_getaffinity(0))) if hasattr(os, "sched_getaffinity") else None,
+            "cpu_governor": read_cpu_governor(),
         },
         "ort": {
             "onnxruntime_version": ort.__version__,
@@ -576,48 +498,351 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 "inter_threads": args.inter_threads,
                 "execution_mode": args.execution_mode,
                 "opt_level": args.opt_level,
-                "enable_mem_pattern": enable_mem_pattern,
-                "enable_cpu_mem_arena": enable_cpu_mem_arena,
+                "enable_mem_pattern": bool(args.mem_pattern),
+                "enable_cpu_mem_arena": bool(args.cpu_arena),
             },
             "env": {
                 "OMP_NUM_THREADS": os.environ.get("OMP_NUM_THREADS"),
+                "OPENBLAS_NUM_THREADS": os.environ.get("OPENBLAS_NUM_THREADS"),
                 "MKL_NUM_THREADS": os.environ.get("MKL_NUM_THREADS"),
+                "NUMEXPR_NUM_THREADS": os.environ.get("NUMEXPR_NUM_THREADS"),
+                "VECLIB_MAXIMUM_THREADS": os.environ.get("VECLIB_MAXIMUM_THREADS"),
             },
         },
         "warmup": args.warmup,
         "runs": args.runs,
+        "input": {},
     }
 
-    # LATENCY
+    # Telemetry snapshot (governor/freq/temp) for reproducibility
+    report["platform"]["telemetry_before"] = capture_telemetry()
+
+    # Session (for latency/both). For memory mode we load inside measured block to capture load.
+    sess = None
+    if args.mode in ("latency", "both"):
+        sess = create_session(args.onnx, args, ort)
+
+    if sess is None:
+        tmp = create_session(args.onnx, args, ort)
+        sess_for_spec = tmp
+    else:
+        sess_for_spec = sess
+
+    in_name, in_shape, in_dtype = resolve_input_spec(sess_for_spec, args, np)
+    x = make_input_array(in_shape, in_dtype, args, np)
+    feeds = {in_name: x}
+    report["input"] = {"name": in_name, "shape": in_shape, "dtype": str(in_dtype), "fill": args.fill, "seed": args.seed}
+
+    # ---- LATENCY ----
     if args.mode in ("latency", "both"):
         assert sess is not None
-        lat = run_latency(sess, feeds, warmup=args.warmup, runs=args.runs, sync_barrier=args.sync_barrier)
-        lat_sum = lat.summary()
-        report["latency"] = {
-            **lat_sum,
+        # warmup (excluded)
+        for _ in range(max(0, args.warmup)):
+            _ = sess.run(None, feeds)
+
+        if args.sync_barrier:
+            time.sleep(0.05)
+
+        # reduce Python GC jitter during timing window
+        prev_gc = gc.isenabled()
+        gc.disable()
+
+        times_ms: List[float] = []
+        for _ in range(max(0, args.runs)):
+            t0 = time.perf_counter_ns()
+            _ = sess.run(None, feeds)
+            t1 = time.perf_counter_ns()
+            times_ms.append((t1 - t0) / 1e6)
+
+        if prev_gc:
+            gc.enable()
+
+        mean = statistics.mean(times_ms) if times_ms else float("nan")
+        std = statistics.pstdev(times_ms) if len(times_ms) > 1 else 0.0
+
+        lat = {
+            "mean_ms": float(mean),
+            "std_ms": float(std),
+            "min_ms": float(min(times_ms)) if times_ms else float("nan"),
+            "max_ms": float(max(times_ms)) if times_ms else float("nan"),
+            "p50_ms": float(percentile(times_ms, 50, np)),
+            "p95_ms": float(percentile(times_ms, 95, np)),
+            "p99_ms": float(percentile(times_ms, 99, np)),
             "warmup_excluded": True,
-            "n_runs": len(lat.times_ms),
+            "n_runs": len(times_ms),
         }
-        # Print human-readable
+        report["latency"] = lat
+
+    # ---- MEMORY (aux RSS sampling) ----
+    if args.mode in ("memory", "both"):
+        # load phase
+        rss_before_load = proc.memory_info().rss
+        load_sampler = RssSampler(interval_ms=args.mem_interval_ms, psutil=psutil, threading=threading)
+        load_sampler.start(threading)
+        sess2 = create_session(args.onnx, args, ort)
+        peak_load = load_sampler.stop()
+        rss_after_load = proc.memory_info().rss
+
+        # inference phase
+        rss_before_infer = proc.memory_info().rss
+        infer_sampler = RssSampler(interval_ms=args.mem_interval_ms, psutil=psutil, threading=threading)
+        infer_sampler.start(threading)
+
+        if args.mem_include_warmup:
+            for _ in range(max(0, args.warmup)):
+                _ = sess2.run(None, feeds)
+        else:
+            for _ in range(max(0, args.warmup)):
+                _ = sess2.run(None, feeds)
+            infer_sampler.stop()
+            rss_before_infer = proc.memory_info().rss
+            infer_sampler = RssSampler(interval_ms=args.mem_interval_ms, psutil=psutil, threading=threading)
+            infer_sampler.start(threading)
+
+        for _ in range(max(0, args.runs)):
+            _ = sess2.run(None, feeds)
+
+        peak_infer = infer_sampler.stop()
+        rss_after_infer = proc.memory_info().rss
+
+        mem = {
+            "rss_before_load_mb": mb(rss_before_load),
+            "rss_after_load_mb": mb(rss_after_load),
+            "delta_load_mb": mb(rss_after_load - rss_before_load),
+            "peak_rss_during_load_mb": mb(peak_load),
+            "rss_before_infer_mb": mb(rss_before_infer),
+            "rss_after_infer_mb": mb(rss_after_infer),
+            "peak_rss_during_infer_mb": mb(peak_infer),
+            "delta_peak_infer_from_before_infer_mb": mb(peak_infer - rss_before_infer),
+            "delta_peak_total_from_before_load_mb": mb(peak_infer - rss_before_load),
+            "include_warmup_in_peak": bool(args.mem_include_warmup),
+            "mem_interval_ms": float(args.mem_interval_ms),
+            "note": "Use /usr/bin/time -v for paper-grade peak RSS (Maximum resident set size).",
+        }
+        report["memory"] = mem
+
+    # Telemetry snapshot after run
+    report["platform"]["telemetry_after"] = capture_telemetry()
+
+    return report
+
+
+# -------------------------
+# Parent aggregation for repeat/fresh-process
+# -------------------------
+
+def aggregate_reports(reports: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Aggregate per-run summaries across repeats (NOT concatenating raw samples)."""
+    out: Dict[str, Any] = {
+        "repeat": len(reports),
+        "runs": reports,
+    }
+
+    # Latency: aggregate mean/std/p50/p95/p99 across repeats (as distribution over runs)
+    lat_means = []
+    lat_p50s = []
+    lat_p95s = []
+    lat_p99s = []
+    for r in reports:
+        if "latency" in r:
+            lat_means.append(r["latency"]["mean_ms"])
+            lat_p50s.append(r["latency"]["p50_ms"])
+            lat_p95s.append(r["latency"]["p95_ms"])
+            lat_p99s.append(r["latency"]["p99_ms"])
+
+    def _summ(xs: List[float]) -> Dict[str, float]:
+        if not xs:
+            return {}
+        import statistics as _st
+        return {
+            "mean": float(_st.mean(xs)),
+            "std": float(_st.pstdev(xs)) if len(xs) > 1 else 0.0,
+            "min": float(min(xs)),
+            "max": float(max(xs)),
+        }
+
+    if lat_means:
+        out["latency_across_repeats_ms"] = {
+            "mean_ms": _summ(lat_means),
+            "p50_ms": _summ(lat_p50s),
+            "p95_ms": _summ(lat_p95s),
+            "p99_ms": _summ(lat_p99s),
+        }
+
+    # Memory (aux): aggregate peak rss during infer/load across repeats
+    mem_peaks = []
+    mem_load_delta = []
+    for r in reports:
+        if "memory" in r:
+            mem_peaks.append(r["memory"]["peak_rss_during_infer_mb"])
+            mem_load_delta.append(r["memory"]["delta_load_mb"])
+    if mem_peaks:
+        out["memory_across_repeats_mb"] = {
+            "peak_rss_during_infer_mb": _summ(mem_peaks),
+            "delta_load_mb": _summ(mem_load_delta),
+        }
+
+    return out
+
+
+def run_fresh_process_repeats(args) -> Dict[str, Any]:
+    """Run this script as a child process multiple times and aggregate results."""
+    cmd_base = [sys.executable, os.path.abspath(__file__), "--_child", "true"]
+
+    # Reconstruct args for child (exclude repeat/fresh-process/json-out and internal flags)
+    passthrough = []
+    for k, v in vars(args).items():
+        if k in ("repeat", "fresh_process", "json_out", "_child"):
+            continue
+        if v is None:
+            continue
+        # booleans
+        if isinstance(v, bool):
+            # only pass if True for store_true flags; for explicit bool args we pass key+value
+            if k in ("sync_barrier",):
+                if v:
+                    passthrough.append(f"--{k.replace('_', '-')}")
+            else:
+                passthrough += [f"--{k.replace('_', '-')}", "true" if v else "false"]
+        else:
+            passthrough += [f"--{k.replace('_', '-')}", str(v)]
+
+    reports: List[Dict[str, Any]] = []
+    for i in range(int(args.repeat)):
+        # Each repeat is a new process => good for peak RSS consistency
+        child_cmd = cmd_base + passthrough
+        p = subprocess.run(child_cmd, capture_output=True, text=True)
+        if p.returncode != 0:
+            raise RuntimeError(f"Child run failed (repeat {i+1}/{args.repeat}). stderr:\n{p.stderr}\nstdout:\n{p.stdout}")
+        # Child prints JSON only
+        rep = json.loads(p.stdout.strip())
+        reports.append(rep)
+
+    return aggregate_reports(reports)
+
+
+# -------------------------
+# CLI / Main
+# -------------------------
+
+def build_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+
+    p.add_argument("--onnx", required=True, help="Path to ONNX model")
+    p.add_argument("--mode", choices=["latency", "memory", "both"], default="latency")
+
+    # Strong control knobs
+    p.add_argument("--cpu-affinity", default=None, help='CPU affinity like "0-3" or "0,2,3" (taskset equivalent)')
+    p.add_argument("--set-env-threads", type=str2bool, default=True, help="Set OMP/BLAS thread env vars for reproducibility")
+
+    # input
+    p.add_argument("--input-name", default=None)
+    p.add_argument("--input-shape", default=None, help="Comma-separated, e.g. 1,3,224,224 (required for dynamic shapes)")
+    p.add_argument("--input-dtype", default=None, help="fp32|fp16|int64|int32|uint8")
+    p.add_argument("--fill", choices=["random", "zeros", "ones"], default="random")
+    p.add_argument("--seed", type=int, default=42)
+
+    # repetitions
+    p.add_argument("--warmup", type=int, default=50)
+    p.add_argument("--runs", type=int, default=1000)
+
+    # ORT threads/options
+    p.add_argument("--intra", "--intra-threads", dest="intra_threads", type=int, default=4)
+    p.add_argument("--inter", "--inter-threads", dest="inter_threads", type=int, default=1)
+    p.add_argument("--execution-mode", choices=["sequential", "parallel"], default="sequential")
+    p.add_argument("--opt-level", choices=["disable", "basic", "extended", "all"], default="all")
+
+    # ORT memory behavior (bools)
+    p.add_argument("--mem-pattern", type=str2bool, default=True)
+    p.add_argument("--cpu-arena", type=str2bool, default=True)
+
+    # env thread overrides
+    p.add_argument("--omp-threads", type=int, default=None)
+    p.add_argument("--openblas-threads", type=int, default=None)
+    p.add_argument("--mkl-threads", type=int, default=None)
+    p.add_argument("--numexpr-threads", type=int, default=None)
+    p.add_argument("--veclib-threads", type=int, default=None)
+
+    # internal RSS sampling (aux)
+    p.add_argument("--mem-interval-ms", type=float, default=1.0)
+    p.add_argument("--mem-include-warmup", type=str2bool, default=False)
+
+    # timing stability
+    p.add_argument("--sync-barrier", action="store_true", help="Tiny sleep before timing window")
+
+    # repeat control
+    p.add_argument("--repeat", type=int, default=1, help="Number of repeats (use with --fresh-process true for strongest reproducibility)")
+    p.add_argument("--fresh-process", type=str2bool, default=False, help="If true, repeats are executed as fresh child processes")
+
+    # output
+    p.add_argument("--json-out", default=None, help="Write report JSON to path")
+
+    # internal
+    p.add_argument("--_child", type=str2bool, default=False, help=argparse.SUPPRESS)
+
+    return p
+
+
+def main(argv: Optional[Sequence[str]] = None) -> int:
+    parser = build_parser()
+    args = parser.parse_args(argv)
+
+    # Default JSON filename for reproducibility logs (non-child only)
+    if not args._child and (args.json_out is None or str(args.json_out).strip() == ""):
+        args.json_out = default_json_name()
+
+    # ---- Strong control: CPU affinity ----
+    if args.cpu_affinity:
+        cpus = parse_cpu_affinity(args.cpu_affinity)
+        apply_cpu_affinity(cpus)
+
+    # ---- Strong control: env threads ----
+    explicit = {
+        "OMP_NUM_THREADS": args.omp_threads,
+        "OPENBLAS_NUM_THREADS": args.openblas_threads,
+        "MKL_NUM_THREADS": args.mkl_threads,
+        "NUMEXPR_NUM_THREADS": args.numexpr_threads,
+        "VECLIB_MAXIMUM_THREADS": args.veclib_threads,
+    }
+    if args.set_env_threads:
+        vals = set_env_threads_auto(args.intra_threads, explicit)
+        apply_env_thread_vars(vals)
+    else:
+        apply_env_thread_vars(explicit)
+
+    # ---- Repeat handling ----
+    if not args._child and args.repeat > 1 and args.fresh_process:
+        agg = run_fresh_process_repeats(args)
+        if args.json_out:
+            os.makedirs(os.path.dirname(os.path.abspath(args.json_out)), exist_ok=True)
+            with open(args.json_out, "w", encoding="utf-8") as f:
+                json.dump(agg, f, indent=2)
+        # human-readable summary
+        if "latency_across_repeats_ms" in agg:
+            s = agg["latency_across_repeats_ms"]["mean_ms"]
+            print(f"[REPEAT x{args.repeat}] latency mean_ms across repeats: {s['mean']:.4f} ± {s['std']:.4f} (min {s['min']:.4f}, max {s['max']:.4f})")
+        if "memory_across_repeats_mb" in agg:
+            s = agg["memory_across_repeats_mb"]["peak_rss_during_infer_mb"]
+            print(f"[REPEAT x{args.repeat}] memory peak_rss_during_infer_mb across repeats: {s['mean']:.3f} ± {s['std']:.3f}")
+        return 0
+
+    # ---- Single run ----
+    rep = run_single(args)
+
+    # If child mode: print JSON only (for parent aggregation)
+    if args._child:
+        print(json.dumps(rep))
+        return 0
+
+    # Otherwise: print human-readable + optionally JSON file
+    if args.mode in ("latency", "both") and "latency" in rep:
+        lat = rep["latency"]
         print("[LATENCY] ms:")
         for k in ("mean_ms", "std_ms", "p50_ms", "p95_ms", "p99_ms", "min_ms", "max_ms"):
-            if k in lat_sum:
-                print(f"  {k}: {lat_sum[k]:.4f}")
+            print(f"  {k}: {lat[k]:.4f}")
 
-    # MEMORY
-    if args.mode in ("memory", "both"):
-        mem = run_memory(
-            onnx_path=args.onnx,
-            sess_kwargs=sess_kwargs,
-            feeds=feeds,
-            warmup=args.warmup,
-            runs=args.runs,
-            sample_interval_ms=args.mem_sample_ms,
-            include_warmup_in_peak=args.mem_include_warmup,
-        )
-        mem_dict = mem.as_dict()
-        report["memory"] = mem_dict
-        # Print human-readable
+    if args.mode in ("memory", "both") and "memory" in rep:
+        mem = rep["memory"]
         print("[MEMORY] RSS (MB):")
         for k in (
             "rss_before_load_mb",
@@ -630,16 +855,15 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             "delta_peak_infer_from_before_infer_mb",
             "delta_peak_total_from_before_load_mb",
         ):
-            print(f"  {k}: {mem_dict[k]:.3f}")
-        print(f"  include_warmup_in_peak: {mem_dict['include_warmup_in_peak']}")
+            print(f"  {k}: {mem[k]:.3f}")
+        print(f"  include_warmup_in_peak: {mem['include_warmup_in_peak']}")
         print("  NOTE: For paper-grade peak RSS, prefer external: /usr/bin/time -v ... (Maximum resident set size)")
 
-    # JSON output
     if args.json_out:
         out_path = os.path.abspath(args.json_out)
         os.makedirs(os.path.dirname(out_path), exist_ok=True)
         with open(out_path, "w", encoding="utf-8") as f:
-            json.dump(report, f, indent=2)
+            json.dump(rep, f, indent=2)
         print(f"[JSON] wrote: {out_path}")
 
     return 0
