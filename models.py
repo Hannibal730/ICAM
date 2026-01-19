@@ -51,7 +51,7 @@ class MBConvBlock(nn.Module):
 
         # 2. Depthwise convolution phase
         layers.extend([
-            nn.Conv2d(hidden_dim, hidden_dim, kernel_size, stride, 
+            nn.Conv2d(hidden_dim, hidden_dim, kernel_size, stride,
                       padding=kernel_size//2, groups=hidden_dim, bias=False),
             nn.BatchNorm2d(hidden_dim),
             nn.ReLU6(inplace=True)
@@ -153,10 +153,10 @@ class CnnFeatureExtractor(nn.Module):
                 nn.Conv2d(3, 32, kernel_size=3, stride=2, padding=1, bias=False),
                 nn.BatchNorm2d(32, eps=bn_eps, momentum=bn_momentum),
                 nn.ReLU6(inplace=True),
-                
+
                 # Block 1: MBConv1, 3x3, 32->16, stride 1, expand 1
                 MBConvBlock(32, 16, kernel_size=3, stride=1, expand_ratio=1),
-                
+
                 # Block 2: MBConv6, 3x3, 16->24, stride 2, expand 6 (2 layers)
                 MBConvBlock(16, 24, kernel_size=3, stride=2, expand_ratio=6), # stride2: 해상도 112 -> 56
                 MBConvBlock(24, 24, kernel_size=3, stride=1, expand_ratio=6)
@@ -245,123 +245,167 @@ class PatchConvEncoder(nn.Module):
 class Embedding4Decoder(nn.Module): 
     """
     Decoder 입력을 위한 임베딩 레이어.
-    [Idea 1-1] 2D Sinusoidal Position Encoding을 적용하여 위치 정보를 주입합니다.
+
+    [Method B Refactor]
+    - V는 content-only (positional encoding 미적용)
+    - K는 content에 positional encoding을 더한 값을 쓰되,
+      (W_K(content + pos) == W_K(content) + W_K(pos)) 선형성을 이용해
+      content+pos 토큰 텐서를 별도로 유지하지 않고 K projection 단계에서 pos 성분을 더합니다.
+
+    주의:
+    - eval/inference에서의 출력은 기존 구현과 수치적으로 동일합니다(드롭아웃 비활성).
+    - training에서 dropout>0이면 기존과 완전히 동일한 dropout 분포를 보장하지는 않습니다.
+      (inference 최적화 목적이므로, training 정확도 보장이 필요하면 별도 옵션으로 기존 경로 유지 권장)
     """
-    def __init__(self, num_encoder_patches, featured_patch_dim, num_decoder_patches, 
-                    grid_size_h, grid_size_w, # 2D PE 생성을 위해 그리드 크기 인자 추가
-                    adaptive_initial_query=False, num_decoder_layers=3, emb_dim=128, num_heads=16, 
-                    decoder_ff_dim=256, attn_dropout=0., dropout=0., save_attention=False, res_attention=False, positional_encoding=True):
-        
+
+    def __init__(
+        self,
+        num_encoder_patches,
+        featured_patch_dim,
+        num_decoder_patches,
+        grid_size_h,
+        grid_size_w,
+        adaptive_initial_query=False,
+        num_decoder_layers=3,
+        emb_dim=128,
+        num_heads=16,
+        decoder_ff_dim=256,
+        attn_dropout=0.0,
+        dropout=0.0,
+        save_attention=False,
+        res_attention=False,
+        positional_encoding=True,
+    ):
         super().__init__()
-        
+
         self.adaptive_initial_query = adaptive_initial_query
 
         # --- 입력 인코딩 ---
-        self.W_feat2emb = nn.Linear(featured_patch_dim, emb_dim)      
+        self.W_feat2emb = nn.Linear(featured_patch_dim, emb_dim)
         self.W_Q_init = nn.Linear(featured_patch_dim, emb_dim)
         self.dropout = nn.Dropout(dropout, inplace=True)
 
         # --- 학습 가능한 쿼리(Learnable Query) ---
         self.learnable_queries = nn.Parameter(torch.empty(num_decoder_patches, featured_patch_dim))
         nn.init.xavier_uniform_(self.learnable_queries)
-        
-        # --- [Idea 1-1] 2D Sinusoidal Positional Encoding ---
+
+        # --- 2D Sinusoidal Positional Encoding (fixed) ---
         self.use_positional_encoding = positional_encoding
         if self.use_positional_encoding:
-            # 고정된 2D Sinusoidal PE 생성 (학습되지 않음)
             pos_embed = self.get_2d_sincos_pos_embed(emb_dim, grid_size_h, grid_size_w)
-            # 모델의 state_dict에 저장되지만 optimizer에 의해 업데이트되지 않도록 register_buffer 사용
-            self.register_buffer('pos_embed', pos_embed, persistent=False)
+            self.register_buffer('pos_embed', pos_embed, persistent=False)  # [1, N, D]
         else:
             self.pos_embed = None
 
+        # --- Adaptive initial query projections ---
         if self.adaptive_initial_query:
             self.W_K_init = nn.Linear(emb_dim, emb_dim)
             self.W_V_init = nn.Linear(emb_dim, emb_dim)
+            # inference cache (W_K_init(pos_embed))
+            self.register_buffer('_k_init_pos_cache', None, persistent=False)  # [1, N, D]
 
         # --- 디코더 ---
-        self.decoder = Decoder(num_encoder_patches, emb_dim, num_heads, num_decoder_patches, decoder_ff_dim=decoder_ff_dim, attn_dropout=attn_dropout, dropout=dropout,
-                                res_attention=res_attention, num_decoder_layers=num_decoder_layers, save_attention=save_attention)
-        
+        self.decoder = Decoder(
+            num_encoder_patches,
+            emb_dim,
+            num_heads,
+            num_decoder_patches,
+            decoder_ff_dim=decoder_ff_dim,
+            attn_dropout=attn_dropout,
+            dropout=dropout,
+            res_attention=res_attention,
+            num_decoder_layers=num_decoder_layers,
+            save_attention=save_attention,
+        )
+
     def get_2d_sincos_pos_embed(self, embed_dim, grid_h, grid_w):
-        """
-        2D Grid에 대한 Sinusoidal Positional Embedding을 생성합니다.
-        embed_dim의 절반은 Height 정보, 나머지 절반은 Width 정보에 할당합니다.
-        """
+        """2D Grid에 대한 Sinusoidal Positional Embedding 생성."""
         assert embed_dim % 2 == 0, "Embedding 차원은 짝수여야 합니다."
-        
-        # 1D Sinusoidal PE 생성 함수
-        def get_1d_sincos_pos_embed_from_grid(embed_dim, pos):
-            """
-            embed_dim: output dimension for each position
-            pos: [H*W] list of positions to be encoded
-            """
-            omega = torch.arange(embed_dim // 2, dtype=torch.float)
-            omega /= embed_dim / 2.
-            omega = 1. / 10000**omega  # (D/2,)
 
-            pos = pos.reshape(-1)  # (M,)
-            out = torch.einsum('m,d->md', pos, omega)  # (M, D/2), outer product
+        def get_1d_sincos_pos_embed_from_grid(embed_dim_1d, pos):
+            omega = torch.arange(embed_dim_1d // 2, dtype=torch.float)
+            omega /= embed_dim_1d / 2.0
+            omega = 1.0 / 10000**omega
+            pos = pos.reshape(-1)
+            out = torch.einsum('m,d->md', pos, omega)
+            emb_sin = torch.sin(out)
+            emb_cos = torch.cos(out)
+            return torch.cat([emb_sin, emb_cos], dim=1)
 
-            emb_sin = torch.sin(out) # (M, D/2)
-            emb_cos = torch.cos(out) # (M, D/2)
-
-            emb = torch.cat([emb_sin, emb_cos], dim=1)  # (M, D)
-            return emb
-
-        # Grid 좌표 생성
         grid_h_arange = torch.arange(grid_h, dtype=torch.float)
         grid_w_arange = torch.arange(grid_w, dtype=torch.float)
-        
-        # Meshgrid로 좌표 확장
         grid_w_coords, grid_h_coords = torch.meshgrid(grid_w_arange, grid_h_arange, indexing='xy')
-        
-        # 각각에 대해 1D PE 생성 (차원의 절반씩 사용)
-        emb_h = get_1d_sincos_pos_embed_from_grid(embed_dim // 2, grid_h_coords) # [H*W, D/2]
-        emb_w = get_1d_sincos_pos_embed_from_grid(embed_dim // 2, grid_w_coords) # [H*W, D/2]
 
-        # Concat하여 최종 2D PE 생성 [H*W, D]
+        emb_h = get_1d_sincos_pos_embed_from_grid(embed_dim // 2, grid_h_coords)
+        emb_w = get_1d_sincos_pos_embed_from_grid(embed_dim // 2, grid_w_coords)
+
         pos_embed = torch.cat([emb_h, emb_w], dim=1)
-        return pos_embed.unsqueeze(0) # [1, H*W, D] (Broadcasting을 위해 배치 차원 추가)
+        return pos_embed.unsqueeze(0)  # [1, H*W, D]
+
+    # ---------------------------------------------------------------------
+    # Inference cache builders (call AFTER loading weights, BEFORE ONNX export)
+    # ---------------------------------------------------------------------
+    @torch.no_grad()
+    def prepare_inference_caches(self):
+        """Method B에서 pos 성분을 projection-space에서 더하기 위한 캐시를 미리 생성합니다.
+
+        - adaptive_initial_query: _k_init_pos_cache = W_K_init(pos_embed)
+        - decoder layers: 각 cross-attn 모듈의 k_pos_cache = W_K_layer(pos_embed) (head-split 형태)
+
+        사용 시점:
+          model.eval(); model.embedding4decoder.prepare_inference_caches(); torch.onnx.export(...)
+        """
+        if not self.use_positional_encoding or self.pos_embed is None:
+            return
+
+        # 1) adaptive init cache
+        if self.adaptive_initial_query:
+            dev = self.W_K_init.weight.device
+            dt = self.W_K_init.weight.dtype
+            pos = self.pos_embed.to(device=dev, dtype=dt)
+            self._k_init_pos_cache = self.W_K_init(pos).contiguous()  # [1, N, D]
+
+        # 2) decoder-layer caches
+        self.decoder.prepare_inference_caches(self.pos_embed)
 
     def forward(self, x) -> Tensor:
         # x: [B, num_encoder_patches, featured_patch_dim]
         bs = x.shape[0]
 
-        x = self.W_feat2emb(x) # [B, N, emb_dim]
+        # content embedding
+        x = self.W_feat2emb(x)  # [B, N, D]
 
-        # Value용: 위치 인코딩을 더하지 않은 순수 특징 (Content)
+        # V용(content-only)
         x_clean = self.dropout(x)
 
-        # --- 위치 인코딩 더하기 ---
-        if self.use_positional_encoding and self.pos_embed is not None:
-            # self.pos_embed: [1, N, emb_dim] -> Broadcasting으로 더해짐
-            x = x + self.pos_embed.to(x.device)
-
-        # Key용: 위치 인코딩이 포함된 특징 (Content + Position)
-        seq_encoder_patches = self.dropout(x)
-        
-        # --- 2. 디코더에 입력할 쿼리(Query) 준비 ---
+        # 2) Query 준비
         if self.adaptive_initial_query:
             latent_queries = self.W_Q_init(self.learnable_queries)
-            # [Optimization] repeat 대신 expand 사용 (메모리 복사 방지)
             latent_queries = latent_queries.unsqueeze(0).expand(bs, -1, -1)
-            
-            # Key는 위치 정보 포함(seq_encoder_patches), Value는 순수 특징(x_clean) 사용
-            k_init = self.W_K_init(seq_encoder_patches)
+
+            # K = content + pos (but implemented as W_K(content) + W_K(pos))
+            k_init = self.W_K_init(x_clean)
+            if self.use_positional_encoding and self.pos_embed is not None:
+                if (not self.training) and (self._k_init_pos_cache is not None):
+                    k_init = k_init + self._k_init_pos_cache.to(device=k_init.device, dtype=k_init.dtype)
+                else:
+                    # training or cache-miss fallback
+                    pos = self.pos_embed.to(device=k_init.device, dtype=k_init.dtype)
+                    k_init = k_init + self.W_K_init(pos)
+
             v_init = self.W_V_init(x_clean)
-            
+
             latent_attn_scores = torch.bmm(latent_queries, k_init.transpose(1, 2))
             latent_attn_weights = F.softmax(latent_attn_scores, dim=-1)
-            
             seq_decoder_patches = torch.bmm(latent_attn_weights, v_init)
         else:
             learnable_queries = self.W_Q_init(self.learnable_queries)
-            # [Optimization] repeat 대신 expand 사용
             seq_decoder_patches = learnable_queries.unsqueeze(0).expand(bs, -1, -1)
 
-        return seq_encoder_patches, x_clean, seq_decoder_patches
-            
+        # API 호환을 위해 (K,V)를 둘 다 content-only 텐서로 반환합니다.
+        # 실제 K의 positional 성분은 Decoder/Cross-Attn에서 projection-space로 더해집니다.
+        return x_clean, x_clean, seq_decoder_patches
+
 
 class Projection4Classifier(nn.Module):
     """디코더의 출력을 받아 최종 분류기가 사용할 수 있는 고정 차원 특징 벡터로 변환합니다.
@@ -382,76 +426,146 @@ class Projection4Classifier(nn.Module):
         return x
 
 class Decoder(nn.Module):
-    def __init__(self, num_encoder_patches, emb_dim, num_heads, num_decoder_patches, decoder_ff_dim=None, attn_dropout=0., dropout=0.,
-                    res_attention=False, num_decoder_layers=1, save_attention=False):
+    def __init__(
+        self,
+        num_encoder_patches,
+        emb_dim,
+        num_heads,
+        num_decoder_patches,
+        decoder_ff_dim=None,
+        attn_dropout=0.0,
+        dropout=0.0,
+        res_attention=False,
+        num_decoder_layers=1,
+        save_attention=False,
+    ):
         super().__init__()
-        
-        self.layers = nn.ModuleList([DecoderLayer(num_encoder_patches, emb_dim, num_decoder_patches, num_heads=num_heads, decoder_ff_dim=decoder_ff_dim, attn_dropout=attn_dropout, dropout=dropout,
-                                                        res_attention=res_attention, save_attention=save_attention) for i in range(num_decoder_layers)])
+
+        self.layers = nn.ModuleList(
+            [
+                DecoderLayer(
+                    num_encoder_patches,
+                    emb_dim,
+                    num_decoder_patches,
+                    num_heads=num_heads,
+                    decoder_ff_dim=decoder_ff_dim,
+                    attn_dropout=attn_dropout,
+                    dropout=dropout,
+                    res_attention=res_attention,
+                    save_attention=save_attention,
+                )
+                for _ in range(num_decoder_layers)
+            ]
+        )
         self.res_attention = res_attention
 
-    def forward(self, seq_encoder_k:Tensor, seq_encoder_v:Tensor, seq_decoder:Tensor):
+    @torch.no_grad()
+    def prepare_inference_caches(self, pos_embed: Tensor):
+        """각 DecoderLayer의 cross-attn에 대해 W_K(pos_embed) 캐시를 생성합니다."""
+        for layer in self.layers:
+            layer.prepare_inference_caches(pos_embed)
+
+    def forward(self, seq_encoder_k: Tensor, seq_encoder_v: Tensor, seq_decoder: Tensor, pos_embed: Tensor = None):
+        """seq_encoder_k/seq_encoder_v: 현재는 content-only가 들어오며,
+        cross-attn 내부에서 pos_embed(또는 캐시된 k_pos)를 K projection에 더합니다.
+        """
         scores = None
         if self.res_attention:
-            for mod in self.layers: _, seq_decoder, scores = mod(seq_encoder_k, seq_encoder_v, seq_decoder, prev=scores)
+            for mod in self.layers:
+                _, seq_decoder, scores = mod(seq_encoder_k, seq_encoder_v, seq_decoder, pos_embed=pos_embed, prev=scores)
             return seq_decoder
         else:
-            for mod in self.layers: _, seq_decoder = mod(seq_encoder_k, seq_encoder_v, seq_decoder)
+            for mod in self.layers:
+                _, seq_decoder = mod(seq_encoder_k, seq_encoder_v, seq_decoder, pos_embed=pos_embed)
             return seq_decoder
 
+
 class DecoderLayer(nn.Module):
-    def __init__(self, num_encoder_patches, emb_dim, num_decoder_patches, num_heads, decoder_ff_dim=256, save_attention=False,
-                    attn_dropout=0, dropout=0., bias=False, res_attention=False): # [Optimization] bias=False 권장
+    def __init__(
+        self,
+        num_encoder_patches,
+        emb_dim,
+        num_decoder_patches,
+        num_heads,
+        decoder_ff_dim=256,
+        save_attention=False,
+        attn_dropout=0,
+        dropout=0.0,
+        bias=False,
+        res_attention=False,
+    ):
         super().__init__()
-        assert not emb_dim%num_heads, f"emb_dim ({emb_dim}) must be divisible by num_heads ({num_heads})"
-        
+        assert not emb_dim % num_heads, f"emb_dim ({emb_dim}) must be divisible by num_heads ({num_heads})"
+
         self.res_attention = res_attention
-        self.cross_attn = _MultiheadAttention(emb_dim, num_heads, attn_dropout=attn_dropout, proj_dropout=dropout, res_attention=res_attention, qkv_bias=False)
+        self.cross_attn = _MultiheadAttention(
+            emb_dim,
+            num_heads,
+            attn_dropout=attn_dropout,
+            proj_dropout=dropout,
+            res_attention=res_attention,
+            qkv_bias=False,
+        )
         self.dropout_attn = nn.Dropout(dropout, inplace=True)
         self.norm_attn = nn.LayerNorm(emb_dim)
 
-        # GEGLU -> ReLU, LayerNorm -> BatchNorm1d
-        self.ffn = nn.Sequential(nn.Linear(emb_dim, decoder_ff_dim, bias=bias),
-                                nn.ReLU6(inplace=True),
-                                nn.Dropout(dropout, inplace=True),
-                                nn.Linear(decoder_ff_dim, emb_dim, bias=bias)) 
-        # Note: GEGLU는 입력을 2배로 쪼개므로 output dim이 절반이었으나, ReLU는 그대로 유지하므로 decoder_ff_dim 전체 사용
+        self.ffn = nn.Sequential(
+            nn.Linear(emb_dim, decoder_ff_dim, bias=bias),
+            nn.ReLU6(inplace=True),
+            nn.Dropout(dropout, inplace=True),
+            nn.Linear(decoder_ff_dim, emb_dim, bias=bias),
+        )
         self.dropout_ffn = nn.Dropout(dropout, inplace=True)
         self.norm_ffn = nn.LayerNorm(emb_dim)
-        
+
         self.save_attention = save_attention
 
-    def forward(self, seq_encoder_k:Tensor, seq_encoder_v:Tensor, seq_decoder:Tensor, prev=None) -> Tensor:
-        # [Optimization] Pre-Norm Architecture 적용
-        # 구조: x = x + Dropout(Sublayer(Norm(x)))
-        
-        # 1. Cross-Attention Block
+    @torch.no_grad()
+    def prepare_inference_caches(self, pos_embed: Tensor):
+        """cross-attn에서 사용할 k_pos cache를 생성합니다."""
+        self.cross_attn.prepare_k_pos_cache(pos_embed)
+
+    def forward(self, seq_encoder_k: Tensor, seq_encoder_v: Tensor, seq_decoder: Tensor, pos_embed: Tensor = None, prev=None) -> Tensor:
+        # 1) Cross-Attention (Pre-Norm)
         residual = seq_decoder
-        seq_decoder = self.norm_attn(seq_decoder) # Norm first
+        seq_decoder = self.norm_attn(seq_decoder)
 
         if self.res_attention:
-            decoder_out, attn, scores = self.cross_attn(seq_decoder, seq_encoder_k, seq_encoder_v, prev)
+            decoder_out, attn, scores = self.cross_attn(seq_decoder, seq_encoder_k, seq_encoder_v, pos_embed=pos_embed, prev=prev)
         else:
-            decoder_out, attn = self.cross_attn(seq_decoder, seq_encoder_k, seq_encoder_v)
-        
+            decoder_out, attn = self.cross_attn(seq_decoder, seq_encoder_k, seq_encoder_v, pos_embed=pos_embed)
+
         if self.save_attention:
             self.attn = attn
-        
+
         seq_decoder = residual + self.dropout_attn(decoder_out)
-        
-        # 2. FFN Block
+
+        # 2) FFN (Pre-Norm)
         residual = seq_decoder
-        seq_decoder = self.norm_ffn(seq_decoder) # Norm first
+        seq_decoder = self.norm_ffn(seq_decoder)
         ffn_out = self.ffn(seq_decoder)
         seq_decoder = residual + self.dropout_ffn(ffn_out)
-        
-        if self.res_attention: return seq_encoder_k, seq_decoder, scores
-        else: return seq_encoder_k, seq_decoder
+
+        if self.res_attention:
+            return seq_encoder_k, seq_decoder, scores
+        else:
+            return seq_encoder_k, seq_decoder
+
 
 class _MultiheadAttention(nn.Module):
-    def __init__(self, emb_dim, num_heads, res_attention=False, attn_dropout=0., proj_dropout=0., qkv_bias=False, save_attention=False, **kwargs):
+    def __init__(
+        self,
+        emb_dim,
+        num_heads,
+        res_attention=False,
+        attn_dropout=0.0,
+        proj_dropout=0.0,
+        qkv_bias=False,
+        save_attention=False,
+        **kwargs,
+    ):
         super().__init__()
-        
+
         head_dim = emb_dim // num_heads
         self.scale = head_dim**-0.5
         self.num_heads, self.head_dim = num_heads, head_dim
@@ -463,47 +577,73 @@ class _MultiheadAttention(nn.Module):
         self.res_attention = res_attention
         self.save_attention = save_attention
         self.attn_dropout = nn.Dropout(attn_dropout)
-        
-        self.concatheads2emb = nn.Sequential(nn.Linear(num_heads * head_dim, emb_dim), nn.Dropout(proj_dropout))
-        self._sdpa_logged = False
 
-    def forward(self, Q:Tensor, K:Tensor, V:Tensor, prev=None):
+        self.concatheads2emb = nn.Sequential(nn.Linear(num_heads * head_dim, emb_dim), nn.Dropout(proj_dropout))
+
+        # [Method B] inference cache: W_K(pos_embed) projected & head-split
+        # shape: [1, H, N, Dh]
+        self.register_buffer('_k_pos_cache', None, persistent=False)
+
+    @torch.no_grad()
+    def prepare_k_pos_cache(self, pos_embed: Tensor):
+        """W_K(pos_embed)를 미리 계산해 head-split 형태로 캐시합니다.
+
+        - pos_embed: [1, N, D]
+        - cache:     [1, H, N, Dh]
+
+        주의: 반드시 weight 로드 후(model.load_state_dict 이후), eval 모드에서 호출 권장.
+        """
+        if pos_embed is None:
+            self._k_pos_cache = None
+            return
+
+        dev = self.W_K.weight.device
+        dt = self.W_K.weight.dtype
+        pos = pos_embed.to(device=dev, dtype=dt)
+
+        k_pos = self.W_K(pos)  # [1, N, H*Dh]
+        k_pos = k_pos.view(1, -1, self.num_heads, self.head_dim).permute(0, 2, 1, 3).contiguous()
+        self._k_pos_cache = k_pos
+
+    def forward(self, Q: Tensor, K: Tensor, V: Tensor, pos_embed: Tensor = None, prev=None):
         bs = Q.size(0)
-        
+
         q_s = self.W_Q(Q).view(bs, -1, self.num_heads, self.head_dim).permute(0, 2, 1, 3)
+
+        # K projection (content)
         k_s = self.W_K(K).view(bs, -1, self.num_heads, self.head_dim).permute(0, 2, 1, 3)
+
+        # [Method B] add positional contribution in projection-space
+        if pos_embed is not None:
+            if (not self.training) and (self._k_pos_cache is not None):
+                k_pos = self._k_pos_cache
+                # 안전장치: 디바이스/타입이 다르면 캐스트
+                if k_pos.device != k_s.device or k_pos.dtype != k_s.dtype:
+                    k_pos = k_pos.to(device=k_s.device, dtype=k_s.dtype)
+                k_s = k_s + k_pos
+            else:
+                # training or cache-miss fallback (will appear in ONNX if cache not prepared)
+                pos = pos_embed.to(device=k_s.device, dtype=k_s.dtype)
+                k_pos = self.W_K(pos).view(1, -1, self.num_heads, self.head_dim).permute(0, 2, 1, 3)
+                k_s = k_s + k_pos
+
         v_s = self.W_V(V).view(bs, -1, self.num_heads, self.head_dim).permute(0, 2, 1, 3)
 
-        # [Optimization] SDPA (Scaled Dot-Product Attention) 적용
-        # res_attention이나 save_attention이 필요 없는 경우, PyTorch의 최적화된 커널(FlashAttention 등) 사용
-        # if not self.res_attention and not self.save_attention:
-        #     if not self._sdpa_logged:
-        #         logging.info(f"[Optimization] SDPA (Scaled Dot-Product Attention) is ACTIVE in {self.__class__.__name__}.")
-        #         self._sdpa_logged = True
-        #     # F.scaled_dot_product_attention은 (B, H, L, D) 입력을 기대함
-        #     output = F.scaled_dot_product_attention(q_s, k_s, v_s, dropout_p=self.attn_dropout.p if self.training else 0.)
-        #     output = output.permute(0, 2, 1, 3).reshape(bs, -1, self.num_heads * self.head_dim)
-        #     output = self.concatheads2emb(output)
-        #     return output, None
-
-        # [Optimization] einsum 대신 matmul 사용 (속도 향상)
-        # attn_scores = torch.einsum('bhqd, bhkd -> bhqk', q_s, k_s) * self.scale
         attn_scores = torch.matmul(q_s, k_s.transpose(-1, -2)) * self.scale
-        
-        if prev is not None: attn_scores = attn_scores + prev
-        
+        if prev is not None:
+            attn_scores = attn_scores + prev
+
         attn_weights = F.softmax(attn_scores, dim=-1)
         attn_weights = self.attn_dropout(attn_weights)
 
-        # output = torch.einsum('bhqk, bhkd -> bhqd', attn_weights, v_s)
         output = torch.matmul(attn_weights, v_s)
-        # [Optimization] Use reshape instead of contiguous().view() to avoid copy if possible
         output = output.permute(0, 2, 1, 3).reshape(bs, -1, self.num_heads * self.head_dim)
-        
         output = self.concatheads2emb(output)
 
-        if self.res_attention: return output, attn_weights, attn_scores
-        else: return output, attn_weights
+        if self.res_attention:
+            return output, attn_weights, attn_scores
+        else:
+            return output, attn_weights
 
 class Model(nn.Module):
     def __init__(self, args, **kwargs):
@@ -548,7 +688,8 @@ class Model(nn.Module):
         # (PatchConvEncoder의 출력이 여기로 들어옴)
         
         seq_encoder_patches, seq_encoder_clean, seq_decoder_patches = self.embedding4decoder(x)
-        z = self.embedding4decoder.decoder(seq_encoder_patches, seq_encoder_clean, seq_decoder_patches)
+        pos_embed = self.embedding4decoder.pos_embed if getattr(self.embedding4decoder, 'use_positional_encoding', False) else None
+        z = self.embedding4decoder.decoder(seq_encoder_patches, seq_encoder_clean, seq_decoder_patches, pos_embed=pos_embed)
         features = self.projection4classifier(z)
         return features
 
