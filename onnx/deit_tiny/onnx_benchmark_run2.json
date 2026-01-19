@@ -1,0 +1,65 @@
+{
+  "timestamp": "2026-01-19T15:55:10",
+  "onnx": "/home/pi/Desktop/sewer_binary_cls_v9/onnx/deit_tiny/deit_tiny_model_fp32_20260118_104712.onnx",
+  "mode": "latency",
+  "platform": {
+    "python": "3.10.19",
+    "os": "Linux-6.12.62+rpt-rpi-2712-aarch64-with-glibc2.41",
+    "machine": "aarch64",
+    "processor": "",
+    "cpu_count": 4,
+    "cpu_affinity": [
+      0,
+      1,
+      2,
+      3
+    ],
+    "cpu_governor": "performance"
+  },
+  "ort": {
+    "onnxruntime_version": "1.23.2",
+    "providers": [
+      "CPUExecutionProvider"
+    ],
+    "session_options": {
+      "intra_threads": 4,
+      "inter_threads": 1,
+      "execution_mode": "sequential",
+      "opt_level": "all",
+      "enable_mem_pattern": true,
+      "enable_cpu_mem_arena": true
+    },
+    "env": {
+      "OMP_NUM_THREADS": "4",
+      "OPENBLAS_NUM_THREADS": "4",
+      "MKL_NUM_THREADS": "4",
+      "NUMEXPR_NUM_THREADS": "4",
+      "VECLIB_MAXIMUM_THREADS": "4"
+    }
+  },
+  "warmup": 50,
+  "runs": 1000,
+  "input": {
+    "name": "input",
+    "shape": [
+      1,
+      3,
+      224,
+      224
+    ],
+    "dtype": "<class 'numpy.float32'>",
+    "fill": "random",
+    "seed": 42
+  },
+  "latency": {
+    "mean_ms": 33.400154052,
+    "std_ms": 1.572574832016992,
+    "min_ms": 32.789198,
+    "max_ms": 62.702009,
+    "p50_ms": 33.0325385,
+    "p95_ms": 34.958350300000006,
+    "p99_ms": 38.02681623,
+    "warmup_excluded": true,
+    "n_runs": 1000
+  }
+}

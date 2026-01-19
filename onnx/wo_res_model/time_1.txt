@@ -1,0 +1,24 @@
+[0;93m2026-01-19 17:00:02.261297688 [W:onnxruntime:Default, device_discovery.cc:164 DiscoverDevicesForPlatform] GPU device discovery failed: device_discovery.cc:89 ReadFileContents Failed to open file: "/sys/class/drm/card1/device/vendor"[m
+	Command being timed: "python3 onnx_benchmark.py --onnx /home/pi/Desktop/sewer_binary_cls_v9/onnx/wo_res_model/wo_res_model_20260119_065913.onnx --mode latency --cpu-affinity 0-3 --intra 4 --inter 1 --execution-mode sequential --seed 42 --fill random --warmup 50 --runs 1000 --json-out onnx_benchmark_run1.json"
+	User time (seconds): 34.64
+	System time (seconds): 0.03
+	Percent of CPU this job got: 390%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:08.88
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 73696
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 0
+	Minor (reclaiming a frame) page faults: 3595
+	Voluntary context switches: 13
+	Involuntary context switches: 1791
+	Swaps: 0
+	File system inputs: 0
+	File system outputs: 96
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 16384
+	Exit status: 0

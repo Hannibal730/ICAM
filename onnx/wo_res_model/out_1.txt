@@ -1,0 +1,9 @@
+[LATENCY] ms:
+  mean_ms: 8.1711
+  std_ms: 0.5118
+  p50_ms: 8.0561
+  p95_ms: 8.5874
+  p99_ms: 10.4210
+  min_ms: 7.8778
+  max_ms: 16.1418
+[JSON] wrote: /home/pi/Desktop/sewer_binary_cls_v9/onnx_benchmark_run1.json

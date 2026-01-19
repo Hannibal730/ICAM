@@ -1,0 +1,50 @@
+1) Latency (통제 강함):
+OMP_NUM_THREADS=4 OPENBLAS_NUM_THREADS=4 \
+python3 onnx_benchmark.py \
+  --onnx /home/pi/Desktop/sewer_binary_cls_v9/onnx/deit_tiny/deit_tiny_model_fp32_20260118_104712.onnx \
+  --mode latency \
+  --cpu-affinity 0-3 \
+  --intra 4 --inter 1 --execution-mode sequential \
+  --seed 42 --fill random \
+  --warmup 50 --runs 1000 \
+  --repeat 5 --fresh-process true
+
+
+2) Peak RSS (paper-grade):
+for i in 1 2 3 4 5; do
+  OMP_NUM_THREADS=4 OPENBLAS_NUM_THREADS=4 \
+  /usr/bin/time -v python3 onnx_benchmark.py \
+    --onnx /home/pi/Desktop/sewer_binary_cls_v9/onnx/deit_tiny/deit_tiny_model_fp32_20260118_104712.onnx \
+    --mode latency \
+    --cpu-affinity 0-3 \
+    --intra 4 --inter 1 --execution-mode sequential \
+    --seed 42 --fill random \
+    --warmup 50 --runs 1000 \
+    --json-out onnx_benchmark_run${i}.json \
+    1> out_${i}.txt 2> time_${i}.txt
+done
+
+
+or
+
+/usr/bin/time -v python3 onnx_benchmark.py \
+  --onnx /home/pi/Desktop/sewer_binary_cls_v9/onnx/deit_tiny/deit_tiny_model_fp32_20260118_104712.onnx \
+  --mode latency \
+  --cpu-affinity 0-3 \
+  --intra 4 --inter 1 --execution-mode sequential \
+  --seed 42 --fill random \
+  --warmup 50 --runs 1000
+
+
+
+3) Memory (보조 지표, Load delta RSS (MB), inference peak delta (MB)):
+python3 onnx_benchmark.py \
+  --onnx /home/pi/Desktop/sewer_binary_cls_v9/onnx/deit_tiny/deit_tiny_model_fp32_20260118_104712.onnx \
+  --mode memory \
+  --cpu-affinity 0-3 \
+  --intra 4 --inter 1 --execution-mode sequential \
+  --seed 42 --fill random \
+  --warmup 50 --runs 1000 \
+  --mem-interval-ms 1 \
+  --mem-include-warmup true \
+  --repeat 5 --fresh-process true
