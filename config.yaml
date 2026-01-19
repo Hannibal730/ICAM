@@ -22,7 +22,7 @@ run:
   only_inference: false # false: 정답 레이블과 비교하여 성능 평가.
   
   # 추론 시 양자화 옵션 (동시 사용 불가)
-  use_fp16_inference: true # true: FP16(Half Precision) 추론 사용 (CPU)
+  use_fp16_inference: false # true: FP16(Half Precision) 추론 사용 (CPU)
 #   use_int8_inference: true # true: INT8 동적 양자화 추론 사용 (CPU)
   int8_calib_samples: 512 # CPU 처리라 많은 샘플 사용 불가
   int8_calibration_method: 'Percentile' # Calibration 방법. 옵션: 'Entropy', 'MinMax', 'Percentile'
@@ -139,7 +139,7 @@ model:
   num_heads: 2               # 멀티헤드 어텐션에서 사용할 헤드의 수. `emb_dim`은 `num_heads`로 나누어 떨어져야 합니다.
 
   cnn_feature_extractor:
-    name: 'efficientnet_b0_feat2'  # 최종 피처맵 크기: $56 \times 56$ (채널 수는 24)
+    name: 'custom'  # 최종 피처맵 크기: $56 \times 56$ (채널 수는 24)
 
   # --- 디코더 및 임베딩 설정 ---
   featured_patch_dim: 24     # CNN 특징 추출기가 각 이미지 패치에서 추출하는 특징 벡터의 차원.
@@ -148,7 +148,7 @@ model:
   decoder_ff_ratio: 2        # 트랜스포머의 피드포워드 네트워크(FFN) 내부 차원을 결정하는 비율 (decoder_ff_dim = emb_dim * decoder_ff_ratio).
   dropout: 0.1               # 모델 내부에 적용될 드롭아웃 비율 (분류기, FFN, 어텐션 출력에 적용).
   positional_encoding: true  # 이미지 패치 시퀀스 (인코더 출력)에 위치 인코딩 추가 여부. False로 설정하면 위치 정보를 사용하지 않습니다.
-  res_attention: true        # 디코더 레이어 간에 어텐션 스코어를 전달하는 잔차 어텐션 사용 여부.
+  res_attention: false        # 디코더 레이어 간에 어텐션 스코어를 전달하는 잔차 어텐션 사용 여부.
   save_attention: false       # 추론 시 어텐션 맵을 저장할지 여부. True로 설정하면 시각화에 사용할 수 있습니다.
   num_plot_attention: 500     # 어텐션 맵을 시각화하여 저장할 최대 샘플 수.
 

@@ -501,7 +501,7 @@ def main():
         dummy_input_cpu = single_dummy_input.to('cpu')
         
         torch.onnx.export(model, dummy_input_cpu, fp32_onnx_path,
-                          export_params=True, opset_version=14,
+                          export_params=True, opset_version=17,
                           do_constant_folding=True,
                           input_names=['input'], output_names=['output'],
                           dynamic_axes={'input': {0: 'batch_size'}, 'output': {0: 'batch_size'}})
@@ -582,7 +582,7 @@ def main():
         fp32_onnx_path = os.path.join(run_dir_path, 'model_fp32_for_fp16.onnx')
         model.to('cpu')
         dummy_input_cpu = single_dummy_input.to('cpu')
-        torch.onnx.export(model, dummy_input_cpu, fp32_onnx_path, export_params=True, opset_version=13, do_constant_folding=True, input_names=['input'], output_names=['output'], dynamic_axes={'input': {0: 'batch_size'}, 'output': {0: 'batch_size'}})
+        torch.onnx.export(model, dummy_input_cpu, fp32_onnx_path, export_params=True, opset_version=17, do_constant_folding=True, input_names=['input'], output_names=['output'], dynamic_axes={'input': {0: 'batch_size'}, 'output': {0: 'batch_size'}})
         
         # 2. Convert to FP16
         fp16_onnx_path = os.path.join(run_dir_path, 'model_fp16.onnx')
@@ -592,7 +592,7 @@ def main():
         
         # 3. Session Create
         sess_options = onnxruntime.SessionOptions()
-        sess_options.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_DISABLE_ALL
+        sess_options.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_ENABLE_ALL
         
         # [수정] 메모리 모니터링 적용
         flush_memory() # [수정]

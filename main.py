@@ -165,7 +165,7 @@ def log_model_parameters(model):
     logging.info(f"    - Init Value Proj (W_V_init):       {w_v_init_params:,} 개")
     logging.info(f"    - Learnable Queries:                {query_params:,} 개")
     # logging.info(f"    - Positional Encoding (learnable):  {pe_params:,} 개")
-    logging.info(f"    - Decoder Layers (Cross-Attention): {decoder_layers_params:,} 개")
+    logging.info(f"    - Decoder Layers:                   {decoder_layers_params:,} 개")
     logging.info(f"    - Projection4Classifier:            {decoder_projection4classifier_params:,} 개")
     logging.info(f"  - Classifier (Projection MLP):        {classifier_total_params:,} 개")
 
@@ -451,7 +451,7 @@ def inference(run_cfg, model_cfg, model, data_loader, device, run_dir_path, time
         dummy_input_cpu = single_dummy_input.to('cpu')
         
         torch.onnx.export(model, dummy_input_cpu, fp32_onnx_path,
-                          export_params=True, opset_version=14,
+                          export_params=True, opset_version=17,
                           do_constant_folding=True,
                           input_names=['input'], output_names=['output'],
                           dynamic_axes={'input': {0: 'batch_size'}, 'output': {0: 'batch_size'}})
@@ -527,6 +527,8 @@ def inference(run_cfg, model_cfg, model, data_loader, device, run_dir_path, time
         with MemoryMonitor() as mem_mon:
             sess_options = onnxruntime.SessionOptions()
             sess_options.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_ENABLE_ALL
+            # [확인용] 최적화된 그래프를 파일로 저장 (Fusion 확인용)
+            sess_options.optimized_model_filepath = os.path.join(save_dir, "model_graph_int8.onnx")
             onnx_session = onnxruntime.InferenceSession(int8_onnx_path, sess_options=sess_options, providers=['CPUExecutionProvider'])
         
         if psutil:
@@ -560,7 +562,7 @@ def inference(run_cfg, model_cfg, model, data_loader, device, run_dir_path, time
         dummy_input_cpu = single_dummy_input.to('cpu') # FP32 Input
         
         torch.onnx.export(model, dummy_input_cpu, fp32_onnx_path,
-                          export_params=True, opset_version=13,
+                          export_params=True, opset_version=17,
                           do_constant_folding=True,
                           input_names=['input'], output_names=['output'],
                           dynamic_axes={'input': {0: 'batch_size'}, 'output': {0: 'batch_size'}})
@@ -584,7 +586,9 @@ def inference(run_cfg, model_cfg, model, data_loader, device, run_dir_path, time
 
         with MemoryMonitor() as mem_mon:
             sess_options = onnxruntime.SessionOptions()
-            sess_options.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_DISABLE_ALL
+            sess_options.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_ENABLE_ALL
+            # [확인용] 최적화된 그래프를 파일로 저장 (Fusion 확인용)
+            sess_options.optimized_model_filepath = os.path.join(save_dir, "model_graph_fp16.onnx")
             onnx_session = onnxruntime.InferenceSession(fp16_onnx_path, sess_options=sess_options, providers=['CPUExecutionProvider'])
 
         if psutil:
@@ -810,9 +814,11 @@ def inference(run_cfg, model_cfg, model, data_loader, device, run_dir_path, time
                 # --- ONNX 런타임 세션 옵션 설정 ---
                 sess_options = onnxruntime.SessionOptions()
                 sess_options.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_ENABLE_ALL
+                # [확인용] 최적화된 그래프를 파일로 저장 (Fusion 확인용)
+                sess_options.optimized_model_filepath = os.path.join(save_dir, "model_graph_fp32.onnx")
 
                 torch.onnx.export(model, dummy_input.to('cpu'), onnx_path, 
-                                    export_params=True, opset_version=13,
+                                    export_params=True, opset_version=17,
                                     do_constant_folding=True,
                                     input_names=['input'], output_names=['output'],
                                     dynamic_axes={'input': {0: 'batch_size'}, 'output': {0: 'batch_size'}})
@@ -1032,9 +1038,6 @@ def main():
 
         # 훈련 시에는 train_loader와 valid_loader 사용
         train(run_cfg, train_cfg, model, optimizer, scheduler, train_loader, valid_loader, device, run_dir_path, class_names, pos_weight)
-
-        logging.info("="*50)
-        logging.info("훈련 완료. 최종 모델 성능을 테스트 세트로 평가합니다.")
         final_acc = inference(run_cfg, model_cfg, model, test_loader, device, run_dir_path, timestamp, mode_name="Test", class_names=class_names)
 
         # --- 그래프 생성 ---

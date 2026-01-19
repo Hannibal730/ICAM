@@ -1,3 +1,4 @@
+import logging
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -12,6 +13,66 @@ from torchvision import models
 # =============================================================================
 # 1. 이미지 인코더 모델 정의
 # =============================================================================
+class SqueezeExcitation(nn.Module):
+    """EfficientNet의 SE Block"""
+    def __init__(self, input_channels, squeeze_channels):
+        super().__init__()
+        self.avg_pool = nn.AdaptiveAvgPool2d(1)
+        self.fc1 = nn.Conv2d(input_channels, squeeze_channels, 1)
+        self.act1 = nn.SiLU(inplace=True)
+        self.fc2 = nn.Conv2d(squeeze_channels, input_channels, 1)
+        self.act2 = nn.Sigmoid()
+
+    def forward(self, x):
+        scale = self.avg_pool(x)
+        scale = self.fc1(scale)
+        scale = self.act1(scale)
+        scale = self.fc2(scale)
+        scale = self.act2(scale)
+        return x * scale
+
+class MBConvBlock(nn.Module):
+    """EfficientNet의 MBConv Block"""
+    def __init__(self, in_channels, out_channels, kernel_size, stride, expand_ratio):
+        super().__init__()
+        self.stride = stride
+        self.use_res_connect = self.stride == 1 and in_channels == out_channels
+
+        hidden_dim = int(in_channels * expand_ratio)
+        layers = []
+
+        # 1. Expansion phase
+        if expand_ratio != 1:
+            layers.extend([
+                nn.Conv2d(in_channels, hidden_dim, 1, bias=False),
+                nn.BatchNorm2d(hidden_dim),
+                nn.ReLU6(inplace=True)
+            ])
+
+        # 2. Depthwise convolution phase
+        layers.extend([
+            nn.Conv2d(hidden_dim, hidden_dim, kernel_size, stride, 
+                      padding=kernel_size//2, groups=hidden_dim, bias=False),
+            nn.BatchNorm2d(hidden_dim),
+            nn.ReLU6(inplace=True)
+        ])
+
+        # 3. Squeeze and Excitation phase (Removed for embedded optimization)
+
+        # 4. Output phase
+        layers.extend([
+            nn.Conv2d(hidden_dim, out_channels, 1, bias=False),
+            nn.BatchNorm2d(out_channels)
+        ])
+
+        self.conv = nn.Sequential(*layers)
+
+    def forward(self, x):
+        if self.use_res_connect:
+            return x + self.conv(x)
+        else:
+            return self.conv(x)
+
 class CnnFeatureExtractor(nn.Module):
     """
     다양한 CNN 아키텍처의 앞부분을 특징 추출기로 사용하는 범용 클래스입니다.
@@ -81,6 +142,27 @@ class CnnFeatureExtractor(nn.Module):
             base_model = timm.create_model('mobilenetv4_conv_small', pretrained=pretrained, features_only=True, out_indices=(0, 1, 2, 3))
             self.conv_front = base_model
             base_out_channels = 96  # feat4 출력 채널
+
+        elif cnn_feature_extractor_name == 'custom':
+            # EfficientNet-B0 feat2 구조를 직접 코드로 구현 (커스터마이징 용도)
+            # 주의: 이 옵션은 pretrained 가중치를 자동으로 로드하지 않습니다.
+            bn_eps = 1e-5
+            bn_momentum = 0.1
+            layers = [
+                # Stem: 채널3 -> 32, stride 2: 해상도224-> 112
+                nn.Conv2d(3, 32, kernel_size=3, stride=2, padding=1, bias=False),
+                nn.BatchNorm2d(32, eps=bn_eps, momentum=bn_momentum),
+                nn.ReLU6(inplace=True),
+                
+                # Block 1: MBConv1, 3x3, 32->16, stride 1, expand 1
+                MBConvBlock(32, 16, kernel_size=3, stride=1, expand_ratio=1),
+                
+                # Block 2: MBConv6, 3x3, 16->24, stride 2, expand 6 (2 layers)
+                MBConvBlock(16, 24, kernel_size=3, stride=2, expand_ratio=6), # stride2: 해상도 112 -> 56
+                MBConvBlock(24, 24, kernel_size=3, stride=1, expand_ratio=6)
+            ]
+            self.conv_front = nn.Sequential(*layers)
+            base_out_channels = 24
 
         else:
             raise ValueError(f"지원하지 않는 CNN 피처 추출기 이름입니다: {cnn_feature_extractor_name}")
@@ -160,11 +242,6 @@ class PatchConvEncoder(nn.Module):
 # 2. 디코더 모델 정의
 # =============================================================================
 
-class GEGLU(nn.Module):
-    def forward(self, x):
-        x, gate = x.chunk(2, dim=-1)
-        return x * F.gelu(gate)
-
 class Embedding4Decoder(nn.Module): 
     """
     Decoder 입력을 위한 임베딩 레이어.
@@ -182,7 +259,7 @@ class Embedding4Decoder(nn.Module):
         # --- 입력 인코딩 ---
         self.W_feat2emb = nn.Linear(featured_patch_dim, emb_dim)      
         self.W_Q_init = nn.Linear(featured_patch_dim, emb_dim)
-        self.dropout = nn.Dropout(dropout)
+        self.dropout = nn.Dropout(dropout, inplace=True)
 
         # --- 학습 가능한 쿼리(Learnable Query) ---
         self.learnable_queries = nn.Parameter(torch.empty(num_decoder_patches, featured_patch_dim))
@@ -267,7 +344,8 @@ class Embedding4Decoder(nn.Module):
         # --- 2. 디코더에 입력할 쿼리(Query) 준비 ---
         if self.adaptive_initial_query:
             latent_queries = self.W_Q_init(self.learnable_queries)
-            latent_queries = latent_queries.unsqueeze(0).repeat(bs, 1, 1)
+            # [Optimization] repeat 대신 expand 사용 (메모리 복사 방지)
+            latent_queries = latent_queries.unsqueeze(0).expand(bs, -1, -1)
             
             # Key는 위치 정보 포함(seq_encoder_patches), Value는 순수 특징(x_clean) 사용
             k_init = self.W_K_init(seq_encoder_patches)
@@ -279,7 +357,8 @@ class Embedding4Decoder(nn.Module):
             seq_decoder_patches = torch.bmm(latent_attn_weights, v_init)
         else:
             learnable_queries = self.W_Q_init(self.learnable_queries)
-            seq_decoder_patches = learnable_queries.unsqueeze(0).repeat(bs, 1, 1)
+            # [Optimization] repeat 대신 expand 사용
+            seq_decoder_patches = learnable_queries.unsqueeze(0).expand(bs, -1, -1)
 
         return seq_encoder_patches, x_clean, seq_decoder_patches
             
@@ -322,25 +401,34 @@ class Decoder(nn.Module):
 
 class DecoderLayer(nn.Module):
     def __init__(self, num_encoder_patches, emb_dim, num_decoder_patches, num_heads, decoder_ff_dim=256, save_attention=False,
-                    attn_dropout=0, dropout=0., bias=True, res_attention=False):
+                    attn_dropout=0, dropout=0., bias=False, res_attention=False): # [Optimization] bias=False 권장
         super().__init__()
         assert not emb_dim%num_heads, f"emb_dim ({emb_dim}) must be divisible by num_heads ({num_heads})"
         
         self.res_attention = res_attention
-        self.cross_attn = _MultiheadAttention(emb_dim, num_heads, attn_dropout=attn_dropout, proj_dropout=dropout, res_attention=res_attention, qkv_bias=True)
-        self.dropout_attn = nn.Dropout(dropout)
+        self.cross_attn = _MultiheadAttention(emb_dim, num_heads, attn_dropout=attn_dropout, proj_dropout=dropout, res_attention=res_attention, qkv_bias=False)
+        self.dropout_attn = nn.Dropout(dropout, inplace=True)
         self.norm_attn = nn.LayerNorm(emb_dim)
 
+        # GEGLU -> ReLU, LayerNorm -> BatchNorm1d
         self.ffn = nn.Sequential(nn.Linear(emb_dim, decoder_ff_dim, bias=bias),
-                                GEGLU(),
-                                nn.Dropout(dropout),
-                                nn.Linear(decoder_ff_dim//2, emb_dim, bias=bias)) 
-        self.dropout_ffn = nn.Dropout(dropout)
+                                nn.ReLU6(inplace=True),
+                                nn.Dropout(dropout, inplace=True),
+                                nn.Linear(decoder_ff_dim, emb_dim, bias=bias)) 
+        # Note: GEGLU는 입력을 2배로 쪼개므로 output dim이 절반이었으나, ReLU는 그대로 유지하므로 decoder_ff_dim 전체 사용
+        self.dropout_ffn = nn.Dropout(dropout, inplace=True)
         self.norm_ffn = nn.LayerNorm(emb_dim)
         
         self.save_attention = save_attention
 
     def forward(self, seq_encoder_k:Tensor, seq_encoder_v:Tensor, seq_decoder:Tensor, prev=None) -> Tensor:
+        # [Optimization] Pre-Norm Architecture 적용
+        # 구조: x = x + Dropout(Sublayer(Norm(x)))
+        
+        # 1. Cross-Attention Block
+        residual = seq_decoder
+        seq_decoder = self.norm_attn(seq_decoder) # Norm first
+
         if self.res_attention:
             decoder_out, attn, scores = self.cross_attn(seq_decoder, seq_encoder_k, seq_encoder_v, prev)
         else:
@@ -349,18 +437,19 @@ class DecoderLayer(nn.Module):
         if self.save_attention:
             self.attn = attn
         
-        seq_decoder = seq_decoder + self.dropout_attn(decoder_out)
-        seq_decoder = self.norm_attn(seq_decoder)
+        seq_decoder = residual + self.dropout_attn(decoder_out)
         
+        # 2. FFN Block
+        residual = seq_decoder
+        seq_decoder = self.norm_ffn(seq_decoder) # Norm first
         ffn_out = self.ffn(seq_decoder)
-        seq_decoder = seq_decoder + self.dropout_ffn(ffn_out)  
-        seq_decoder = self.norm_ffn(seq_decoder)
+        seq_decoder = residual + self.dropout_ffn(ffn_out)
         
         if self.res_attention: return seq_encoder_k, seq_decoder, scores
         else: return seq_encoder_k, seq_decoder
 
 class _MultiheadAttention(nn.Module):
-    def __init__(self, emb_dim, num_heads, res_attention=False, attn_dropout=0., proj_dropout=0., qkv_bias=True, **kwargs):
+    def __init__(self, emb_dim, num_heads, res_attention=False, attn_dropout=0., proj_dropout=0., qkv_bias=False, save_attention=False, **kwargs):
         super().__init__()
         
         head_dim = emb_dim // num_heads
@@ -372,9 +461,11 @@ class _MultiheadAttention(nn.Module):
         self.W_V = nn.Linear(emb_dim, head_dim * num_heads, bias=qkv_bias)
 
         self.res_attention = res_attention
+        self.save_attention = save_attention
         self.attn_dropout = nn.Dropout(attn_dropout)
         
         self.concatheads2emb = nn.Sequential(nn.Linear(num_heads * head_dim, emb_dim), nn.Dropout(proj_dropout))
+        self._sdpa_logged = False
 
     def forward(self, Q:Tensor, K:Tensor, V:Tensor, prev=None):
         bs = Q.size(0)
@@ -382,6 +473,18 @@ class _MultiheadAttention(nn.Module):
         q_s = self.W_Q(Q).view(bs, -1, self.num_heads, self.head_dim).permute(0, 2, 1, 3)
         k_s = self.W_K(K).view(bs, -1, self.num_heads, self.head_dim).permute(0, 2, 1, 3)
         v_s = self.W_V(V).view(bs, -1, self.num_heads, self.head_dim).permute(0, 2, 1, 3)
+
+        # [Optimization] SDPA (Scaled Dot-Product Attention) 적용
+        # res_attention이나 save_attention이 필요 없는 경우, PyTorch의 최적화된 커널(FlashAttention 등) 사용
+        # if not self.res_attention and not self.save_attention:
+        #     if not self._sdpa_logged:
+        #         logging.info(f"[Optimization] SDPA (Scaled Dot-Product Attention) is ACTIVE in {self.__class__.__name__}.")
+        #         self._sdpa_logged = True
+        #     # F.scaled_dot_product_attention은 (B, H, L, D) 입력을 기대함
+        #     output = F.scaled_dot_product_attention(q_s, k_s, v_s, dropout_p=self.attn_dropout.p if self.training else 0.)
+        #     output = output.permute(0, 2, 1, 3).reshape(bs, -1, self.num_heads * self.head_dim)
+        #     output = self.concatheads2emb(output)
+        #     return output, None
 
         # [Optimization] einsum 대신 matmul 사용 (속도 향상)
         # attn_scores = torch.einsum('bhqd, bhkd -> bhqk', q_s, k_s) * self.scale
@@ -461,8 +564,8 @@ class Classifier(nn.Module):
 
         self.projection = nn.Sequential(
             nn.Linear(input_dim, hidden_dim),
-            nn.ReLU(),
-            nn.Dropout(dropout),
+            nn.ReLU6(inplace=True),
+            nn.Dropout(dropout, inplace=True),
             nn.Linear(hidden_dim, num_labels)
         )
 

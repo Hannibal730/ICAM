@@ -143,7 +143,7 @@ def patch_timm_model_for_pruning(model, model_name, device):
         if hasattr(self, 'q_norm'):
             q, k = self.q_norm(q), self.k_norm(k)
 
-        # [수정] ONNX Opset 13 호환성을 위해 F.scaled_dot_product_attention 사용을 비활성화합니다.
+        # ONNX 호환을 위해 F.scaled_dot_product_attention 사용을 비활성화합니다.
         if False and hasattr(F, 'scaled_dot_product_attention') and getattr(self, 'fused_attn', False):
             x = F.scaled_dot_product_attention(
                 q, k, v,
@@ -585,7 +585,7 @@ def inference(run_cfg, model_cfg, model, data_loader, device, run_dir_path, time
         dummy_input_cpu = single_dummy_input.to('cpu')
         
         torch.onnx.export(model, dummy_input_cpu, fp32_onnx_path,
-                          export_params=True, opset_version=14,
+                          export_params=True, opset_version=17,
                           do_constant_folding=True,
                           input_names=['input'], output_names=['output'],
                           dynamic_axes={'input': {0: 'batch_size'}, 'output': {0: 'batch_size'}})
@@ -696,7 +696,7 @@ def inference(run_cfg, model_cfg, model, data_loader, device, run_dir_path, time
         dummy_input_cpu = single_dummy_input.to('cpu') # FP32 Input
         
         torch.onnx.export(model, dummy_input_cpu, fp32_onnx_path,
-                          export_params=True, opset_version=13,
+                          export_params=True, opset_version=17,
                           do_constant_folding=True,
                           input_names=['input'], output_names=['output'],
                           dynamic_axes={'input': {0: 'batch_size'}, 'output': {0: 'batch_size'}})
@@ -858,7 +858,7 @@ def inference(run_cfg, model_cfg, model, data_loader, device, run_dir_path, time
                 sess_options = onnxruntime.SessionOptions()
                 sess_options.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_ENABLE_ALL
                 torch.onnx.export(model, dummy_input.to('cpu'), onnx_path,
-                                    export_params=True, opset_version=13,
+                                    export_params=True, opset_version=17,
                                     do_constant_folding=True,
                                     input_names=['input'], output_names=['output'],
                                     dynamic_axes={'input': {0: 'batch_size'}, 'output': {0: 'batch_size'}})
