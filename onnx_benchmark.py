@@ -15,45 +15,44 @@ SCI/EAAI 투고용 ONNX Runtime(ORT) CPU inference 벤치마크 스크립트 (Ra
 - (선택) fresh-process 반복 실행: --repeat N --fresh-process true
 
 권장(투고용) 실행 예시 (Pi5, 4 cores)
-
-
-
 1) Latency (통제 강함):
-OMP_NUM_THREADS=4 OPENBLAS_NUM_THREADS=4 \
-python3 onnx_benchmark.py \
-  --onnx /path/to/model.onnx \
-  --mode latency \
-  --cpu-affinity 0-3 \
-  --intra 4 --inter 1 --execution-mode sequential \
-  --warmup 50 --runs 1000 \
-  --repeat 5 --fresh-process true
+   OMP_NUM_THREADS=4 OPENBLAS_NUM_THREADS=4 \
+   python3 onnx_benchmark.py --onnx model.onnx --mode latency \
+     --cpu-affinity 0-3 --intra 4 --inter 1 --execution-mode sequential \
+     --warmup 50 --runs 1000 --repeat 5 --fresh-process true
 
 2) Peak RSS (paper-grade):
-for i in 1 2 3 4 5; do
-  /usr/bin/time -v python3 onnx_benchmark.py --onnx model.onnx --mode latency \
-    --cpu-affinity 0-3 --intra 4 --inter 1 --execution-mode sequential \
-    --warmup 50 --runs 1000 \
-    --json-out onnx_benchmark_run${i}.json \
-    1> out_${i}.txt 2> time_${i}.txt
-done
+   (fresh-process + 외부 측정)
+   for i in 1 2 3 4 5; do
+     /usr/bin/time -v python3 onnx_benchmark.py --onnx model.onnx --mode latency \
+       --cpu-affinity 0-3 --intra 4 --inter 1 --execution-mode sequential \
+       --warmup 50 --runs 1000 --json-out run_$i.json 1> run_$i.out 2> run_$i.time
+   done
+   -> 'Maximum resident set size (kbytes)' 를 Peak RSS로 사용
 
 or
 
-/usr/bin/time -v python3 onnx_benchmark.py \
-  --onnx /path/to/model.onnx \
-  --mode latency \
-  --cpu-affinity 0-3 \
-  --intra 4 --inter 1 --execution-mode sequential \
-  --warmup 50 --runs 1000
+    /usr/bin/time -v python3 onnx_benchmark.py \
+    --onnx /home/pi/Desktop/sewer_binary_cls_v9/onnx/deit_tiny/deit_tiny_model_fp32_20260118_104712.onnx \
+    --mode latency \
+    --cpu-affinity 0-3 \
+    --intra 4 --inter 1 --execution-mode sequential \
+    --seed 42 --fill random \
+    --warmup 50 --runs 1000
+
+
+저장된 time_*.txt에서 Max RSS 평균/분산을 “로그로 출력”
+peak_rss_stats.py
 
 
 
-3) Memory (내부 RSS 샘플링, 보조지표):
+3) Memory (보조 지표, Load delta RSS (MB), inference peak delta (MB)):
 python3 onnx_benchmark.py \
-  --onnx /path/to/model.onnx \
+  --onnx /home/pi/Desktop/sewer_binary_cls_v9/onnx/deit_tiny/deit_tiny_model_fp32_20260118_104712.onnx \
   --mode memory \
   --cpu-affinity 0-3 \
   --intra 4 --inter 1 --execution-mode sequential \
+  --seed 42 --fill random \
   --warmup 50 --runs 1000 \
   --mem-interval-ms 1 \
   --mem-include-warmup true \
@@ -69,8 +68,8 @@ python3 onnx_benchmark.py \
 from __future__ import annotations
 
 import argparse
-import datetime
 import json
+import re
 import os
 import platform
 import subprocess
@@ -171,7 +170,6 @@ def apply_env_thread_vars(vals: Dict[str, Optional[int]]) -> None:
         os.environ[k] = str(int(v))
 
 
-
 def read_cpu_governor() -> Optional[str]:
     # Works on many Linux systems (including Pi) if cpufreq is available
     p = "/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor"
@@ -180,80 +178,6 @@ def read_cpu_governor() -> Optional[str]:
             return f.read().strip()
     except Exception:
         return None
-
-
-def _read_int_file(path: str) -> Optional[int]:
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            s = f.read().strip()
-        return int(s)
-    except Exception:
-        return None
-
-
-def read_cpu_freq_khz() -> Optional[Dict[str, Any]]:
-    """
-    Return per-core current frequency in kHz if available.
-    On Raspberry Pi, scaling_cur_freq/cpuinfo_cur_freq may exist depending on kernel config.
-    """
-    base = "/sys/devices/system/cpu"
-    if not os.path.isdir(base):
-        return None
-
-    per_core: Dict[int, Optional[int]] = {}
-    for i in range(os.cpu_count() or 1):
-        # Prefer scaling_cur_freq, fallback cpuinfo_cur_freq
-        p1 = f"{base}/cpu{i}/cpufreq/scaling_cur_freq"
-        p2 = f"{base}/cpu{i}/cpufreq/cpuinfo_cur_freq"
-        v = _read_int_file(p1)
-        if v is None:
-            v = _read_int_file(p2)
-        per_core[i] = v
-
-    vals = [v for v in per_core.values() if isinstance(v, int)]
-    if not vals:
-        return None
-
-    return {
-        "per_core_khz": {str(k): v for k, v in per_core.items()},
-        "avg_khz": sum(vals) / len(vals),
-        "min_khz": min(vals),
-        "max_khz": max(vals),
-    }
-
-
-def read_cpu_temperature_c() -> Optional[float]:
-    """
-    Raspberry Pi typical: /sys/class/thermal/thermal_zone0/temp in millidegree C.
-    """
-    v = _read_int_file("/sys/class/thermal/thermal_zone0/temp")
-    if v is None:
-        return None
-    # millidegree C -> C
-    return v / 1000.0
-
-
-def capture_telemetry() -> Dict[str, Any]:
-    """
-    Capture governor/clock/temp snapshot. Safe to call on non-Pi too.
-    """
-    return {
-        "cpu_governor": read_cpu_governor(),
-        "cpu_freq": read_cpu_freq_khz(),
-        "cpu_temp_c": read_cpu_temperature_c(),
-    }
-
-
-def default_json_name(ts_iso: Optional[str] = None) -> str:
-    """
-    Default filename: onnx_benchmark_YYYYMMDD_HHMMSS.json
-    """
-    if ts_iso is None:
-        ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    else:
-        # ts_iso: YYYY-MM-DDTHH:MM:SS
-        ts = ts_iso.replace("-", "").replace(":", "").replace("T", "_")
-    return f"onnx_benchmark_{ts}.json"
 
 
 # -------------------------
@@ -333,6 +257,72 @@ def percentile(values: Sequence[float], p: float, np) -> float:
 def mb(x_bytes: int) -> float:
     return x_bytes / (1024.0 * 1024.0)
 
+
+def summarize_sample(xs: List[float]) -> Dict[str, float]:
+    """
+    Sample statistics across repeats (recommended for paper reporting):
+    - std: sample standard deviation (denominator n-1)
+    - var: sample variance (denominator n-1)
+    """
+    if not xs:
+        return {}
+    import statistics as _st
+    n = len(xs)
+    mean = float(_st.mean(xs))
+    std = float(_st.stdev(xs)) if n > 1 else 0.0
+    var = float(_st.variance(xs)) if n > 1 else 0.0
+    return {
+        "n": float(n),
+        "mean": mean,
+        "std": std,
+        "var": var,
+        "min": float(min(xs)),
+        "max": float(max(xs)),
+    }
+
+
+def parse_time_v_maxrss_kb(text: str) -> Optional[int]:
+    """
+    Parse `/usr/bin/time -v` output and extract:
+      Maximum resident set size (kbytes): <int>
+    Robust to ANSI escape sequences.
+    """
+    ansi = re.compile(r"\x1b\[[0-9;]*m")
+    text = ansi.sub("", text)
+    m = re.search(r"Maximum resident set size \(kbytes\):\s*(\d+)", text, flags=re.IGNORECASE)
+    if not m:
+        return None
+    return int(m.group(1))
+
+
+def summarize_time_files(glob_pattern: str) -> Dict[str, Any]:
+    """
+    Summarize Max RSS across multiple `time_*.txt` files produced by `/usr/bin/time -v`.
+    Returns MB mean/std/var (sample stats) + per-file values.
+    """
+    import glob
+    files = sorted(glob.glob(glob_pattern))
+    if not files:
+        raise FileNotFoundError(f"No files matched: {glob_pattern}")
+
+    rows = []
+    vals_mb: List[float] = []
+    for fn in files:
+        with open(fn, "r", encoding="utf-8", errors="ignore") as f:
+            txt = f.read()
+        kb = parse_time_v_maxrss_kb(txt)
+        if kb is None:
+            raise ValueError(f"Max RSS not found in file: {fn}")
+        mb_val = kb / 1024.0
+        rows.append({"file": fn, "max_rss_kb": kb, "max_rss_mb": mb_val})
+        vals_mb.append(mb_val)
+
+    summ = summarize_sample(vals_mb)
+    return {
+        "glob": glob_pattern,
+        "files": rows,
+        "summary_mb": summ,
+    }
 
 class RssSampler:
     """Background RSS sampler (psutil) to estimate peak RSS within a region."""
@@ -514,9 +504,6 @@ def run_single(args) -> Dict[str, Any]:
         "input": {},
     }
 
-    # Telemetry snapshot (governor/freq/temp) for reproducibility
-    report["platform"]["telemetry_before"] = capture_telemetry()
-
     # Session (for latency/both). For memory mode we load inside measured block to capture load.
     sess = None
     if args.mode in ("latency", "both"):
@@ -621,9 +608,6 @@ def run_single(args) -> Dict[str, Any]:
         }
         report["memory"] = mem
 
-    # Telemetry snapshot after run
-    report["platform"]["telemetry_after"] = capture_telemetry()
-
     return report
 
 
@@ -638,48 +622,61 @@ def aggregate_reports(reports: List[Dict[str, Any]]) -> Dict[str, Any]:
         "runs": reports,
     }
 
-    # Latency: aggregate mean/std/p50/p95/p99 across repeats (as distribution over runs)
-    lat_means = []
-    lat_p50s = []
-    lat_p95s = []
-    lat_p99s = []
+    # ---- Latency across repeats (sample stats; n-1) ----
+    lat_mean_ms: List[float] = []
+    lat_p50_ms: List[float] = []
+    lat_p95_ms: List[float] = []
+    lat_p99_ms: List[float] = []
+
     for r in reports:
-        if "latency" in r:
-            lat_means.append(r["latency"]["mean_ms"])
-            lat_p50s.append(r["latency"]["p50_ms"])
-            lat_p95s.append(r["latency"]["p95_ms"])
-            lat_p99s.append(r["latency"]["p99_ms"])
+        lat = r.get("latency")
+        if not isinstance(lat, dict):
+            continue
+        lat_mean_ms.append(float(lat.get("mean_ms", float("nan"))))
+        lat_p50_ms.append(float(lat.get("p50_ms", float("nan"))))
+        lat_p95_ms.append(float(lat.get("p95_ms", float("nan"))))
+        lat_p99_ms.append(float(lat.get("p99_ms", float("nan"))))
 
-    def _summ(xs: List[float]) -> Dict[str, float]:
-        if not xs:
-            return {}
-        import statistics as _st
-        return {
-            "mean": float(_st.mean(xs)),
-            "std": float(_st.pstdev(xs)) if len(xs) > 1 else 0.0,
-            "min": float(min(xs)),
-            "max": float(max(xs)),
-        }
+    # Filter NaNs (defensive)
+    def _finite(xs: List[float]) -> List[float]:
+        import math
+        return [x for x in xs if isinstance(x, (int, float)) and math.isfinite(x)]
 
-    if lat_means:
+    lat_mean_ms = _finite(lat_mean_ms)
+    lat_p50_ms = _finite(lat_p50_ms)
+    lat_p95_ms = _finite(lat_p95_ms)
+    lat_p99_ms = _finite(lat_p99_ms)
+
+    if lat_mean_ms:
         out["latency_across_repeats_ms"] = {
-            "mean_ms": _summ(lat_means),
-            "p50_ms": _summ(lat_p50s),
-            "p95_ms": _summ(lat_p95s),
-            "p99_ms": _summ(lat_p99s),
+            "mean_ms": summarize_sample(lat_mean_ms),
+            "p50_ms": summarize_sample(lat_p50_ms),
+            "p95_ms": summarize_sample(lat_p95_ms),
+            "p99_ms": summarize_sample(lat_p99_ms),
         }
 
-    # Memory (aux): aggregate peak rss during infer/load across repeats
-    mem_peaks = []
-    mem_load_delta = []
+    # ---- Memory across repeats (sample stats; n-1) ----
+    mem_peak_infer_mb: List[float] = []
+    mem_delta_load_mb: List[float] = []
+    mem_delta_peak_infer_mb: List[float] = []
+
     for r in reports:
-        if "memory" in r:
-            mem_peaks.append(r["memory"]["peak_rss_during_infer_mb"])
-            mem_load_delta.append(r["memory"]["delta_load_mb"])
-    if mem_peaks:
+        mem = r.get("memory")
+        if not isinstance(mem, dict):
+            continue
+        mem_peak_infer_mb.append(float(mem.get("peak_rss_during_infer_mb", float("nan"))))
+        mem_delta_load_mb.append(float(mem.get("delta_load_mb", float("nan"))))
+        mem_delta_peak_infer_mb.append(float(mem.get("delta_peak_infer_from_before_infer_mb", float("nan"))))
+
+    mem_peak_infer_mb = _finite(mem_peak_infer_mb)
+    mem_delta_load_mb = _finite(mem_delta_load_mb)
+    mem_delta_peak_infer_mb = _finite(mem_delta_peak_infer_mb)
+
+    if mem_peak_infer_mb:
         out["memory_across_repeats_mb"] = {
-            "peak_rss_during_infer_mb": _summ(mem_peaks),
-            "delta_load_mb": _summ(mem_load_delta),
+            "peak_rss_during_infer_mb": summarize_sample(mem_peak_infer_mb),
+            "delta_load_mb": summarize_sample(mem_delta_load_mb),
+            "delta_peak_infer_from_before_infer_mb": summarize_sample(mem_delta_peak_infer_mb),
         }
 
     return out
@@ -777,6 +774,10 @@ def build_parser() -> argparse.ArgumentParser:
     # output
     p.add_argument("--json-out", default=None, help="Write report JSON to path")
 
+    # post-processing helper: summarize `/usr/bin/time -v` outputs
+    p.add_argument("--summarize-time-glob", default=None,
+                   help='If set, parse matching files (e.g., "time_*.txt") and print Max RSS mean/std/var in MB, then exit.')
+
     # internal
     p.add_argument("--_child", type=str2bool, default=False, help=argparse.SUPPRESS)
 
@@ -787,9 +788,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
 
-    # Default JSON filename for reproducibility logs (non-child only)
-    if not args._child and (args.json_out is None or str(args.json_out).strip() == ""):
-        args.json_out = default_json_name()
+    # Helper mode: summarize `/usr/bin/time -v` files (Max RSS) and exit
+    if not args._child and args.summarize_time_glob:
+        rep = summarize_time_files(args.summarize_time_glob)
+        s = rep["summary_mb"]
+        print(f"[TIME -v] Max RSS across files '{rep['glob']}': {s['mean']:.3f} ± {s['std']:.3f} MB (var {s['var']:.6f}, n={int(s['n'])})")
+        print(f"[TIME -v] min/max (MB): {s['min']:.3f} / {s['max']:.3f}")
+        return 0
 
     # ---- Strong control: CPU affinity ----
     if args.cpu_affinity:
@@ -817,13 +822,37 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             os.makedirs(os.path.dirname(os.path.abspath(args.json_out)), exist_ok=True)
             with open(args.json_out, "w", encoding="utf-8") as f:
                 json.dump(agg, f, indent=2)
-        # human-readable summary
+        # human-readable summary (sample stats across repeats; var uses n-1)
         if "latency_across_repeats_ms" in agg:
-            s = agg["latency_across_repeats_ms"]["mean_ms"]
-            print(f"[REPEAT x{args.repeat}] latency mean_ms across repeats: {s['mean']:.4f} ± {s['std']:.4f} (min {s['min']:.4f}, max {s['max']:.4f})")
+            L = agg["latency_across_repeats_ms"]
+            for key in ("mean_ms", "p50_ms", "p95_ms", "p99_ms"):
+                s = L.get(key, {})
+                if s:
+                    print(
+                        f"[REPEAT x{args.repeat}] latency {key} across repeats: "
+                        f"{s['mean']:.4f} ± {s['std']:.4f} ms (var {s['var']:.6f}, min {s['min']:.4f}, max {s['max']:.4f})"
+                    )
+
         if "memory_across_repeats_mb" in agg:
-            s = agg["memory_across_repeats_mb"]["peak_rss_during_infer_mb"]
-            print(f"[REPEAT x{args.repeat}] memory peak_rss_during_infer_mb across repeats: {s['mean']:.3f} ± {s['std']:.3f}")
+            M = agg["memory_across_repeats_mb"]
+            s = M.get("peak_rss_during_infer_mb", {})
+            if s:
+                print(
+                    f"[REPEAT x{args.repeat}] memory peak_rss_during_infer_mb across repeats: "
+                    f"{s['mean']:.3f} ± {s['std']:.3f} MB (var {s['var']:.6f}, min {s['min']:.3f}, max {s['max']:.3f})"
+                )
+            s = M.get("delta_load_mb", {})
+            if s:
+                print(
+                    f"[REPEAT x{args.repeat}] memory delta_load_mb across repeats: "
+                    f"{s['mean']:.3f} ± {s['std']:.3f} MB (var {s['var']:.6f}, min {s['min']:.3f}, max {s['max']:.3f})"
+                )
+            s = M.get("delta_peak_infer_from_before_infer_mb", {})
+            if s:
+                print(
+                    f"[REPEAT x{args.repeat}] memory delta_peak_infer_from_before_infer_mb across repeats: "
+                    f"{s['mean']:.3f} ± {s['std']:.3f} MB (var {s['var']:.6f}, min {s['min']:.3f}, max {s['max']:.3f})"
+                )
         return 0
 
     # ---- Single run ----
