@@ -1,5 +1,0 @@
-model_name: efficientnet_b0
-pruning_method: fpgm
-target_type: params
-target_value: 0.031371
-optimal_sparsity: 0.9344091796874999

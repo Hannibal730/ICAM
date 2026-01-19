@@ -1,5 +1,0 @@
-model_name: mobilenet_v4_s
-pruning_method: wanda
-target_type: params
-target_value: 0.031371
-optimal_sparsity: 0.9025048828125001

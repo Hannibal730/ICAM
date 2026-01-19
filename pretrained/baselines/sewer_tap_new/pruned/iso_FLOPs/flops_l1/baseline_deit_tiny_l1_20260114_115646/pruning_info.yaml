@@ -1,5 +1,0 @@
-model_name: deit_tiny
-pruning_method: l1
-target_type: flops
-target_value: 0.1829
-optimal_sparsity: 0.816943359375
