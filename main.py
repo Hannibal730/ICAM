@@ -17,6 +17,7 @@ from datetime import datetime
 import random
 import time 
 import gc
+import copy
 from models import Model as DecoderBackbone, PatchConvEncoder, Classifier, HybridModel
 
 try:
@@ -64,7 +65,7 @@ from plot import plot_and_save_train_val_accuracy_graph, plot_and_save_val_accur
 # =============================================================================
 # 1. 로깅 설정
 # =============================================================================
-def setup_logging(run_cfg, data_dir_name):
+def setup_logging(run_cfg, data_dir_name, run_name_suffix=None):
     """로그 파일을 log 폴더에 생성하고, 콘솔에도 함께 출력하도록 설정합니다."""
     show_log = getattr(run_cfg, 'show_log', True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -78,6 +79,8 @@ def setup_logging(run_cfg, data_dir_name):
 
     # 각 실행을 위한 고유한 디렉토리 생성
     run_dir_name = f"main_{timestamp}"
+    if run_name_suffix:
+        run_dir_name = f"{run_dir_name}_{run_name_suffix}"
     run_dir_path = os.path.join("log", data_dir_name, run_dir_name)
     os.makedirs(run_dir_path, exist_ok=True)
     
@@ -110,9 +113,8 @@ def log_model_parameters(model):
     cnn_feature_extractor = model.encoder.shared_conv[0]
     conv_front_params = count_parameters(cnn_feature_extractor.conv_front)
     conv_1x1_params = count_parameters(cnn_feature_extractor.conv_1x1)
-    patch_mixer_params = count_parameters(model.encoder.patch_mixer)
     encoder_norm_params = count_parameters(model.encoder.norm)
-    encoder_total_params = conv_front_params + conv_1x1_params + patch_mixer_params + encoder_norm_params
+    encoder_total_params = conv_front_params + conv_1x1_params + encoder_norm_params
 
     # 2. Decoder (DecoderBackbone) 내부 파라미터 계산
     embedding_module = model.decoder.embedding4decoder
@@ -155,7 +157,6 @@ def log_model_parameters(model):
     logging.info(f"  - Encoder (PatchConvEncoder):         {encoder_total_params:,} 개")
     logging.info(f"    - conv_front (CNN Backbone):        {conv_front_params:,} 개")
     logging.info(f"    - 1x1_conv (Channel Proj):          {conv_1x1_params:,} 개")
-    logging.info(f"    - patch_mixer (Depthwise Conv):     {patch_mixer_params:,} 개")
     logging.info(f"    - norm (LayerNorm):                 {encoder_norm_params:,} 개")
     logging.info(f"  - Decoder (Cross-Attention-based):    {decoder_total_params:,} 개")
     logging.info(f"    - Embedding Layer (W_feat2emb):     {w_feat2emb_params:,} 개")
@@ -881,30 +882,42 @@ def main():
         logging.info(f"전역 랜덤 시드를 {global_seed}로 고정합니다.")
 
     # --- 실행 디렉토리 설정 ---
+    # 훈련/추론별 실행 디렉토리 및 로깅 설정
+    # 폴더 이름에 주요 모델 설정을 포함시킵니다.
+    run_suffix = f"grid{model_cfg.grid_size}_patch{model_cfg.num_decoder_patches}_layer{model_cfg.num_decoder_layers}_head{model_cfg.num_heads}"
+
     if run_cfg.mode == 'train':
-        # 훈련 모드: 새로운 실행 디렉토리 생성
-        run_dir_path, timestamp = setup_logging(run_cfg, data_dir_name) # 여기서 run_dir_path와 timestamp가 반환됨
-    elif run_cfg.mode == 'inference':
-        # ONNX 직접 추론 경로가 설정되었는지 확인
+        run_dir_path, timestamp = setup_logging(run_cfg, data_dir_name, run_name_suffix=run_suffix)
+        log_dir_path = run_dir_path
+    else:
+        # 추론 모드: pth_inference_dir 또는 onnx_inference_path 사용
         onnx_inference_path = getattr(run_cfg, 'onnx_inference_path', None)
         if not (onnx_inference_path and os.path.exists(onnx_inference_path)):
-            # ONNX 경로가 없는 경우에만 pth_inference_dir 경로를 검사합니다.
             run_dir_path = getattr(run_cfg, 'pth_inference_dir', None)
             if getattr(run_cfg, 'show_log', True) and (not run_dir_path or not os.path.isdir(run_dir_path)):
                 logging.error("추론 모드에서는 'config.yaml'에 'pth_inference_dir'를 올바르게 설정해야 합니다.")
-                exit()
+                return
         else:
-            # ONNX 경로가 있으면 pth_inference_dir은 무시하고 현재 디렉토리를 임시로 사용합니다.
             run_dir_path = '.'
-        log_dir_path, timestamp = setup_logging(run_cfg, data_dir_name)
-    
+        log_dir_path, timestamp = setup_logging(run_cfg, data_dir_name, run_name_suffix=run_suffix)
+
+    # --- 전역 시드 고정 (로그 파일에 남기기 위해 setup_logging 이후 실행) ---
+    global_seed = getattr(run_cfg, 'global_seed', None)
+    if global_seed is not None:
+        random.seed(global_seed)
+        os.environ['PYTHONHASHSEED'] = str(global_seed)
+        np.random.seed(global_seed)
+        torch.manual_seed(global_seed)
+        torch.cuda.manual_seed(global_seed)
+        logging.info(f"전역 랜덤 시드를 {global_seed}로 고정합니다.")
+
     # --- 설정 파일 내용 로깅 ---
     config_str = yaml.dump(config, allow_unicode=True, default_flow_style=False, sort_keys=False)
     logging.info("="*50)
     logging.info("config.yaml:")
     logging.info("\n" + config_str)
     logging.info("="*50)
-    
+
     # --- 공통 파라미터 설정 ---
     use_cuda_if_available = getattr(run_cfg, 'cuda', True)
     device = torch.device("cuda" if use_cuda_if_available and torch.cuda.is_available() else "cpu")
@@ -925,13 +938,15 @@ def main():
     train_loader, valid_loader, test_loader, num_labels, class_names, pos_weight = prepare_data(run_cfg, train_cfg, model_cfg)
 
     # --- 모델 구성 ---
-    # stride를 고려하여 인코더 패치 수 계산
-    num_patches_per_dim = (model_cfg.img_size - model_cfg.patch_size) // model_cfg.stride + 1
-    num_encoder_patches = num_patches_per_dim ** 2
-    logging.info(f"이미지 크기: {model_cfg.img_size}, 패치 크기: {model_cfg.patch_size}, Stride: {model_cfg.stride} -> 인코더 패치 수: {num_encoder_patches}개")
-    
+    num_patches_h = model_cfg.grid_size
+    num_patches_w = model_cfg.grid_size
+    num_encoder_patches = num_patches_h * num_patches_w
+    logging.info(f"이미지 크기: {model_cfg.img_size}, 그리드 크기: {model_cfg.grid_size}x{model_cfg.grid_size} -> 인코더 패치 수: {num_encoder_patches}개")
+
     decoder_params = {
         'num_encoder_patches': num_encoder_patches,
+        'grid_size_h': num_patches_h,
+        'grid_size_w': num_patches_w,
         'num_labels': num_labels,
         'num_decoder_layers': model_cfg.num_decoder_layers,
         'num_decoder_patches': model_cfg.num_decoder_patches,
@@ -947,13 +962,21 @@ def main():
     }
     decoder_args = SimpleNamespace(**decoder_params)
 
-    encoder = PatchConvEncoder(img_size=model_cfg.img_size, patch_size=model_cfg.patch_size, stride=model_cfg.stride,
-                                featured_patch_dim=model_cfg.featured_patch_dim, cnn_feature_extractor_name=model_cfg.cnn_feature_extractor['name'],
-                                pre_trained=train_cfg.pre_trained)
-    decoder = DecoderBackbone(args=decoder_args) # models.py의 Model 클래스
-    
-    classifier = Classifier(num_decoder_patches=model_cfg.num_decoder_patches,
-                            featured_patch_dim=model_cfg.featured_patch_dim, num_labels=num_labels, dropout=model_cfg.dropout)
+    encoder = PatchConvEncoder(
+        grid_size=model_cfg.grid_size,
+        featured_patch_dim=model_cfg.featured_patch_dim,
+        cnn_feature_extractor_name=model_cfg.cnn_feature_extractor['name'],
+        pre_trained=train_cfg.pre_trained,
+    )
+    decoder = DecoderBackbone(args=decoder_args)
+
+    # pooling head로 입력 차원이 고정되므로, classifier는 Q에 의존하지 않습니다.
+    classifier = Classifier(
+        num_decoder_patches=model_cfg.num_decoder_patches,
+        featured_patch_dim=model_cfg.featured_patch_dim,
+        num_labels=num_labels,
+        dropout=model_cfg.dropout,
+    )
     model = HybridModel(encoder, decoder, classifier).to(device)
 
     # 모델 생성 후 파라미터 수 로깅

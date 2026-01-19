@@ -112,8 +112,7 @@ def get_default_config():
         'training_run': {},
         'model': {
             'img_size': 224,
-            'patch_size': 56,
-            'stride': 56,
+            'grid_size': 7,
             'cnn_feature_extractor': {'name': 'efficientnet_b0_feat2'},
             'featured_patch_dim': 24,
             'emb_dim': 24,
@@ -397,8 +396,7 @@ def main():
 
     else:
         logging.info("Building HYBRID (Proposed) model...")
-        num_patches_per_dim = (model_cfg.img_size - model_cfg.patch_size) // model_cfg.stride + 1
-        num_encoder_patches = num_patches_per_dim ** 2
+        num_encoder_patches = model_cfg.grid_size ** 2
         
         decoder_params = {
             'num_encoder_patches': num_encoder_patches,
@@ -417,7 +415,7 @@ def main():
         }
         decoder_args = SimpleNamespace(**decoder_params)
 
-        encoder = PatchConvEncoder(img_size=model_cfg.img_size, patch_size=model_cfg.patch_size, stride=model_cfg.stride,
+        encoder = PatchConvEncoder(grid_size=model_cfg.grid_size,
                                     featured_patch_dim=model_cfg.featured_patch_dim, cnn_feature_extractor_name=model_cfg.cnn_feature_extractor.name,
                                     pre_trained=False)
         decoder = DecoderBackbone(args=decoder_args)

@@ -1,7 +1,10 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import timm
+try:
+    import timm
+except ImportError:  # timm is optional unless you select a timm-based backbone
+    timm = None
 import math
 from torch import Tensor
 from torchvision import models
@@ -13,7 +16,10 @@ class CnnFeatureExtractor(nn.Module):
     """
     다양한 CNN 아키텍처의 앞부분을 특징 추출기로 사용하는 범용 클래스입니다.
     config.yaml의 `cnn_feature_extractor.name` 설정에 따라 모델 구조가 결정됩니다.
+
+    출력: [B, featured_patch_dim, Hf, Wf]
     """
+
     def __init__(self, cnn_feature_extractor_name='resnet18_layer1', pretrained=True, featured_patch_dim=None):
         super().__init__()
         self.cnn_feature_extractor_name = cnn_feature_extractor_name
@@ -21,52 +27,60 @@ class CnnFeatureExtractor(nn.Module):
         # CNN 모델 이름에 따라 모델과 잘라낼 레이어, 기본 출력 채널을 설정합니다.
         if cnn_feature_extractor_name == 'resnet18_layer1':
             base_model = models.resnet18(weights=models.ResNet18_Weights.IMAGENET1K_V1 if pretrained else None)
-            self.conv_front = nn.Sequential(*list(base_model.children())[:5]) # layer1까지
+            self.conv_front = nn.Sequential(*list(base_model.children())[:5])  # layer1까지
             base_out_channels = 64
         elif cnn_feature_extractor_name == 'resnet18_layer2':
             base_model = models.resnet18(weights=models.ResNet18_Weights.IMAGENET1K_V1 if pretrained else None)
-            self.conv_front = nn.Sequential(*list(base_model.children())[:6]) # layer2까지
+            self.conv_front = nn.Sequential(*list(base_model.children())[:6])  # layer2까지
             base_out_channels = 128
-            
+
         elif cnn_feature_extractor_name == 'mobilenet_v3_small_feat1':
             base_model = models.mobilenet_v3_small(weights=models.MobileNet_V3_Small_Weights.IMAGENET1K_V1 if pretrained else None)
-            self.conv_front = base_model.features[:2] # features의 2번째 블록까지
+            self.conv_front = base_model.features[:2]  # features의 2번째 블록까지
             base_out_channels = 16
         elif cnn_feature_extractor_name == 'mobilenet_v3_small_feat3':
             base_model = models.mobilenet_v3_small(weights=models.MobileNet_V3_Small_Weights.IMAGENET1K_V1 if pretrained else None)
-            self.conv_front = base_model.features[:4] # features의 4번째 블록까지
+            self.conv_front = base_model.features[:4]  # features의 4번째 블록까지
             base_out_channels = 24
         elif cnn_feature_extractor_name == 'mobilenet_v3_small_feat4':
             base_model = models.mobilenet_v3_small(weights=models.MobileNet_V3_Small_Weights.IMAGENET1K_V1 if pretrained else None)
-            self.conv_front = base_model.features[:5] # features의 5번째 블록까지
+            self.conv_front = base_model.features[:5]  # features의 5번째 블록까지
             base_out_channels = 40
-            
+
         elif cnn_feature_extractor_name == 'efficientnet_b0_feat2':
             base_model = models.efficientnet_b0(weights=models.EfficientNet_B0_Weights.IMAGENET1K_V1 if pretrained else None)
-            self.conv_front = base_model.features[:3] # features의 3번째 블록까지
+            self.conv_front = base_model.features[:3]  # features의 3번째 블록까지
             base_out_channels = 24
         elif cnn_feature_extractor_name == 'efficientnet_b0_feat3':
             base_model = models.efficientnet_b0(weights=models.EfficientNet_B0_Weights.IMAGENET1K_V1 if pretrained else None)
-            self.conv_front = base_model.features[:4] # features의 4번째 블록까지
+            self.conv_front = base_model.features[:4]  # features의 4번째 블록까지
             base_out_channels = 40
 
         # --- MobileNetV4 (timm) ---
         elif cnn_feature_extractor_name == 'mobilenet_v4_feat1':
+            if timm is None:
+                raise ImportError("timm is required for mobilenet_v4_* backbones. Install with: pip install timm")
             base_model = timm.create_model('mobilenetv4_conv_small', pretrained=pretrained, features_only=True, out_indices=(0,))
             self.conv_front = base_model
-            base_out_channels = 32 # feat1 출력 채널
+            base_out_channels = 32  # feat1 출력 채널
         elif cnn_feature_extractor_name == 'mobilenet_v4_feat2':
+            if timm is None:
+                raise ImportError("timm is required for mobilenet_v4_* backbones. Install with: pip install timm")
             base_model = timm.create_model('mobilenetv4_conv_small', pretrained=pretrained, features_only=True, out_indices=(0, 1))
             self.conv_front = base_model
-            base_out_channels = 48 # feat2 출력 채널
+            base_out_channels = 48  # feat2 출력 채널
         elif cnn_feature_extractor_name == 'mobilenet_v4_feat3':
+            if timm is None:
+                raise ImportError("timm is required for mobilenet_v4_* backbones. Install with: pip install timm")
             base_model = timm.create_model('mobilenetv4_conv_small', pretrained=pretrained, features_only=True, out_indices=(0, 1, 2))
             self.conv_front = base_model
-            base_out_channels = 64 # feat3 출력 채널
+            base_out_channels = 64  # feat3 출력 채널
         elif cnn_feature_extractor_name == 'mobilenet_v4_feat4':
+            if timm is None:
+                raise ImportError("timm is required for mobilenet_v4_* backbones. Install with: pip install timm")
             base_model = timm.create_model('mobilenetv4_conv_small', pretrained=pretrained, features_only=True, out_indices=(0, 1, 2, 3))
             self.conv_front = base_model
-            base_out_channels = 96 # feat4 출력 채널
+            base_out_channels = 96  # feat4 출력 채널
 
         else:
             raise ValueError(f"지원하지 않는 CNN 피처 추출기 이름입니다: {cnn_feature_extractor_name}")
@@ -79,80 +93,68 @@ class CnnFeatureExtractor(nn.Module):
 
     def forward(self, x):
         x = self.conv_front(x)
-        x = self.conv_1x1(x) # 최종 채널 수 조정
 
         # timm의 features_only=True 모델은 리스트를 반환하므로 마지막 요소만 사용
         if isinstance(x, list):
             x = x[-1]
 
+        x = self.conv_1x1(x)  # 최종 채널 수 조정
         return x
 
+
 class PatchConvEncoder(nn.Module):
-    """이미지를 패치로 나누고, 각 패치에서 특징을 추출하여 1D 시퀀스로 변환하는 인코더입니다."""
-    def __init__(self, img_size, patch_size, stride, featured_patch_dim, cnn_feature_extractor_name, pre_trained=True):
+    """Full-frame CNN 1회 + Grid Pooling으로 패치 토큰을 생성하는 인코더.
+
+    - self-attention 없음
+    - (제거됨) patch_mixer: 토큰 간 depthwise mixing을 제거하여 latency/memory를 더 안정화
+
+    출력: [B, N, D] (N = num_patches_H * num_patches_W)
+
+    참고: patch_size/stride는 토큰 그리드 크기(H_p, W_p)를 결정하는 하이퍼파라미터로 사용됩니다.
+    (기존처럼 실제 패치를 잘라 CNN을 여러 번 돌리지는 않습니다.)
+    """
+
+    def __init__(self, grid_size, featured_patch_dim, cnn_feature_extractor_name, pre_trained=True):
         super(PatchConvEncoder, self).__init__()
-        self.patch_size = patch_size
-        self.stride = stride
+        self.grid_size = grid_size
         self.featured_patch_dim = featured_patch_dim
 
-        # stride를 고려한 패치 수 계산 (H, W 각각 계산)
-        self.num_patches_H = (img_size - self.patch_size) // self.stride + 1
-        self.num_patches_W = (img_size - self.patch_size) // self.stride + 1
+        self.num_patches_H = grid_size
+        self.num_patches_W = grid_size
         self.num_encoder_patches = self.num_patches_H * self.num_patches_W
 
-        # 1. Shared CNN Feature Extractor
+        # 1) Full-frame CNN feature extractor (1회)
+        #    main.py의 파라미터 로깅 호환을 위해 shared_conv[0]에 extractor가 위치하도록 유지
         self.shared_conv = nn.Sequential(
-            CnnFeatureExtractor(cnn_feature_extractor_name=cnn_feature_extractor_name, pretrained=pre_trained, featured_patch_dim=featured_patch_dim),
-            nn.AdaptiveAvgPool2d((1, 1)),
-            nn.Flatten(start_dim=1) # [B*num_encoder_patches, D]
-        )
-        
-        # 2. Patch Mixer (Idea 2-1): 패치 간 정보 교환을 위한 Depthwise Convolution
-        self.patch_mixer = nn.Sequential(
-            nn.Conv2d(featured_patch_dim, featured_patch_dim, kernel_size=3, padding=1, groups=featured_patch_dim, bias=False),
-            nn.BatchNorm2d(featured_patch_dim),
-            nn.ReLU(inplace=True)
+            CnnFeatureExtractor(
+                cnn_feature_extractor_name=cnn_feature_extractor_name,
+                pretrained=pre_trained,
+                featured_patch_dim=featured_patch_dim,
+            )
         )
 
+        # 2) Grid pooling: feature map -> [B, D, H_p, W_p]
+        self.grid_pool = nn.AdaptiveAvgPool2d((self.num_patches_H, self.num_patches_W))
+
+        # 3) Token norm
         self.norm = nn.LayerNorm(featured_patch_dim)
 
     def forward(self, x):
-        B, C, H, W = x.shape
-        # 이미지를 패치로 분할
-        # [Optimization] stride == patch_size인 경우 unfold 대신 view/permute 사용 (메모리 효율성 향상)
-        if self.patch_size == self.stride:
-            patches = x.view(B, C, H // self.patch_size, self.patch_size, W // self.patch_size, self.patch_size)
-            # [Fix] Remove NHWC round-trip to improve latency. Use standard NCHW layout.
-            # (B, C, H_p, p, W_p, p) -> (B, H_p, W_p, C, p, p)
-            patches = patches.permute(0, 2, 4, 1, 3, 5).contiguous()
-            patches = patches.view(-1, C, self.patch_size, self.patch_size)
-        else:
-            patches = x.unfold(2, self.patch_size, self.stride).unfold(3, self.patch_size, self.stride)
-            # [Optimization] Produce channels_last layout
-            patches = patches.permute(0, 2, 3, 4, 5, 1).contiguous()
-            patches = patches.view(-1, self.patch_size, self.patch_size, C).permute(0, 3, 1, 2)
-        # patches: [B * num_patches, C, patch_size, patch_size]
-        
-        # 각 패치별 특징 추출
-        conv_outs = self.shared_conv(patches) # [B * num_patches, D]
-        
-        # --- Patch Mixing ---
-        # 1. Grid 복원: [B * (H_p * W_p), D] -> [B, D, H_p, W_p]
-        #    이 과정은 단순 View 연산으로 비용이 거의 들지 않습니다.
-        #    하지만 이를 통해 인접 패치(상하좌우)가 누구인지 알 수 있게 됩니다.
-        conv_outs_grid = conv_outs.view(B, self.num_patches_H, self.num_patches_W, self.featured_patch_dim).permute(0, 3, 1, 2)
-        
-        # 2. Mixing: Depthwise Conv로 인접 패치 정보 섞기
-        mixed_outs = self.patch_mixer(conv_outs_grid)
-        
-        # 3. Flatten: 다시 시퀀스로 변환 [B, D, H_p, W_p] -> [B, H_p * W_p, D]
-        #    permute(0, 2, 3, 1) -> [B, H_p, W_p, D]
-        mixed_outs = mixed_outs.permute(0, 2, 3, 1).contiguous().view(B, -1, self.featured_patch_dim)
+        # x: [B, C, H, W]
+        B = x.shape[0]
 
-        # Layer Normalization 적용
-        mixed_outs = self.norm(mixed_outs)
-        
-        return mixed_outs
+        # 1) Full-frame CNN
+        feat = self.shared_conv(x)  # [B, D, Hf, Wf]
+
+        # 2) Grid pooling -> [B, D, H_p, W_p]
+        grid = self.grid_pool(feat)
+
+        # 3) Flatten: [B, D, H_p, W_p] -> [B, H_p*W_p, D]
+        tokens = grid.permute(0, 2, 3, 1).contiguous().view(B, -1, self.featured_patch_dim)
+
+        # Layer Normalization
+        tokens = self.norm(tokens)
+        return tokens
 
 # =============================================================================
 # 2. 디코더 모델 정의
@@ -283,17 +285,23 @@ class Embedding4Decoder(nn.Module):
             
 
 class Projection4Classifier(nn.Module):
-    """디코더의 출력을 받아 최종 분류기가 사용할 수 있는 특징 벡터로 변환합니다."""
+    """디코더의 출력을 받아 최종 분류기가 사용할 수 있는 고정 차원 특징 벡터로 변환합니다.
+
+    기존: [B, Q, emb_dim] -> Linear -> Flatten => [B, Q*D] (Q에 따라 입력 차원이 변함)
+    변경: [B, Q, emb_dim] -> Mean Pool(Q) -> Linear => [B, D] (Q와 무관하게 입력 차원 고정)
+    """
+
     def __init__(self, emb_dim, featured_patch_dim):
         super().__init__()
+    
         self.linear = nn.Linear(emb_dim, featured_patch_dim)
-        self.flatten = nn.Flatten(start_dim=-2)
 
     def forward(self, x):
-        x = self.linear(x)
-        x = self.flatten(x)
-        return x 
-            
+        # x: [B, Q, emb_dim]
+        x = x.mean(dim=1)  # [B, emb_dim]
+        x = self.linear(x)  # [B, featured_patch_dim]
+        return x
+
 class Decoder(nn.Module):
     def __init__(self, num_encoder_patches, emb_dim, num_heads, num_decoder_patches, decoder_ff_dim=None, attn_dropout=0., dropout=0.,
                     res_attention=False, num_decoder_layers=1, save_attention=False):
@@ -348,7 +356,7 @@ class DecoderLayer(nn.Module):
         seq_decoder = seq_decoder + self.dropout_ffn(ffn_out)  
         seq_decoder = self.norm_ffn(seq_decoder)
         
-        if self.res_attention: return seq_encoder, seq_decoder, scores
+        if self.res_attention: return seq_encoder_k, seq_decoder, scores
         else: return seq_encoder_k, seq_decoder
 
 class _MultiheadAttention(nn.Module):
@@ -412,13 +420,14 @@ class Model(nn.Module):
         positional_encoding = args.positional_encoding 
         save_attention = args.save_attention     
         res_attention = getattr(args, 'res_attention', False)
-        
-        # 2D PE 생성을 위해 그리드 크기 전달 (PatchConvEncoder에서 계산된 값 필요)
-        # num_encoder_patches는 제곱수라고 가정 (정사각형 이미지/패치)
-        grid_size = int(math.sqrt(num_encoder_patches))
-        grid_size_h = grid_size
-        grid_size_w = grid_size
-        # 만약 직사각형 이미지라면 이 추론은 틀릴 수 있지만, config에서 img_size 하나만 받으므로 정사각형 가정.
+        # 2D PE 생성을 위해 그리드 크기 전달 (main.py에서 계산된 값이 있으면 사용)
+        grid_size_h = getattr(args, 'grid_size_h', None)
+        grid_size_w = getattr(args, 'grid_size_w', None)
+        if grid_size_h is None or grid_size_w is None:
+            # fallback: 정사각형 그리드라고 가정
+            grid_size = int(math.sqrt(num_encoder_patches))
+            grid_size_h = grid_size
+            grid_size_w = grid_size
 
         decoder_ff_dim = emb_dim * decoder_ff_ratio 
 
@@ -447,7 +456,7 @@ class Classifier(nn.Module):
     """디코더 백본의 출력을 받아 최종 클래스 로짓으로 매핑하는 분류기입니다."""
     def __init__(self, num_decoder_patches, featured_patch_dim, num_labels, dropout):
         super().__init__()
-        input_dim = num_decoder_patches * featured_patch_dim 
+        input_dim = featured_patch_dim 
         hidden_dim = (input_dim + num_labels) // 2 
 
         self.projection = nn.Sequential(
