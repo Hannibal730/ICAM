@@ -16,7 +16,7 @@ SCI/EAAI 투고용 ONNX Runtime(ORT) CPU inference 벤치마크 스크립트 (Ra
 
 권장(투고용) 실행 예시 (Pi5, 4 cores)
 1) Latency (통제 강함):
-   OMP_NUM_THREADS=4 OPENBLAS_NUM_THREADS=4 \
+   OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 \
    python3 onnx_benchmark.py --onnx model.onnx --mode latency \
      --cpu-affinity 0-3 --intra 4 --inter 1 --execution-mode sequential \
      --warmup 50 --runs 1000 --repeat 5 --fresh-process true
@@ -24,6 +24,7 @@ SCI/EAAI 투고용 ONNX Runtime(ORT) CPU inference 벤치마크 스크립트 (Ra
 2) Peak RSS (paper-grade):
    (fresh-process + 외부 측정)
    for i in 1 2 3 4 5; do
+     OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 \
      /usr/bin/time -v python3 onnx_benchmark.py --onnx model.onnx --mode latency \
        --cpu-affinity 0-3 --intra 4 --inter 1 --execution-mode sequential \
        --warmup 50 --runs 1000 --json-out run_$i.json 1> run_$i.out 2> run_$i.time
@@ -31,14 +32,14 @@ SCI/EAAI 투고용 ONNX Runtime(ORT) CPU inference 벤치마크 스크립트 (Ra
    -> 'Maximum resident set size (kbytes)' 를 Peak RSS로 사용
 
 or
-
-    /usr/bin/time -v python3 onnx_benchmark.py \
-    --onnx /home/pi/Desktop/sewer_binary_cls_v9/onnx/deit_tiny/deit_tiny_model_fp32_20260118_104712.onnx \
-    --mode latency \
-    --cpu-affinity 0-3 \
-    --intra 4 --inter 1 --execution-mode sequential \
-    --seed 42 --fill random \
-    --warmup 50 --runs 1000
+OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 \
+/usr/bin/time -v python3 onnx_benchmark.py \
+--onnx /home/pi/Desktop/sewer_binary_cls_v9/onnx/deit_tiny/deit_tiny_model_fp32_20260118_104712.onnx \
+--mode latency \
+--cpu-affinity 0-3 \
+--intra 4 --inter 1 --execution-mode sequential \
+--seed 42 --fill random \
+--warmup 50 --runs 1000
 
 
 저장된 time_*.txt에서 Max RSS 평균/분산을 “로그로 출력”
@@ -47,6 +48,7 @@ peak_rss_stats.py
 
 
 3) Memory (보조 지표, Load delta RSS (MB), inference peak delta (MB)):
+OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 \
 python3 onnx_benchmark.py \
   --onnx /home/pi/Desktop/sewer_binary_cls_v9/onnx/deit_tiny/deit_tiny_model_fp32_20260118_104712.onnx \
   --mode memory \
@@ -56,7 +58,8 @@ python3 onnx_benchmark.py \
   --warmup 50 --runs 1000 \
   --mem-interval-ms 1 \
   --mem-include-warmup true \
-  --repeat 5 --fresh-process true
+  --repeat 5 --fresh-process true \
+  --json-out memory_benchmark.json
 
 
 
@@ -659,6 +662,7 @@ def aggregate_reports(reports: List[Dict[str, Any]]) -> Dict[str, Any]:
     mem_peak_infer_mb: List[float] = []
     mem_delta_load_mb: List[float] = []
     mem_delta_peak_infer_mb: List[float] = []
+    mem_delta_peak_total_mb: List[float] = []
 
     for r in reports:
         mem = r.get("memory")
@@ -667,16 +671,19 @@ def aggregate_reports(reports: List[Dict[str, Any]]) -> Dict[str, Any]:
         mem_peak_infer_mb.append(float(mem.get("peak_rss_during_infer_mb", float("nan"))))
         mem_delta_load_mb.append(float(mem.get("delta_load_mb", float("nan"))))
         mem_delta_peak_infer_mb.append(float(mem.get("delta_peak_infer_from_before_infer_mb", float("nan"))))
+        mem_delta_peak_total_mb.append(float(mem.get("delta_peak_total_from_before_load_mb", float("nan"))))
 
     mem_peak_infer_mb = _finite(mem_peak_infer_mb)
     mem_delta_load_mb = _finite(mem_delta_load_mb)
     mem_delta_peak_infer_mb = _finite(mem_delta_peak_infer_mb)
+    mem_delta_peak_total_mb = _finite(mem_delta_peak_total_mb)
 
     if mem_peak_infer_mb:
         out["memory_across_repeats_mb"] = {
             "peak_rss_during_infer_mb": summarize_sample(mem_peak_infer_mb),
             "delta_load_mb": summarize_sample(mem_delta_load_mb),
             "delta_peak_infer_from_before_infer_mb": summarize_sample(mem_delta_peak_infer_mb),
+            "delta_peak_total_from_before_load_mb": summarize_sample(mem_delta_peak_total_mb),
         }
 
     return out
@@ -851,6 +858,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             if s:
                 print(
                     f"[REPEAT x{args.repeat}] memory delta_peak_infer_from_before_infer_mb across repeats: "
+                    f"{s['mean']:.3f} ± {s['std']:.3f} MB (var {s['var']:.6f}, min {s['min']:.3f}, max {s['max']:.3f})"
+                )
+            s = M.get("delta_peak_total_from_before_load_mb", {})
+            if s:
+                print(
+                    f"[REPEAT x{args.repeat}] memory delta_peak_total_from_before_load_mb across repeats: "
                     f"{s['mean']:.3f} ± {s['std']:.3f} MB (var {s['var']:.6f}, min {s['min']:.3f}, max {s['max']:.3f})"
                 )
         return 0
