@@ -327,7 +327,8 @@ class Embedding4Decoder(nn.Module):
 
         # --- 학습 가능한 쿼리(Learnable Query) ---
         self.learnable_queries = nn.Parameter(torch.empty(num_decoder_patches, emb_dim))
-        nn.init.xavier_uniform_(self.learnable_queries)
+        # ViT/BERT 등에서 널리 사용되는 방식인 정규분포 초기화를 적용합니다.
+        nn.init.normal_(self.learnable_queries, std=0.02)
 
         # --- 2D Sinusoidal Positional Encoding (fixed) ---
         self.use_positional_encoding = positional_encoding
