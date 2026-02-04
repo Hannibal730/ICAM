@@ -561,8 +561,7 @@ class DecoderLayer(nn.Module):
 
         self.ffn = nn.Sequential(
             nn.Linear(emb_dim, decoder_ff_dim, bias=bias),
-            # [수정] ReLU6 -> GELU (최신 Transformer 트렌드 반영, 성능 향상)
-            nn.GELU(),
+            nn.ReLU6(inplace=True),
             nn.Dropout(dropout, inplace=True),
             nn.Linear(decoder_ff_dim, emb_dim, bias=bias),
         )
@@ -633,11 +632,6 @@ class _MultiheadAttention(nn.Module):
 
         self.concatheads2emb = nn.Sequential(nn.Linear(num_heads * head_dim, emb_dim), nn.Dropout(proj_dropout))
 
-        # [추가] QK-Norm (Query-Key Normalization) - ViT-22B 등 최신 모델 트렌드
-        # 학습 안정성을 높이고 성능을 개선함.
-        self.q_norm = nn.LayerNorm(head_dim)
-        self.k_norm = nn.LayerNorm(head_dim)
-
         # [Method B] inference cache: W_K(pos_embed) projected & head-split
         # shape: [1, H, N, Dh]
         self.register_buffer('_k_pos_cache', None, persistent=False)
@@ -668,8 +662,6 @@ class _MultiheadAttention(nn.Module):
 
         # Q Projection
         q_s = self.W_Q(Q).view(bs, -1, self.num_heads, self.head_dim).permute(0, 2, 1, 3)
-        # [추가] Apply QK-Norm
-        q_s = self.q_norm(q_s)
 
         # K projection (content)
         k_s = self.W_K(K).view(bs, -1, self.num_heads, self.head_dim).permute(0, 2, 1, 3)
@@ -688,9 +680,6 @@ class _MultiheadAttention(nn.Module):
                 k_pos = self.W_K(pos).view(1, -1, self.num_heads, self.head_dim).permute(0, 2, 1, 3)
                 k_s = k_s + k_pos
         
-        # [추가] Apply QK-Norm (Positional Encoding이 더해진 후 적용)
-        k_s = self.k_norm(k_s)
-
         v_s = self.W_V(V).view(bs, -1, self.num_heads, self.head_dim).permute(0, 2, 1, 3)
 
         attn_scores = torch.matmul(q_s, k_s.transpose(-1, -2)) * self.scale
