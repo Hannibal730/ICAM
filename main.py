@@ -106,6 +106,8 @@ def log_model_parameters(model):
     """모델의 구간별 및 총 파라미터 수를 계산하고 로깅합니다."""
     
     def count_parameters(m):
+        if m is None:
+            return 0
         return sum(p.numel() for p in m.parameters() if p.requires_grad)
 
     # Encoder 내부를 세분화하여 파라미터 계산
@@ -130,16 +132,16 @@ def log_model_parameters(model):
         query_params = embedding_module.learnable_queries.numel()
     
     w_feat2emb_params = count_parameters(embedding_module.W_feat2emb)
-    w_q_init_params = count_parameters(embedding_module.W_Q_init)
     
     w_k_init_params = 0
     w_v_init_params = 0
     if hasattr(embedding_module, 'W_K_init'):
         w_k_init_params = count_parameters(embedding_module.W_K_init)
+    if hasattr(embedding_module, 'W_V_init'):
         w_v_init_params = count_parameters(embedding_module.W_V_init)
 
     # Embedding4Decoder의 파라미터 총합 (내부 Decoder 레이어 제외)
-    embedding4decoder_total_params = w_feat2emb_params + w_q_init_params + w_k_init_params + w_v_init_params + query_params + pe_params
+    embedding4decoder_total_params = w_feat2emb_params + w_k_init_params + w_v_init_params + query_params + pe_params
 
     # Decoder 내부의 트랜스포머 레이어와 최종 프로젝션 레이어 파라미터 계산
     decoder_layers_params = count_parameters(model.decoder.embedding4decoder.decoder)
@@ -160,7 +162,6 @@ def log_model_parameters(model):
     logging.info(f"    - norm (LayerNorm):                 {encoder_norm_params:,} 개")
     logging.info(f"  - Decoder (Cross-Attention-based):    {decoder_total_params:,} 개")
     logging.info(f"    - Embedding Layer (W_feat2emb):     {w_feat2emb_params:,} 개")
-    logging.info(f"    - Init Query Proj (W_Q_init):       {w_q_init_params:,} 개")
     logging.info(f"    - Init Key Proj (W_K_init):         {w_k_init_params:,} 개")
     logging.info(f"    - Init Value Proj (W_V_init):       {w_v_init_params:,} 개")
     logging.info(f"    - Learnable Queries:                {query_params:,} 개")

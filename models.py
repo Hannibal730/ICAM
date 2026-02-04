@@ -323,11 +323,10 @@ class Embedding4Decoder(nn.Module):
 
         # --- 입력 인코딩 ---
         self.W_feat2emb = nn.Linear(featured_patch_dim, emb_dim)
-        self.W_Q_init = nn.Linear(featured_patch_dim, emb_dim)
         self.dropout = nn.Dropout(dropout, inplace=True)
 
         # --- 학습 가능한 쿼리(Learnable Query) ---
-        self.learnable_queries = nn.Parameter(torch.empty(num_decoder_patches, featured_patch_dim))
+        self.learnable_queries = nn.Parameter(torch.empty(num_decoder_patches, emb_dim))
         nn.init.xavier_uniform_(self.learnable_queries)
 
         # --- 2D Sinusoidal Positional Encoding (fixed) ---
@@ -422,8 +421,7 @@ class Embedding4Decoder(nn.Module):
 
         # 2) Query 준비
         if self.adaptive_initial_query:
-            latent_queries = self.W_Q_init(self.learnable_queries)
-            latent_queries = latent_queries.unsqueeze(0).expand(bs, -1, -1)
+            latent_queries = self.learnable_queries.unsqueeze(0).expand(bs, -1, -1)
 
             # K = content + pos (but implemented as W_K(content) + W_K(pos))
             k_init = self.W_K_init(x_clean)
@@ -441,8 +439,7 @@ class Embedding4Decoder(nn.Module):
             latent_attn_weights = F.softmax(latent_attn_scores, dim=-1)
             seq_decoder_patches = torch.bmm(latent_attn_weights, v_init)
         else:
-            learnable_queries = self.W_Q_init(self.learnable_queries)
-            seq_decoder_patches = learnable_queries.unsqueeze(0).expand(bs, -1, -1)
+            seq_decoder_patches = self.learnable_queries.unsqueeze(0).expand(bs, -1, -1)
 
         # API 호환을 위해 (K,V)를 둘 다 content-only 텐서로 반환합니다.
         # 실제 K의 positional 성분은 Decoder/Cross-Attn에서 projection-space로 더해집니다.
