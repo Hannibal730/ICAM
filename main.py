@@ -965,6 +965,7 @@ def main():
         'positional_encoding': model_cfg.positional_encoding,
         'res_attention': model_cfg.res_attention,
         'save_attention': model_cfg.save_attention,
+        'drop_path_ratio': getattr(model_cfg, 'drop_path_ratio', 0.0), # [수정] drop_path_ratio 설정 전달
     }
     decoder_args = SimpleNamespace(**decoder_params)
 

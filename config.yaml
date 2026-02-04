@@ -136,19 +136,20 @@ model:
   grid_size: 7               # 인코더에서 생성할 패치 그리드의 크기 (가로/세로 동일). 예: 7 -> 7x7=49개 패치.
   num_decoder_patches: 6     # 디코더에서 사용할 학습 가능한 쿼리(패치)의 수. 모델의 표현력을 조절합니다.
   num_decoder_layers: 7      # 모델 내부의 디코더 레이어 수.
-  num_heads: 6               # 멀티헤드 어텐션에서 사용할 헤드의 수. `emb_dim`은 `num_heads`로 나누어 떨어져야 합니다.
+  num_heads: 4               # 멀티헤드 어텐션에서 사용할 헤드의 수. `emb_dim`은 `num_heads`로 나누어 떨어져야 합니다.
 
   cnn_feature_extractor:
-    name: 'custom'  # 최종 피처맵 크기: $56 \times 56$ (채널 수는 24)
+    name: 'custom32'         # custom24, custom32
 
   # --- 디코더 및 임베딩 설정 ---
-  featured_patch_dim: 24     # CNN 특징 추출기가 각 이미지 패치에서 추출하는 특징 벡터의 차원.
-  emb_dim: 24                # 트랜스포머 모델 내부에서 사용하는 통일된 임베딩 차원.
+  featured_patch_dim: 32     # CNN 특징 추출기가 각 이미지 패치에서 추출하는 특징 벡터의 차원.
+  emb_dim: 32                # 트랜스포머 모델 내부에서 사용하는 통일된 임베딩 차원.
   adaptive_initial_query: true # true: 학습 가능한 쿼리와 인코더 출력을 cross-attention하여 동적 초기 쿼리 생성, false: 고정된 학습 가능 쿼리 사용.
   decoder_ff_ratio: 2        # 트랜스포머의 피드포워드 네트워크(FFN) 내부 차원을 결정하는 비율 (decoder_ff_dim = emb_dim * decoder_ff_ratio).
   dropout: 0.1               # 모델 내부에 적용될 드롭아웃 비율 (분류기, FFN, 어텐션 출력에 적용).
   positional_encoding: true  # 이미지 패치 시퀀스 (인코더 출력)에 위치 인코딩 추가 여부. False로 설정하면 위치 정보를 사용하지 않습니다.
   res_attention: false        # 디코더 레이어 간에 어텐션 스코어를 전달하는 잔차 어텐션 사용 여부.
+  drop_path_ratio: 0.2        # 잔차 연결(Residual Connection)의 경로를 무작위로 끊어주는 정규화 기법 (Stochastic Depth)
   save_attention: false       # 추론 시 어텐션 맵을 저장할지 여부. True로 설정하면 시각화에 사용할 수 있습니다.
   num_plot_attention: 500     # 어텐션 맵을 시각화하여 저장할 최대 샘플 수.
 

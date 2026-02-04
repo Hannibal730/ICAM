@@ -10,6 +10,25 @@ import math
 from torch import Tensor
 from torchvision import models
 
+# [추가] DropPath (Stochastic Depth) 구현
+# timm 라이브러리가 없어도 동작하도록 내장 구현
+class DropPath(nn.Module):
+    """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
+    def __init__(self, drop_prob: float = 0., scale_by_keep: bool = True):
+        super(DropPath, self).__init__()
+        self.drop_prob = drop_prob
+        self.scale_by_keep = scale_by_keep
+
+    def forward(self, x):
+        if self.drop_prob == 0. or not self.training:
+            return x
+        keep_prob = 1 - self.drop_prob
+        shape = (x.shape[0],) + (1,) * (x.ndim - 1)
+        random_tensor = x.new_empty(shape).bernoulli_(keep_prob)
+        if keep_prob > 0.0 and self.scale_by_keep:
+            random_tensor.div_(keep_prob)
+        return x * random_tensor
+
 # =============================================================================
 # 1. 이미지 인코더 모델 정의
 # =============================================================================
@@ -143,8 +162,8 @@ class CnnFeatureExtractor(nn.Module):
             self.conv_front = base_model
             base_out_channels = 96  # feat4 출력 채널
 
-        elif cnn_feature_extractor_name == 'custom':
-            # EfficientNet-B0 feat2 구조를 직접 코드로 구현 (커스터마이징 용도)
+        elif cnn_feature_extractor_name == 'custom24':
+            # EfficientNet-B0 feat2 구조를 기반으로 코드 구현 (커스터마이징 용도)
             # 주의: 이 옵션은 pretrained 가중치를 자동으로 로드하지 않습니다.
             bn_eps = 1e-5
             bn_momentum = 0.1
@@ -163,6 +182,27 @@ class CnnFeatureExtractor(nn.Module):
             ]
             self.conv_front = nn.Sequential(*layers)
             base_out_channels = 24
+
+        elif cnn_feature_extractor_name == 'custom32':
+            # EfficientNet-B0 feat2 구조를 기반으로 코드 구현 (커스터마이징 용도)
+            # 주의: 이 옵션은 pretrained 가중치를 자동으로 로드하지 않습니다.
+            bn_eps = 1e-5
+            bn_momentum = 0.1
+            layers = [
+                # Stem: 채널3 -> 32, stride 2: 해상도224-> 112
+                nn.Conv2d(3, 32, kernel_size=3, stride=2, padding=1, bias=False),
+                nn.BatchNorm2d(32, eps=bn_eps, momentum=bn_momentum),
+                nn.ReLU6(inplace=True),
+
+                # Block 1: MBConv1, 3x3, 32->16, stride 1, expand 1
+                MBConvBlock(32, 16, kernel_size=3, stride=1, expand_ratio=1),
+
+                # Block 2: MBConv6, 3x3, 16->32, stride 2, expand 6 (2 layers)
+                MBConvBlock(16, 32, kernel_size=3, stride=2, expand_ratio=6), # stride2: 해상도 112 -> 56
+                MBConvBlock(32, 32, kernel_size=3, stride=1, expand_ratio=6)
+            ]
+            self.conv_front = nn.Sequential(*layers)
+            base_out_channels = 32
 
         else:
             raise ValueError(f"지원하지 않는 CNN 피처 추출기 이름입니다: {cnn_feature_extractor_name}")
@@ -272,6 +312,7 @@ class Embedding4Decoder(nn.Module):
         decoder_ff_dim=256,
         attn_dropout=0.0,
         dropout=0.0,
+        drop_path_ratio=0.0,
         save_attention=False,
         res_attention=False,
         positional_encoding=True,
@@ -313,6 +354,7 @@ class Embedding4Decoder(nn.Module):
             decoder_ff_dim=decoder_ff_dim,
             attn_dropout=attn_dropout,
             dropout=dropout,
+            drop_path_ratio=drop_path_ratio,
             res_attention=res_attention,
             num_decoder_layers=num_decoder_layers,
             save_attention=save_attention,
@@ -435,11 +477,15 @@ class Decoder(nn.Module):
         decoder_ff_dim=None,
         attn_dropout=0.0,
         dropout=0.0,
+        drop_path_ratio=0.0,
         res_attention=False,
         num_decoder_layers=1,
         save_attention=False,
     ):
         super().__init__()
+
+        # Stochastic Depth Decay Rule: 0부터 drop_path_ratio까지 선형적으로 증가
+        dpr = [x.item() for x in torch.linspace(0, drop_path_ratio, num_decoder_layers)]
 
         self.layers = nn.ModuleList(
             [
@@ -451,10 +497,11 @@ class Decoder(nn.Module):
                     decoder_ff_dim=decoder_ff_dim,
                     attn_dropout=attn_dropout,
                     dropout=dropout,
+                    drop_path=dpr[i],
                     res_attention=res_attention,
                     save_attention=save_attention,
                 )
-                for _ in range(num_decoder_layers)
+                for i in range(num_decoder_layers)
             ]
         )
         self.res_attention = res_attention
@@ -490,6 +537,7 @@ class DecoderLayer(nn.Module):
         decoder_ff_dim=256,
         save_attention=False,
         attn_dropout=0,
+        drop_path=0.0, # [추가] DropPath 비율
         dropout=0.0,
         bias=False,
         res_attention=False,
@@ -507,11 +555,14 @@ class DecoderLayer(nn.Module):
             qkv_bias=False,
         )
         self.dropout_attn = nn.Dropout(dropout, inplace=True)
+        # [수정] DropPath 적용
+        self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
         self.norm_attn = nn.LayerNorm(emb_dim)
 
         self.ffn = nn.Sequential(
             nn.Linear(emb_dim, decoder_ff_dim, bias=bias),
-            nn.ReLU6(inplace=True),
+            # [수정] ReLU6 -> GELU (최신 Transformer 트렌드 반영, 성능 향상)
+            nn.GELU(),
             nn.Dropout(dropout, inplace=True),
             nn.Linear(decoder_ff_dim, emb_dim, bias=bias),
         )
@@ -538,13 +589,15 @@ class DecoderLayer(nn.Module):
         if self.save_attention:
             self.attn = attn
 
-        seq_decoder = residual + self.dropout_attn(decoder_out)
+        # [수정] DropPath 적용 (추론 시에는 영향 없음)
+        seq_decoder = residual + self.drop_path(self.dropout_attn(decoder_out))
 
         # 2) FFN (Pre-Norm)
         residual = seq_decoder
         seq_decoder = self.norm_ffn(seq_decoder)
         ffn_out = self.ffn(seq_decoder)
-        seq_decoder = residual + self.dropout_ffn(ffn_out)
+        # [수정] DropPath 적용
+        seq_decoder = residual + self.drop_path(self.dropout_ffn(ffn_out))
 
         if self.res_attention:
             return seq_encoder_k, seq_decoder, scores
@@ -580,6 +633,11 @@ class _MultiheadAttention(nn.Module):
 
         self.concatheads2emb = nn.Sequential(nn.Linear(num_heads * head_dim, emb_dim), nn.Dropout(proj_dropout))
 
+        # [추가] QK-Norm (Query-Key Normalization) - ViT-22B 등 최신 모델 트렌드
+        # 학습 안정성을 높이고 성능을 개선함.
+        self.q_norm = nn.LayerNorm(head_dim)
+        self.k_norm = nn.LayerNorm(head_dim)
+
         # [Method B] inference cache: W_K(pos_embed) projected & head-split
         # shape: [1, H, N, Dh]
         self.register_buffer('_k_pos_cache', None, persistent=False)
@@ -608,7 +666,10 @@ class _MultiheadAttention(nn.Module):
     def forward(self, Q: Tensor, K: Tensor, V: Tensor, pos_embed: Tensor = None, prev=None):
         bs = Q.size(0)
 
+        # Q Projection
         q_s = self.W_Q(Q).view(bs, -1, self.num_heads, self.head_dim).permute(0, 2, 1, 3)
+        # [추가] Apply QK-Norm
+        q_s = self.q_norm(q_s)
 
         # K projection (content)
         k_s = self.W_K(K).view(bs, -1, self.num_heads, self.head_dim).permute(0, 2, 1, 3)
@@ -626,6 +687,9 @@ class _MultiheadAttention(nn.Module):
                 pos = pos_embed.to(device=k_s.device, dtype=k_s.dtype)
                 k_pos = self.W_K(pos).view(1, -1, self.num_heads, self.head_dim).permute(0, 2, 1, 3)
                 k_s = k_s + k_pos
+        
+        # [추가] Apply QK-Norm (Positional Encoding이 더해진 후 적용)
+        k_s = self.k_norm(k_s)
 
         v_s = self.W_V(V).view(bs, -1, self.num_heads, self.head_dim).permute(0, 2, 1, 3)
 
@@ -663,6 +727,9 @@ class Model(nn.Module):
         positional_encoding = args.positional_encoding 
         save_attention = args.save_attention     
         res_attention = getattr(args, 'res_attention', False)
+        # [수정] Drop Path Ratio (config에서 설정 가능하도록 하거나 기본값 0.1 사용)
+        drop_path_ratio = getattr(args, 'drop_path_ratio', 0.1)
+
         # 2D PE 생성을 위해 그리드 크기 전달 (main.py에서 계산된 값이 있으면 사용)
         grid_size_h = getattr(args, 'grid_size_h', None)
         grid_size_w = getattr(args, 'grid_size_w', None)
@@ -678,8 +745,9 @@ class Model(nn.Module):
                                 grid_size_h=grid_size_h, grid_size_w=grid_size_w, # 추가된 인자
                                 adaptive_initial_query=adaptive_initial_query,
                                 num_decoder_layers=num_decoder_layers, emb_dim=emb_dim, num_heads=num_heads, decoder_ff_dim=decoder_ff_dim, positional_encoding=positional_encoding,
-                                attn_dropout=attn_dropout, dropout=dropout,
+                                attn_dropout=attn_dropout, dropout=dropout, drop_path_ratio=drop_path_ratio,
                                 res_attention=res_attention, save_attention=save_attention)
+        
 
         self.projection4classifier = Projection4Classifier(emb_dim, self.featured_patch_dim)
 
