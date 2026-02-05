@@ -53,7 +53,7 @@ except ImportError:
 # =============================================================================
 # 제안 모델 임포트
 # =============================================================================
-from models import Model as DecoderBackbone, PatchConvEncoder, Classifier, HybridModel
+from models import Model as DecoderBackbone, Encoder, Classifier, HybridModel
 from dataloader import prepare_data, InferenceImageDataset
 from onnx_utils import ONNXCalibrationDataReader, measure_onnx_performance, MemoryMonitor, flush_memory
 
@@ -114,7 +114,7 @@ def get_default_config():
             'img_size': 224,
             'grid_size': 7,
             'cnn_feature_extractor': {'name': 'efficientnet_b0_feat2'},
-            'featured_patch_dim': 24,
+            'encoder_dim': 24,
             'emb_dim': 24,
             'num_heads': 2,
             'num_decoder_layers': 2,
@@ -403,7 +403,7 @@ def main():
             'num_labels': num_labels,
             'num_decoder_layers': model_cfg.num_decoder_layers,
             'num_decoder_patches': model_cfg.num_decoder_patches,
-            'featured_patch_dim': model_cfg.featured_patch_dim,
+            'encoder_dim': model_cfg.encoder_dim,
             'adaptive_initial_query': getattr(model_cfg, 'adaptive_initial_query', False),
             'emb_dim': model_cfg.emb_dim,
             'num_heads': model_cfg.num_heads,
@@ -415,12 +415,12 @@ def main():
         }
         decoder_args = SimpleNamespace(**decoder_params)
 
-        encoder = PatchConvEncoder(grid_size=model_cfg.grid_size,
-                                    featured_patch_dim=model_cfg.featured_patch_dim, cnn_feature_extractor_name=model_cfg.cnn_feature_extractor.name,
+        encoder = Encoder(grid_size=model_cfg.grid_size,
+                                    encoder_dim=model_cfg.encoder_dim, cnn_feature_extractor_name=model_cfg.cnn_feature_extractor.name,
                                     pre_trained=False)
         decoder = DecoderBackbone(args=decoder_args)
         classifier = Classifier(num_decoder_patches=model_cfg.num_decoder_patches,
-                                featured_patch_dim=model_cfg.featured_patch_dim, num_labels=num_labels, dropout=0.0)
+                                emb_dim=model_cfg.emb_dim, num_labels=num_labels, dropout=0.0)
         model = HybridModel(encoder, decoder, classifier).to(device)
 
     # 6. 가중치 로드
