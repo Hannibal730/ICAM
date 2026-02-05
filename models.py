@@ -232,7 +232,7 @@ class PatchConvEncoder(nn.Module):
 
     출력: [B, N, D] (N = num_patches_H * num_patches_W)
 
-    참고: patch_size/stride는 토큰 그리드 크기(H_p, W_p)를 결정하는 하이퍼파라미터로 사용됩니다.
+    참고: grid_size는 토큰 그리드 크기(H_p, W_p)를 결정하는 하이퍼파라미터로 사용됩니다.
     (기존처럼 실제 패치를 잘라 CNN을 여러 번 돌리지는 않습니다.)
     """
 
@@ -447,23 +447,7 @@ class Embedding4Decoder(nn.Module):
         return x_clean, x_clean, seq_decoder_patches
 
 
-class Projection4Classifier(nn.Module):
-    """디코더의 출력을 받아 최종 분류기가 사용할 수 있는 고정 차원 특징 벡터로 변환합니다.
 
-    기존: [B, Q, emb_dim] -> Linear -> Flatten => [B, Q*D] (Q에 따라 입력 차원이 변함)
-    변경: [B, Q, emb_dim] -> Mean Pool(Q) -> Linear => [B, D] (Q와 무관하게 입력 차원 고정)
-    """
-
-    def __init__(self, emb_dim, featured_patch_dim):
-        super().__init__()
-    
-        self.linear = nn.Linear(emb_dim, featured_patch_dim)
-
-    def forward(self, x):
-        # x: [B, Q, emb_dim]
-        x = x.mean(dim=1)  # [B, emb_dim]
-        x = self.linear(x)  # [B, featured_patch_dim]
-        return x
 
 class Decoder(nn.Module):
     def __init__(
@@ -736,29 +720,44 @@ class Model(nn.Module):
                                 res_attention=res_attention, save_attention=save_attention)
         
 
-        self.projection4classifier = Projection4Classifier(emb_dim, self.featured_patch_dim)
+        
+
+        # self.projection4classifier = Projection4Classifier(emb_dim, self.featured_patch_dim)
+
+
 
     def forward(self, x): 
-        # x: [B, num_encoder_patches, featured_patch_dim]
-        # (PatchConvEncoder의 출력이 여기로 들어옴)
-        
-        seq_encoder_patches, seq_encoder_clean, seq_decoder_patches = self.embedding4decoder(x)
-        pos_embed = self.embedding4decoder.pos_embed if getattr(self.embedding4decoder, 'use_positional_encoding', False) else None
-        z = self.embedding4decoder.decoder(seq_encoder_patches, seq_encoder_clean, seq_decoder_patches, pos_embed=pos_embed)
-        features = self.projection4classifier(z)
-        return features
 
+        # x: [B, num_encoder_patches, featured_patch_dim]
+
+        # (PatchConvEncoder의 출력이 여기로 들어옴)
+
+        
+
+        seq_encoder_patches, seq_encoder_clean, seq_decoder_patches = self.embedding4decoder(x)
+
+        pos_embed = self.embedding4decoder.pos_embed if getattr(self.embedding4decoder, 'use_positional_encoding', False) else None
+
+        z = self.embedding4decoder.decoder(seq_encoder_patches, seq_encoder_clean, seq_decoder_patches, pos_embed=pos_embed)
+
+        # features = self.projection4classifier(z)
+
+        return z
 # =============================================================================
 # 3. 전체 모델 구성
 # =============================================================================
 class Classifier(nn.Module):
-    """디코더 백본의 출력을 받아 최종 클래스 로짓으로 매핑하는 분류기입니다."""
-    def __init__(self, num_decoder_patches, featured_patch_dim, num_labels, dropout):
+    """디코더의 [B, Q, D_emb] 출력을 받아 최종 클래스 로짓으로 매핑합니다.
+    모든 쿼리 토큰을 flatten하고 Linear 레이어를 통과시켜 클래스별 점수를 계산합니다.
+    """
+    def __init__(self, num_decoder_patches, emb_dim, num_labels, dropout):
         super().__init__()
-        input_dim = featured_patch_dim 
-        hidden_dim = (input_dim + num_labels) // 2 
+        input_dim = num_decoder_patches * emb_dim
+        hidden_dim = emb_dim * 2  # emb_dim 기반의 hidden dimension
 
         self.projection = nn.Sequential(
+            nn.Flatten(start_dim=1),      # [B, Q, D_emb] -> [B, Q * D_emb]
+            nn.LayerNorm(input_dim),      # LayerNorm 추가
             nn.Linear(input_dim, hidden_dim),
             nn.ReLU6(inplace=True),
             nn.Dropout(dropout, inplace=True),
@@ -766,7 +765,8 @@ class Classifier(nn.Module):
         )
 
     def forward(self, x):
-        x = self.projection(x) 
+        # x shape: [B, num_decoder_patches, emb_dim]
+        x = self.projection(x)
         return x
 
 class HybridModel(torch.nn.Module):
