@@ -328,8 +328,8 @@ class Embedding4Decoder(nn.Module):
 
         # --- 학습 가능한 쿼리(Learnable Query) ---
         self.learnable_queries = nn.Parameter(torch.empty(num_decoder_patches, featured_patch_dim))
-        nn.init.xavier_uniform_(self.learnable_queries)
-
+        nn.init.normal_(self.learnable_queries, std=0.02)
+        
         # --- 2D Sinusoidal Positional Encoding (fixed) ---
         self.use_positional_encoding = positional_encoding
         if self.use_positional_encoding:
