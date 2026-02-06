@@ -236,13 +236,13 @@ class PatchingEncoder(nn.Module):
     (기존처럼 실제 패치를 잘라 CNN을 여러 번 돌리지는 않습니다.)
     """
 
-    def __init__(self, grid_size, encoder_dim, cnn_feature_extractor_name, pre_trained=True):
+    def __init__(self, num_patches_per_side, encoder_dim, cnn_feature_extractor_name, pre_trained=True):
         super(PatchingEncoder, self).__init__()
-        self.grid_size = grid_size
+        self.num_patches_per_side = num_patches_per_side
         self.encoder_dim = encoder_dim
 
-        self.num_patches_H = grid_size
-        self.num_patches_W = grid_size
+        self.num_patches_H = num_patches_per_side
+        self.num_patches_W = num_patches_per_side
         self.num_encoder_patches = self.num_patches_H * self.num_patches_W
 
         # 1) Full-frame CNN feature extractor (1회)
@@ -259,7 +259,7 @@ class PatchingEncoder(nn.Module):
         self.grid_pool = nn.AdaptiveAvgPool2d((self.num_patches_H, self.num_patches_W))
 
         # 3) Token norm
-        self.norm = nn.LayerNorm(encoder_dim)
+        self.norm_tokens = nn.LayerNorm(encoder_dim)
 
     def forward(self, x):
         # x: [B, C, H, W]
@@ -275,7 +275,7 @@ class PatchingEncoder(nn.Module):
         tokens = grid.permute(0, 2, 3, 1).contiguous().view(B, -1, self.encoder_dim)
 
         # Layer Normalization
-        tokens = self.norm(tokens)
+        tokens = self.norm_tokens(tokens)
         return tokens
 
 # =============================================================================
@@ -724,9 +724,9 @@ class Model(nn.Module):
         grid_size_w = getattr(args, 'grid_size_w', None)
         if grid_size_h is None or grid_size_w is None:
             # fallback: 정사각형 그리드라고 가정
-            grid_size = int(math.sqrt(num_encoder_patches))
-            grid_size_h = grid_size
-            grid_size_w = grid_size
+            num_patches_per_side = int(math.sqrt(num_encoder_patches))
+            grid_size_h = num_patches_per_side
+            grid_size_w = num_patches_per_side
 
         decoder_ff_dim = emb_dim * decoder_ff_ratio 
 

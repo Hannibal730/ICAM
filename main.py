@@ -113,7 +113,7 @@ def log_model_parameters(model):
     cnn_feature_extractor = model.encoder.shared_conv[0]
     conv_front_params = count_parameters(cnn_feature_extractor.conv_front)
     conv_1x1_params = count_parameters(cnn_feature_extractor.conv_1x1)
-    encoder_norm_params = count_parameters(model.encoder.norm)
+    encoder_norm_params = count_parameters(model.encoder.norm_tokens)
     encoder_total_params = conv_front_params + conv_1x1_params + encoder_norm_params
 
     # 2. Decoder (DecoderBackbone) 내부 파라미터 계산
@@ -890,7 +890,7 @@ def main():
     # --- 실행 디렉토리 설정 ---
     # 훈련/추론별 실행 디렉토리 및 로깅 설정
     # 폴더 이름에 주요 모델 설정을 포함시킵니다.
-    run_suffix = f"grid{model_cfg.grid_size}_patch{model_cfg.num_decoder_patches}_layer{model_cfg.num_decoder_layers}_head{model_cfg.num_heads}"
+    run_suffix = f"grid{model_cfg.num_patches_per_side}_patch{model_cfg.num_decoder_patches}_layer{model_cfg.num_decoder_layers}_head{model_cfg.num_heads}"
 
     if run_cfg.mode == 'train':
         run_dir_path, timestamp = setup_logging(run_cfg, data_dir_name, run_name_suffix=run_suffix)
@@ -944,10 +944,10 @@ def main():
     train_loader, valid_loader, test_loader, num_labels, class_names, pos_weight = prepare_data(run_cfg, train_cfg, model_cfg)
 
     # --- 모델 구성 ---
-    num_patches_h = model_cfg.grid_size
-    num_patches_w = model_cfg.grid_size
+    num_patches_h = model_cfg.num_patches_per_side
+    num_patches_w = model_cfg.num_patches_per_side
     num_encoder_patches = num_patches_h * num_patches_w
-    logging.info(f"이미지 크기: {model_cfg.img_size}, 그리드 크기: {model_cfg.grid_size}x{model_cfg.grid_size} -> 인코더 패치 수: {num_encoder_patches}개")
+    logging.info(f"이미지 크기: {model_cfg.img_size}, 그리드 크기: {model_cfg.num_patches_per_side}x{model_cfg.num_patches_per_side} -> 인코더 패치 수: {num_encoder_patches}개")
 
     decoder_params = {
         'num_encoder_patches': num_encoder_patches,
@@ -970,7 +970,7 @@ def main():
     decoder_args = SimpleNamespace(**decoder_params)
 
     encoder = PatchingEncoder(
-        grid_size=model_cfg.grid_size,
+        num_patches_per_side=model_cfg.num_patches_per_side,
         encoder_dim=model_cfg.encoder_dim,
         cnn_feature_extractor_name=model_cfg.cnn_feature_extractor['name'],
         pre_trained=train_cfg.pre_trained,

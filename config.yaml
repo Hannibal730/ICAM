@@ -133,7 +133,7 @@ finetuning_pruned:
 model:
   # --- 이미지 및 인코더 설정 ---
   img_size: 224                # 모델에 입력하기 전 이미지의 리사이즈 크기 (정사각형).
-  grid_size: 7               # 인코더에서 생성할 패치 그리드의 크기 (가로/세로 동일). 예: 7 -> 7x7=49개 패치.
+  num_patches_per_side: 7               # 인코더에서 생성할 패치 그리드의 한 변의 패치 수. 예: 7 -> 7x7=49개 패치.
   num_decoder_patches: 1     # 디코더에서 사용할 학습 가능한 쿼리(패치)의 수. 모델의 표현력을 조절합니다.
   num_decoder_layers: 6      # 모델 내부의 디코더 레이어 수.
   num_heads: 2               # 멀티헤드 어텐션에서 사용할 헤드의 수. `emb_dim`은 `num_heads`로 나누어 떨어져야 합니다.

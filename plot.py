@@ -433,8 +433,8 @@ def plot_and_save_attention_maps(attention_maps, image_tensor, save_dir, img_siz
 
         # 3. 어텐션 맵 차원 정보 추출
         num_heads, num_queries, num_patches = attention_maps.shape
-        grid_size = int(num_patches**0.5)
-        if grid_size * grid_size != num_patches:
+        num_patches_per_side = int(num_patches**0.5)
+        if num_patches_per_side * num_patches_per_side != num_patches:
             logging.error("어텐션 맵의 패치 수가 제곱수가 아니므로 2D로 변환할 수 없습니다.")
             return
 
@@ -475,7 +475,7 @@ def plot_and_save_attention_maps(attention_maps, image_tensor, save_dir, img_siz
                 ax = axes[query_patch, head + 1]
                 
                 # 1D 어텐션 맵 -> 2D 그리드로 변환
-                attn_map_2d = attention_maps[head, query_patch].view(1, 1, grid_size, grid_size)
+                attn_map_2d = attention_maps[head, query_patch].view(1, 1, num_patches_per_side, num_patches_per_side)
                 
                 # 원본 이미지 크기로 업샘플링
                 upscaled_map = F.interpolate(attn_map_2d, size=(img_size, img_size), mode='bilinear', align_corners=False)
@@ -498,7 +498,7 @@ def plot_and_save_attention_maps(attention_maps, image_tensor, save_dir, img_siz
             avg_attn_map = attention_maps[:, query_patch, :].mean(dim=0) # [num_patches]
             
             # 1D -> 2D 그리드로 변환 및 업샘플링
-            attn_map_2d = avg_attn_map.view(1, 1, grid_size, grid_size)
+            attn_map_2d = avg_attn_map.view(1, 1, num_patches_per_side, num_patches_per_side)
             upscaled_map = F.interpolate(attn_map_2d, size=(img_size, img_size), mode='bilinear', align_corners=False)
             upscaled_map = upscaled_map.squeeze().numpy()
             
@@ -522,7 +522,7 @@ def plot_and_save_attention_maps(attention_maps, image_tensor, save_dir, img_siz
             head_attn_map = attention_maps[head].mean(dim=0) # [num_patches]
             
             # 1D -> 2D 그리드로 변환 및 업샘플링
-            attn_map_2d = head_attn_map.view(1, 1, grid_size, grid_size)
+            attn_map_2d = head_attn_map.view(1, 1, num_patches_per_side, num_patches_per_side)
             upscaled_map = F.interpolate(attn_map_2d, size=(img_size, img_size), mode='bilinear', align_corners=False)
             upscaled_map = upscaled_map.squeeze().numpy()
 
@@ -543,7 +543,7 @@ def plot_and_save_attention_maps(attention_maps, image_tensor, save_dir, img_siz
         layer_avg_map = attention_maps.mean(dim=(0, 1)) # [num_patches]
 
         # 1D -> 2D 그리드로 변환 및 업샘플링
-        attn_map_2d = layer_avg_map.view(1, 1, grid_size, grid_size)
+        attn_map_2d = layer_avg_map.view(1, 1, num_patches_per_side, num_patches_per_side)
         upscaled_map = F.interpolate(attn_map_2d, size=(img_size, img_size), mode='bilinear', align_corners=False)
         upscaled_map = upscaled_map.squeeze().numpy()
 
