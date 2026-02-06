@@ -18,7 +18,7 @@ import random
 import time 
 import gc
 import copy
-from models import Model as DecoderBackbone, Encoder, Classifier, HybridModel
+from models import Model as DecoderBackbone, PatchConvEncoder, Classifier, HybridModel
 
 try:
     import cpuinfo
@@ -106,12 +106,10 @@ def log_model_parameters(model):
     """모델의 구간별 및 총 파라미터 수를 계산하고 로깅합니다."""
     
     def count_parameters(m):
-        if m is None:
-            return 0
         return sum(p.numel() for p in m.parameters() if p.requires_grad)
 
     # Encoder 내부를 세분화하여 파라미터 계산
-    # 1. Encoder (Encoder) 내부 파라미터 계산
+    # 1. Encoder (PatchConvEncoder) 내부 파라미터 계산
     cnn_feature_extractor = model.encoder.shared_conv[0]
     conv_front_params = count_parameters(cnn_feature_extractor.conv_front)
     conv_1x1_params = count_parameters(cnn_feature_extractor.conv_1x1)
@@ -132,20 +130,21 @@ def log_model_parameters(model):
         query_params = embedding_module.learnable_queries.numel()
     
     w_feat2emb_params = count_parameters(embedding_module.W_feat2emb)
+    w_q_init_params = count_parameters(embedding_module.W_Q_init)
     
     w_k_init_params = 0
     w_v_init_params = 0
     if hasattr(embedding_module, 'W_K_init'):
         w_k_init_params = count_parameters(embedding_module.W_K_init)
-    if hasattr(embedding_module, 'W_V_init'):
         w_v_init_params = count_parameters(embedding_module.W_V_init)
 
     # Embedding4Decoder의 파라미터 총합 (내부 Decoder 레이어 제외)
-    embedding4decoder_total_params = w_feat2emb_params + w_k_init_params + w_v_init_params + query_params + pe_params
+    embedding4decoder_total_params = w_feat2emb_params + w_q_init_params + w_k_init_params + w_v_init_params + query_params + pe_params
 
-    # Decoder 내부의 트랜스포머 레이어 파라미터 계산
+    # Decoder 내부의 트랜스포머 레이어와 최종 프로젝션 레이어 파라미터 계산
     decoder_layers_params = count_parameters(model.decoder.embedding4decoder.decoder)
-    decoder_total_params = embedding4decoder_total_params + decoder_layers_params
+    decoder_projection4classifier_params = count_parameters(model.decoder.projection4classifier)
+    decoder_total_params = embedding4decoder_total_params + decoder_layers_params + decoder_projection4classifier_params
 
     # 3. Classifier (MLP) 파라미터 계산
     classifier_projection_params = count_parameters(model.classifier.projection)
@@ -155,17 +154,19 @@ def log_model_parameters(model):
 
     logging.info("="*50)
     logging.info(f"모델 파라미터 수: {total_params:,} 개")
-    logging.info(f"  - Encoder (Encoder):         {encoder_total_params:,} 개")
+    logging.info(f"  - Encoder (PatchConvEncoder):         {encoder_total_params:,} 개")
     logging.info(f"    - conv_front (CNN Backbone):        {conv_front_params:,} 개")
     logging.info(f"    - 1x1_conv (Channel Proj):          {conv_1x1_params:,} 개")
     logging.info(f"    - norm (LayerNorm):                 {encoder_norm_params:,} 개")
     logging.info(f"  - Decoder (Cross-Attention-based):    {decoder_total_params:,} 개")
     logging.info(f"    - Embedding Layer (W_feat2emb):     {w_feat2emb_params:,} 개")
+    logging.info(f"    - Init Query Proj (W_Q_init):       {w_q_init_params:,} 개")
     logging.info(f"    - Init Key Proj (W_K_init):         {w_k_init_params:,} 개")
     logging.info(f"    - Init Value Proj (W_V_init):       {w_v_init_params:,} 개")
     logging.info(f"    - Learnable Queries:                {query_params:,} 개")
     # logging.info(f"    - Positional Encoding (learnable):  {pe_params:,} 개")
     logging.info(f"    - Decoder Layers:                   {decoder_layers_params:,} 개")
+    logging.info(f"    - Projection4Classifier:            {decoder_projection4classifier_params:,} 개")
     logging.info(f"  - Classifier (Projection MLP):        {classifier_total_params:,} 개")
 
 def evaluate(run_cfg, model, data_loader, device, criterion, loss_function_name, desc="Evaluating", class_names=None, log_class_metrics=False):
@@ -955,7 +956,7 @@ def main():
         'num_labels': num_labels,
         'num_decoder_layers': model_cfg.num_decoder_layers,
         'num_decoder_patches': model_cfg.num_decoder_patches,
-        'encoder_dim': model_cfg.encoder_dim,
+        'featured_patch_dim': model_cfg.featured_patch_dim,
         'adaptive_initial_query': getattr(model_cfg, 'adaptive_initial_query', False),
         'emb_dim': model_cfg.emb_dim,
         'num_heads': model_cfg.num_heads,
@@ -968,18 +969,18 @@ def main():
     }
     decoder_args = SimpleNamespace(**decoder_params)
 
-    encoder = Encoder(
+    encoder = PatchConvEncoder(
         grid_size=model_cfg.grid_size,
-        encoder_dim=model_cfg.encoder_dim,
+        featured_patch_dim=model_cfg.featured_patch_dim,
         cnn_feature_extractor_name=model_cfg.cnn_feature_extractor['name'],
         pre_trained=train_cfg.pre_trained,
     )
     decoder = DecoderBackbone(args=decoder_args)
 
-    # Classifier는 num_decoder_patches와 emb_dim을 기반으로 입력을 처리합니다.
+    # pooling head로 입력 차원이 고정되므로, classifier는 Q에 의존하지 않습니다.
     classifier = Classifier(
         num_decoder_patches=model_cfg.num_decoder_patches,
-        emb_dim=model_cfg.emb_dim,
+        featured_patch_dim=model_cfg.featured_patch_dim,
         num_labels=num_labels,
         dropout=model_cfg.dropout,
     )
