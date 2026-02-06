@@ -97,10 +97,10 @@ class CnnFeatureExtractor(nn.Module):
     다양한 CNN 아키텍처의 앞부분을 특징 추출기로 사용하는 범용 클래스입니다.
     config.yaml의 `cnn_feature_extractor.name` 설정에 따라 모델 구조가 결정됩니다.
 
-    출력: [B, featured_patch_dim, Hf, Wf]
+    출력: [B, encoder_dim, Hf, Wf]
     """
 
-    def __init__(self, cnn_feature_extractor_name='resnet18_layer1', pretrained=True, featured_patch_dim=None):
+    def __init__(self, cnn_feature_extractor_name='resnet18_layer1', pretrained=True, encoder_dim=None):
         super().__init__()
         self.cnn_feature_extractor_name = cnn_feature_extractor_name
 
@@ -207,9 +207,9 @@ class CnnFeatureExtractor(nn.Module):
         else:
             raise ValueError(f"지원하지 않는 CNN 피처 추출기 이름입니다: {cnn_feature_extractor_name}")
 
-        # 최종 출력 채널 수를 `featured_patch_dim`에 맞추기 위한 1x1 컨볼루션 레이어입니다.
-        if featured_patch_dim is not None and featured_patch_dim != base_out_channels:
-            self.conv_1x1 = nn.Conv2d(base_out_channels, featured_patch_dim, kernel_size=1)
+        # 최종 출력 채널 수를 `encoder_dim`에 맞추기 위한 1x1 컨볼루션 레이어입니다.
+        if encoder_dim is not None and encoder_dim != base_out_channels:
+            self.conv_1x1 = nn.Conv2d(base_out_channels, encoder_dim, kernel_size=1)
         else:
             self.conv_1x1 = nn.Identity()
 
@@ -224,7 +224,7 @@ class CnnFeatureExtractor(nn.Module):
         return x
 
 
-class PatchConvEncoder(nn.Module):
+class PatchingEncoder(nn.Module):
     """Full-frame CNN 1회 + Grid Pooling으로 패치 토큰을 생성하는 인코더.
 
     - self-attention 없음
@@ -236,10 +236,10 @@ class PatchConvEncoder(nn.Module):
     (기존처럼 실제 패치를 잘라 CNN을 여러 번 돌리지는 않습니다.)
     """
 
-    def __init__(self, grid_size, featured_patch_dim, cnn_feature_extractor_name, pre_trained=True):
-        super(PatchConvEncoder, self).__init__()
+    def __init__(self, grid_size, encoder_dim, cnn_feature_extractor_name, pre_trained=True):
+        super(PatchingEncoder, self).__init__()
         self.grid_size = grid_size
-        self.featured_patch_dim = featured_patch_dim
+        self.encoder_dim = encoder_dim
 
         self.num_patches_H = grid_size
         self.num_patches_W = grid_size
@@ -251,7 +251,7 @@ class PatchConvEncoder(nn.Module):
             CnnFeatureExtractor(
                 cnn_feature_extractor_name=cnn_feature_extractor_name,
                 pretrained=pre_trained,
-                featured_patch_dim=featured_patch_dim,
+                encoder_dim=encoder_dim,
             )
         )
 
@@ -259,7 +259,7 @@ class PatchConvEncoder(nn.Module):
         self.grid_pool = nn.AdaptiveAvgPool2d((self.num_patches_H, self.num_patches_W))
 
         # 3) Token norm
-        self.norm = nn.LayerNorm(featured_patch_dim)
+        self.norm = nn.LayerNorm(encoder_dim)
 
     def forward(self, x):
         # x: [B, C, H, W]
@@ -272,7 +272,7 @@ class PatchConvEncoder(nn.Module):
         grid = self.grid_pool(feat)
 
         # 3) Flatten: [B, D, H_p, W_p] -> [B, H_p*W_p, D]
-        tokens = grid.permute(0, 2, 3, 1).contiguous().view(B, -1, self.featured_patch_dim)
+        tokens = grid.permute(0, 2, 3, 1).contiguous().view(B, -1, self.encoder_dim)
 
         # Layer Normalization
         tokens = self.norm(tokens)
@@ -301,7 +301,7 @@ class Embedding4Decoder(nn.Module):
     def __init__(
         self,
         num_encoder_patches,
-        featured_patch_dim,
+        encoder_dim,
         num_decoder_patches,
         grid_size_h,
         grid_size_w,
@@ -322,12 +322,12 @@ class Embedding4Decoder(nn.Module):
         self.adaptive_initial_query = adaptive_initial_query
 
         # --- 입력 인코딩 ---
-        self.W_feat2emb = nn.Linear(featured_patch_dim, emb_dim)
-        self.W_Q_init = nn.Linear(featured_patch_dim, emb_dim)
+        self.W_feat2emb = nn.Linear(encoder_dim, emb_dim)
+        self.W_Q_init = nn.Linear(encoder_dim, emb_dim)
         self.dropout = nn.Dropout(dropout, inplace=True)
 
         # --- 학습 가능한 쿼리(Learnable Query) ---
-        self.learnable_queries = nn.Parameter(torch.empty(num_decoder_patches, featured_patch_dim))
+        self.learnable_queries = nn.Parameter(torch.empty(num_decoder_patches, encoder_dim))
         nn.init.normal_(self.learnable_queries, std=0.02)
         
         # --- 2D Sinusoidal Positional Encoding (fixed) ---
@@ -411,7 +411,7 @@ class Embedding4Decoder(nn.Module):
         self.decoder.prepare_inference_caches(self.pos_embed)
 
     def forward(self, x) -> Tensor:
-        # x: [B, num_encoder_patches, featured_patch_dim]
+        # x: [B, num_encoder_patches, encoder_dim]
         bs = x.shape[0]
 
         # content embedding
@@ -456,15 +456,15 @@ class Projection4Classifier(nn.Module):
     변경: [B, Q, emb_dim] -> Mean Pool(Q) -> Linear => [B, D] (Q와 무관하게 입력 차원 고정)
     """
 
-    def __init__(self, emb_dim, featured_patch_dim):
+    def __init__(self, emb_dim, encoder_dim):
         super().__init__()
     
-        self.linear = nn.Linear(emb_dim, featured_patch_dim)
+        self.linear = nn.Linear(emb_dim, encoder_dim)
 
     def forward(self, x):
         # x: [B, Q, emb_dim]
         x = x.mean(dim=1)  # [B, emb_dim]
-        x = self.linear(x)  # [B, featured_patch_dim]
+        x = self.linear(x)  # [B, encoder_dim]
         return x
 
 class Decoder(nn.Module):
@@ -705,7 +705,7 @@ class Model(nn.Module):
         num_encoder_patches = args.num_encoder_patches 
         num_labels = args.num_labels 
         num_decoder_patches = args.num_decoder_patches 
-        self.featured_patch_dim = args.featured_patch_dim 
+        self.encoder_dim = args.encoder_dim 
         adaptive_initial_query = args.adaptive_initial_query 
         emb_dim = args.emb_dim           
         num_heads = args.num_heads           
@@ -730,7 +730,7 @@ class Model(nn.Module):
 
         decoder_ff_dim = emb_dim * decoder_ff_ratio 
 
-        self.embedding4decoder = Embedding4Decoder(num_encoder_patches=num_encoder_patches, featured_patch_dim=self.featured_patch_dim, num_decoder_patches=num_decoder_patches, 
+        self.embedding4decoder = Embedding4Decoder(num_encoder_patches=num_encoder_patches, encoder_dim=self.encoder_dim, num_decoder_patches=num_decoder_patches, 
                                 grid_size_h=grid_size_h, grid_size_w=grid_size_w, # 추가된 인자
                                 adaptive_initial_query=adaptive_initial_query,
                                 num_decoder_layers=num_decoder_layers, emb_dim=emb_dim, num_heads=num_heads, decoder_ff_dim=decoder_ff_dim, positional_encoding=positional_encoding,
@@ -738,11 +738,11 @@ class Model(nn.Module):
                                 res_attention=res_attention, save_attention=save_attention)
         
 
-        self.projection4classifier = Projection4Classifier(emb_dim, self.featured_patch_dim)
+        self.projection4classifier = Projection4Classifier(emb_dim, self.encoder_dim)
 
     def forward(self, x): 
-        # x: [B, num_encoder_patches, featured_patch_dim]
-        # (PatchConvEncoder의 출력이 여기로 들어옴)
+        # x: [B, num_encoder_patches, encoder_dim]
+        # (PatchingEncoder의 출력이 여기로 들어옴)
         
         seq_encoder_patches, seq_encoder_clean, seq_decoder_patches = self.embedding4decoder(x)
         pos_embed = self.embedding4decoder.pos_embed if getattr(self.embedding4decoder, 'use_positional_encoding', False) else None
@@ -755,9 +755,9 @@ class Model(nn.Module):
 # =============================================================================
 class Classifier(nn.Module):
     """디코더 백본의 출력을 받아 최종 클래스 로짓으로 매핑하는 분류기입니다."""
-    def __init__(self, num_decoder_patches, featured_patch_dim, num_labels, dropout):
+    def __init__(self, num_decoder_patches, encoder_dim, num_labels, dropout):
         super().__init__()
-        input_dim = featured_patch_dim 
+        input_dim = encoder_dim 
         hidden_dim = (input_dim + num_labels) // 2 
 
         self.projection = nn.Sequential(

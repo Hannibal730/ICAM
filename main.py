@@ -18,7 +18,7 @@ import random
 import time 
 import gc
 import copy
-from models import Model as DecoderBackbone, PatchConvEncoder, Classifier, HybridModel
+from models import Model as DecoderBackbone, PatchingEncoder, Classifier, HybridModel
 
 try:
     import cpuinfo
@@ -109,7 +109,7 @@ def log_model_parameters(model):
         return sum(p.numel() for p in m.parameters() if p.requires_grad)
 
     # Encoder 내부를 세분화하여 파라미터 계산
-    # 1. Encoder (PatchConvEncoder) 내부 파라미터 계산
+    # 1. Encoder (PatchingEncoder) 내부 파라미터 계산
     cnn_feature_extractor = model.encoder.shared_conv[0]
     conv_front_params = count_parameters(cnn_feature_extractor.conv_front)
     conv_1x1_params = count_parameters(cnn_feature_extractor.conv_1x1)
@@ -154,7 +154,7 @@ def log_model_parameters(model):
 
     logging.info("="*50)
     logging.info(f"모델 파라미터 수: {total_params:,} 개")
-    logging.info(f"  - Encoder (PatchConvEncoder):         {encoder_total_params:,} 개")
+    logging.info(f"  - Encoder (PatchingEncoder):         {encoder_total_params:,} 개")
     logging.info(f"    - conv_front (CNN Backbone):        {conv_front_params:,} 개")
     logging.info(f"    - 1x1_conv (Channel Proj):          {conv_1x1_params:,} 개")
     logging.info(f"    - norm (LayerNorm):                 {encoder_norm_params:,} 개")
@@ -956,7 +956,7 @@ def main():
         'num_labels': num_labels,
         'num_decoder_layers': model_cfg.num_decoder_layers,
         'num_decoder_patches': model_cfg.num_decoder_patches,
-        'featured_patch_dim': model_cfg.featured_patch_dim,
+        'encoder_dim': model_cfg.encoder_dim,
         'adaptive_initial_query': getattr(model_cfg, 'adaptive_initial_query', False),
         'emb_dim': model_cfg.emb_dim,
         'num_heads': model_cfg.num_heads,
@@ -969,9 +969,9 @@ def main():
     }
     decoder_args = SimpleNamespace(**decoder_params)
 
-    encoder = PatchConvEncoder(
+    encoder = PatchingEncoder(
         grid_size=model_cfg.grid_size,
-        featured_patch_dim=model_cfg.featured_patch_dim,
+        encoder_dim=model_cfg.encoder_dim,
         cnn_feature_extractor_name=model_cfg.cnn_feature_extractor['name'],
         pre_trained=train_cfg.pre_trained,
     )
@@ -980,7 +980,7 @@ def main():
     # pooling head로 입력 차원이 고정되므로, classifier는 Q에 의존하지 않습니다.
     classifier = Classifier(
         num_decoder_patches=model_cfg.num_decoder_patches,
-        featured_patch_dim=model_cfg.featured_patch_dim,
+        encoder_dim=model_cfg.encoder_dim,
         num_labels=num_labels,
         dropout=model_cfg.dropout,
     )

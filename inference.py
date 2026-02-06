@@ -53,7 +53,7 @@ except ImportError:
 # =============================================================================
 # 제안 모델 임포트
 # =============================================================================
-from models import Model as DecoderBackbone, Encoder, Classifier, HybridModel
+from models import Model as DecoderBackbone, PatchingEncoder, Classifier, HybridModel
 from dataloader import prepare_data, InferenceImageDataset
 from onnx_utils import ONNXCalibrationDataReader, measure_onnx_performance, MemoryMonitor, flush_memory
 
@@ -415,7 +415,7 @@ def main():
         }
         decoder_args = SimpleNamespace(**decoder_params)
 
-        encoder = Encoder(grid_size=model_cfg.grid_size,
+        encoder = PatchingEncoder(grid_size=model_cfg.grid_size,
                                     encoder_dim=model_cfg.encoder_dim, cnn_feature_extractor_name=model_cfg.cnn_feature_extractor.name,
                                     pre_trained=False)
         decoder = DecoderBackbone(args=decoder_args)
