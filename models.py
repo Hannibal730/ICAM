@@ -320,6 +320,7 @@ class Embedding4Decoder(nn.Module):
         super().__init__()
 
         self.adaptive_initial_query = adaptive_initial_query
+        self.scale = emb_dim ** -0.5
 
         # --- 입력 인코딩 ---
         self.W_feat2emb = nn.Linear(encoder_dim, emb_dim)
@@ -437,7 +438,7 @@ class Embedding4Decoder(nn.Module):
 
             v_init = self.W_V_init(x_clean)
 
-            latent_attn_scores = torch.bmm(latent_queries, k_init.transpose(1, 2))
+            latent_attn_scores = torch.bmm(latent_queries, k_init.transpose(1, 2)) * self.scale
             latent_attn_weights = F.softmax(latent_attn_scores, dim=-1)
             seq_decoder_patches = torch.bmm(latent_attn_weights, v_init)
         else:
