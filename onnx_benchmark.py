@@ -15,32 +15,41 @@ SCI/EAAI 투고용 ONNX Runtime(ORT) CPU inference 벤치마크 스크립트 (Ra
 - (선택) fresh-process 반복 실행: --repeat N --fresh-process true
 
 권장(투고용) 실행 예시 (Pi5, 4 cores)
-1) Latency (통제 강함):
-   OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 \
-   python3 onnx_benchmark.py --onnx model.onnx --mode latency \
-     --cpu-affinity 0-3 --intra 4 --inter 1 --execution-mode sequential \
-     --warmup 50 --runs 1000 --repeat 5 --fresh-process true
+1) Latency:
 
+python3 onnx_benchmark.py \
+  --onnx /home/pi/Desktop/sewer_binary_cls_v9/onnx_fp32/mobilenet_v4_s/mobilenet_v4_s_model_fp32_20260118_104628.onnx \
+  --mode latency \
+  --cpu-affinity 0-3 \
+  --intra 4 --inter 1 --execution-mode sequential \
+  --seed 42 --fill random \
+  --warmup 50 --runs 1000 \
+  --repeat 5 --fresh-process true \
+  --omp-threads 1 \
+  --openblas-threads 1 \
+  --mkl-threads 1 \
+  --numexpr-threads 1 \
+  --veclib-threads 1 \
+  --json-out verify_latency.json
+  
+  
+  
+  
 2) Peak RSS (paper-grade):
    (fresh-process + 외부 측정)
-   for i in 1 2 3 4 5; do
-     OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 \
-     /usr/bin/time -v python3 onnx_benchmark.py --onnx model.onnx --mode latency \
-       --cpu-affinity 0-3 --intra 4 --inter 1 --execution-mode sequential \
-       --warmup 50 --runs 1000 --json-out run_$i.json 1> run_$i.out 2> run_$i.time
-   done
+
+for i in 1 2 3 4 5; do
+  /usr/bin/time -v python3 onnx_benchmark.py \
+    --onnx /home/pi/Desktop/sewer_binary_cls_v9/onnx_int8/icam/best_model_int8.onnx \
+    --mode latency \
+    --cpu-affinity 0-3 --intra 4 --inter 1 --execution-mode sequential \
+    --warmup 50 --runs 1000 \
+    --omp-threads 1 --openblas-threads 1 --mkl-threads 1 --numexpr-threads 1 --veclib-threads 1 \
+    --json-out run_${i}.json \
+    1> run_${i}.out 2> run_${i}.time
+done
+   
    -> 'Maximum resident set size (kbytes)' 를 Peak RSS로 사용
-
-or
-OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 \
-/usr/bin/time -v python3 onnx_benchmark.py \
---onnx /home/pi/Desktop/sewer_binary_cls_v9/onnx/deit_tiny/deit_tiny_model_fp32_20260118_104712.onnx \
---mode latency \
---cpu-affinity 0-3 \
---intra 4 --inter 1 --execution-mode sequential \
---seed 42 --fill random \
---warmup 50 --runs 1000
-
 
 저장된 time_*.txt에서 Max RSS 평균/분산을 “로그로 출력”
 peak_rss_stats.py
@@ -48,21 +57,27 @@ peak_rss_stats.py
 
 
 3) Memory (보조 지표, Load delta RSS (MB), inference peak delta (MB)):
-OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 \
+
 python3 onnx_benchmark.py \
-  --onnx /home/pi/Desktop/sewer_binary_cls_v9/onnx/deit_tiny/deit_tiny_model_fp32_20260118_104712.onnx \
+  --onnx /home/pi/Desktop/sewer_binary_cls_v9/onnx_int8/icam/best_model_int8.onnx \
   --mode memory \
   --cpu-affinity 0-3 \
   --intra 4 --inter 1 --execution-mode sequential \
   --seed 42 --fill random \
   --warmup 50 --runs 1000 \
+  --omp-threads 1 --openblas-threads 1 --mkl-threads 1 --numexpr-threads 1 --veclib-threads 1 \
   --mem-interval-ms 1 \
-  --mem-include-warmup true \
   --repeat 5 --fresh-process true \
-  --json-out memory_benchmark.json
+  --json-out verify_memory_delta.json \
+  --mem-include-warmup true
+  
+  
+  
+  
+#   --mem-include-warmup true
 
 
-3-2) warmup 제거 하려면 --mem-include-warmup 옵션을 false로 수정 필요
+3-2) warmup 제거 하려면 --mem-include-warmup 옵션을 false 로 수정 필요
 
 
 
@@ -152,10 +167,11 @@ def apply_cpu_affinity(cpus: List[int]) -> None:
 def set_env_threads_auto(intra_threads: int, explicit: Dict[str, Optional[int]]) -> Dict[str, Optional[int]]:
     """
     If user enabled env thread control and did not set explicit values,
-    set common env vars to intra_threads (or to cpu_count if intra=0).
+    set common external math-library thread env vars to 1 by default.
+    (Explicit --*-threads options still take precedence.)
     """
-    cpu_cnt = os.cpu_count() or 1
-    base = intra_threads if intra_threads and intra_threads > 0 else cpu_cnt
+    _ = intra_threads  # keep signature for call-site compatibility
+    base = 1
 
     out = dict(explicit)
     def _fill(key: str) -> None:

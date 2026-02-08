@@ -313,7 +313,6 @@ As illustrated in Figure~\ref{fig:algorithm} and summarized in Algorithm~\ref{al
 
 
 Vision Transformers (ViT) represent an image as a sequence of patch embeddings processed by a Transformer encoder \citep{dosovitskiy2020image}. However, global self-attention over all tokens scales quadratically with sequence length, motivating architectures that interact with the input through a smaller set of latent or query tokens \citep{jaegle2021perceiver}.
-
 Perceiver addresses this cost through asymmetric cross-attention that projects the input token array into a fixed-size latent bottleneck: queries are produced from a learned latent array, while keys and values are derived from the input tokens \citep{jaegle2021perceiver}. The resulting latent representations are subsequently refined via self-attention in latent space \citep{jaegle2021perceiver}. DETR similarly employs a fixed set of learned ``object queries'' that are iteratively updated in the decoder through decoder self-attention and encoder--decoder cross-attention to image features \citep{carion2020end}.
 
 In both Perceiver and DETR, the latent or query embeddings are global learned parameters shared across samples and become instance-specific only through subsequent attention updates \citep{carion2020end,jaegle2021perceiver}. As a consequence, early decoder layers must simultaneously perform instance conditioning and representation refinement, placing a substantial burden on iterative decoding. Recent work on detection transformers has explicitly highlighted this inefficiency, demonstrating that initializing queries with dense priors \citep{yao2021efficient} or conditioning them on spatial context \citep{meng2021conditional} significantly accelerates convergence by narrowing the search space and reducing the need for prolonged refinement.
@@ -467,9 +466,16 @@ Since ICAM is designed as a binary classifier for defect detection, we specifica
 
 \subsection{Hyperparameters}
 \label{sec:exp_hyperparams}
-For model configuration, we use a compact cross-attention decoder with two layers and a single learnable query. Each input image is partitioned into non-overlapping patches using patch size $p=56$ and stride $s=56$. Each patch is then processed by a lightweight CNN feature extractor whose weights are shared across patches to reduce parameters. The extractor is derived from the early stages of EfficientNet-B0 \citep{tan2019efficientnet} and relies on Mobile Inverted Bottleneck Convolution (MBConv) blocks, which reduce computation while preserving representational capacity via depthwise separable convolutions and inverted residual connections \citep{sandler2018mobilenetv2}.
+For model configuration, ICAM uses a lightweight MBConv-based visual encoder with an input size of $224 \times 224$ \citep{sandler2018mobilenetv2}.
+The encoder feature map is pooled into a $7 \times 7$ grid, yielding $N{=}49$ encoder tokens of dimension 24.
+The decoder uses one learnable query ($N_q{=}1$), six cross-attention layers, two attention heads, embedding dimension 24, dropout 0.1, and stochastic depth ratio 0.2.
+As shown in Table~\ref{tab:param_breakdown}, the model has only 47,585 trainable parameters in total.
 
-As shown in Table~\ref{tab:param_breakdown}, the model has only 47.59K trainable parameters.
+For training, we follow the Sewer-ML preprocessing protocol and train ICAM and all baselines from scratch for 90 epochs, consistent with the training schedule of Sewer-ML \citep{haurum2021sewer}.
+We optimize cross-entropy loss with label smoothing 0.1 using AdamW (initial learning rate $1 \times 10^{-3}$, weight decay $1 \times 10^{-4}$). We use cosine annealing scheduling with $T_{\max}{=}90$ and $\eta_{\min}{=}1 \times 10^{-4}$.
+To account for differences in dataset scale, we use a batch size of 256 for Sewer-ML and 16 for the private dataset.
+Training is performed on a single NVIDIA RTX 5090 GPU.
+
 
 \begin{table}[t]
     \centering
@@ -483,12 +489,12 @@ As shown in Table~\ref{tab:param_breakdown}, the model has only 47.59K trainable
             \midrule
             \addlinespace[0.5em] 
             
-            \textbf{Visual Encoder} & \textbf{15,840} \\
-            \quad Single-pass Conv & 15,792 \\
+            \textbf{Encoder} & \textbf{15,840} \\
+            \quad Convolution Layer & 15,792 \\
             \quad LayerNorm & 48 \\
             \addlinespace 
             
-            \textbf{Decoder (Cross-Attention-based)} & \textbf{31,392} \\
+            \textbf{Decoder} & \textbf{31,392} \\
             \quad Embedding Layer ($W_{\text{emb}}$) & 600 \\
             \quad Init Query Proj ($W_{\text{init}Q}$) & 600 \\
             \quad Init Key Proj ($W_{\text{init}K}$) & 600 \\
@@ -498,7 +504,7 @@ As shown in Table~\ref{tab:param_breakdown}, the model has only 47.59K trainable
             \quad Output Proj & 600 \\
             \addlinespace 
             
-            \textbf{Classification Head} & \textbf{353} \\
+            \textbf{Classifier} & \textbf{353} \\
             
             \addlinespace[0.5em] 
             \midrule 
@@ -508,43 +514,55 @@ As shown in Table~\ref{tab:param_breakdown}, the model has only 47.59K trainable
     }
 \end{table}
 
-
-
-For training, we follow the preprocessing protocol of Sewer-ML and train ICAM and all baselines from scratch for 90 epochs, consistent with the training schedule of Sewer-ML \citep{haurum2021sewer}. To account for differences in dataset scale, we use a batch size of 256 for Sewer-ML and 16 for the private dataset to stabilize optimization under limited data. We minimize the cross-entropy loss using AdamW with an initial learning rate of $1 \times 10^{-4}$ and weight decay of $1 \times 10^{-2}$, together with a cosine annealing learning-rate schedule. To mitigate overconfident predictions on ambiguous or visually subtle defects, we apply label smoothing \citep{szegedy2016rethinking, muller2019does}. Training is performed on a single NVIDIA RTX 5090 GPU.
-
-
-
-
-
 \subsection{Metrics and Comparison Strategy}
 \label{sec:exp_metrics}
 This section describes the evaluation metrics and protocols used to assess the feasibility of deploying models in resource-constrained environments. We analyze both model complexity (FLOPs, parameters, model size) and runtime performance (latency, memory usage) against baseline models.
 
 \paragraph{Experimental Setup}
-To reflect a practical deployment pipeline, we convert all trained PyTorch checkpoints to ONNX format (opset version 17) and conduct measurements using ONNX Runtime (v1.23.2). All experiments are performed on a \textbf{Raspberry Pi 5} (4GB RAM), which features a Broadcom BCM2712 SoC with a quad-core ARM Cortex-A76 CPU and LPDDR4X memory. This platform provides a realistic testbed under computational and power constraints widely encountered in industrial edge computing and robotics, in contrast to proxy efficiency metrics collected on server-class GPUs \citep{mathe2024comprehensive}.
+To reflect a practical deployment pipeline, we convert trained PyTorch checkpoints to ONNX format (opset version 17) and evaluate them with ONNX Runtime (v1.23.2).
+All experiments are performed on a \textbf{Raspberry Pi 5} (4GB RAM), which features a Broadcom BCM2712 SoC with a quad-core ARM Cortex-A76 CPU and LPDDR4X memory.
+This platform provides a realistic testbed under computational and power constraints widely encountered in industrial edge computing and robotics, in contrast to proxy efficiency metrics collected on server-class GPUs \citep{mathe2024comprehensive}.
 
-To ensure reproducibility on an embedded platform, we enforce strict system-level controls.
+
+
+For reproducibility on an embedded platform, latency and memory experiments are executed under system-level controlled settings.
 Specifically, the CPU frequency governor is fixed to \texttt{performance} to minimize run-to-run fluctuations caused by dynamic voltage and frequency scaling (DVFS).
-The benchmark process is pinned to a fixed CPU set (cores 0--3) using CPU affinity to reduce scheduler-induced jitter and cache effects arising from core migration.
-We additionally fix ONNX Runtime threading and execution behavior using \texttt{intra\_op\_num\_threads}=4, \texttt{inter\_op\_num\_threads}=1, and \texttt{ORT\_SEQUENTIAL} execution mode, thereby keeping the parallelism structure consistent across runs and limiting variability due to inter-operator parallel scheduling.
-To prevent thread oversubscription from external math libraries that can introduce uncontrolled nested parallelism, we explicitly set \texttt{OMP\_NUM\_THREADS}=1 and \texttt{OPENBLAS\_NUM\_THREADS}=1 for all latency and memory experiments.
-For robustness, each benchmark is repeated five times as independent executions using fresh processes.
-These controls collectively reduce confounding factors from DVFS, OS scheduling, and nested threading, enabling fair and stable comparisons across models on Raspberry Pi 5.
+CPU affinity is pinned to cores 0--3 to reduce scheduler-induced jitter and cache effects arising from core migration.
+ONNX Runtime is configured with \texttt{intra\_op\_num\_threads}=4, \texttt{inter\_op\_num\_threads}=1, and \texttt{ORT\_SEQUENTIAL} execution mode, which keeps the operator-level parallelism fixed across runs and reduces scheduler-induced variance.
+To prevent thread oversubscription and uncontrolled nested parallelism in external numerical libraries, we set the environment variables \texttt{OMP\_NUM\_THREADS}, \texttt{OPENBLAS\_NUM\_THREADS}, \texttt{MKL\_NUM\_THREADS}, \texttt{NUMEXPR\_NUM\_THREADS}, and \texttt{VECLIB\_MAXIMUM\_THREADS} to 1 for all latency and memory experiments.
+The CPU governor is set to \texttt{performance} during benchmarking.
+
+
+
+
+
+
+
 
 
 
 \paragraph{Efficiency Metrics}
-We measure inference latency and memory usage using a strictly defined protocol. The process consists of a warm-up phase (50 runs) followed by a measurement phase (1{,}000 runs) using randomly generated input with a single-sample batch size ($B=1$) and a fixed seed (42).
-All values are reported as Mean $\pm$ Std across 5 independent runs (fresh processes).
+We measure inference latency and memory usage with a fixed protocol: warm-up (50 runs), timed phase (1{,}000 runs), random input, single-sample batch size ($B=1$), and seed 42. For robustness, each benchmark is repeated five times as independent fresh-process executions, and we report Mean $\pm$ Std across repeats.
 
-For \textbf{latency}, we exclude the warm-up runs to eliminate initialization effects such as JIT compilation, cache warming, and dynamic frequency scaling, following the evaluation protocols established by the MLPerf Inference benchmark \citep{reddi2020mlperf}. We measure the elapsed time using \texttt{time.perf\_counter\_ns()}. To capture both average performance and runtime stability (tail latency), we report the mean, P50, P90, P95, and P99 percentiles.
+For \textbf{latency}, we exclude the warm-up runs to eliminate initialization effects such as JIT compilation, cache warming, and dynamic frequency scaling, following the evaluation protocols established by the MLPerf Inference benchmark \citep{reddi2020mlperf}.
+We measure the elapsed time using \texttt{time.perf\_counter\_ns()}. To capture both average performance and runtime stability (tail latency), we report the mean, P50, P90, P95, and P99 percentiles.
 
-For \textbf{memory usage}, we report the Peak Resident Set Size (RSS) to evaluate the actual physical memory footprint during inference. Captured via the standard GNU time utility (\texttt{/usr/bin/time -v}), this metric represents the maximum physical memory allocated by the process. This includes persistent memory for weights and the non-persistent arena for activation maps, consistent with memory management architectures for TinyML systems \citep{david2021tensorflow}. Additionally, we estimate the interval RSS by polling \texttt{proc.memory\_info().rss} at 1~ms intervals. This high-frequency monitoring isolates memory overheads during model loading from transient peaks during inference, which is essential for assessing system multitenancy and operational limits on edge devices \citep{david2021tensorflow}.
+For \textbf{memory usage}, we report the Peak Resident Set Size (RSS) to evaluate the actual physical memory footprint during inference.
+Captured via the standard GNU time utility (\texttt{/usr/bin/time -v}), this metric represents the maximum physical memory allocated by the process.
+This includes persistent memory for weights and the non-persistent arena for activation maps, consistent with memory management architectures for TinyML systems \citep{david2021tensorflow}.
+We additionally report internal RSS diagnostics by polling \texttt{proc.memory\_info().rss} at 1~ms intervals.
+This high-frequency monitoring isolates memory overheads during model-load from inference phases, which is essential for assessing system multitenancy and operational limits on edge devices \citep{david2021tensorflow}.
+
+
+
+
 
 \paragraph{Performance Metrics}
-We report Top-1 accuracy over all classes to ensure a comprehensive evaluation of global performance. However, our primary focus lies on the metrics for the \textbf{abnormal class}: precision, recall, and F1-score.
+We report Top-1 accuracy over all classes to ensure a comprehensive evaluation of global performance.
+We also primary focus on the metrics for the \textbf{abnormal class}: precision, recall, and F1-score.
 Following \citet{haurum2021sewer}, we prioritize identifying defects because false negatives incur significantly higher economic risks than false positives.
-While this necessitates high recall, relying solely on recall is insufficient; frequent false alarms (low precision) can reduce system reliability and increase manual verification costs \citep{chandola2009anomaly}. Therefore, we report precision and F1-score alongside recall to provide a balanced assessment of anomaly detection capability.
+While this necessitates high recall, relying solely on recall is insufficient since requent false alarms (low precision) can reduce system reliability and increase manual verification costs \citep{chandola2009anomaly}.
+Therefore, we report precision and F1-score alongside recall to provide a balanced assessment of anomaly detection capability.
 
 We also assess robustness under varying \textbf{numerical precision}, a critical factor for deployment on NPU/DSP accelerators \citep{sze2017efficient}.
 To this end, we evaluate the performance of ICAM and baselines across three standard inference precision levels: FP32, FP16, and INT8.
@@ -552,7 +570,10 @@ For FP16, we convert the trained FP32 ONNX graph to IEEE~754 half precision.
 For static INT8, we adopt the integer-only inference formulation of \citet{jacob2018quantization}, quantizing weights to signed 8-bit integers (QInt8) and activations to unsigned 8-bit integers (QUInt8).
 We export in Quantize--DeQuantize (QDQ) format with per-channel weight quantization, which has been shown to better preserve accuracy even after batch-normalization folding \citep{wu2020integer}.
 Quantization parameters (scale and zero-point) are estimated using a calibration set of 512 randomly selected training images, consistent with the NVIDIA TensorRT developer guide, which suggests that approximately 500 samples are sufficient even for large-scale benchmarks like ImageNet.
-We use percentile-based calibration at the 99.99th percentile, which sets clipping thresholds by discarding extreme activation values beyond this percentile, mitigating the impact of outliers on the quantization scale while preserving resolution for the bulk of the activation distribution \citep{li2019fully}.
+We also use percentile calibration at the 99.99, which sets clipping thresholds by discarding extreme activation values beyond this percentile, mitigating the impact of outliers on the quantization scale while preserving resolution for the bulk of the activation distribution \citep{li2019fully}.
+
+
+
 
 \paragraph{Comparison Strategy}
 We benchmark ICAM against the diverse baseline architectures introduced in Section~\ref{sec:exp_baselines}. Given that these models differ substantially in their native resource requirements, direct comparison can be inequitable. To ensure fair comparisons across architectures, we apply a unified pruning protocol to all baselines under two budget settings.
@@ -579,37 +600,37 @@ Overall, this pruning protocol provides a standardized basis for comparing ICAM 
 
 \section{Experimental Results}
 \label{sec:exp_results}
-In this section, we validate the practical feasibility of ICAM by comparing it with baselines under standardized resource constraints.
-
-
-
+In this section, we validate the practical feasibility of ICAM by comparing it with baselines on a Raspberry Pi 5 under standardized resource constraints.
 
 
 
 \begin{table}[h!]
     \centering
-    \caption{Performance comparison of unpruned models. FLOPs are reported assuming $2 \times$ FLOPs per MAC. Size denotes the physical storage requirements of the converted ONNX file.}
+    \caption{Comparison of model complexity in terms of FLOPs, parameters, and storage size. FLOPs are reported assuming $2 \times$ FLOPs per MAC. Size denotes the physical storage requirements of the converted ONNX file across different precisions.}
     \label{tab:original_spec}
-    \resizebox{0.8\columnwidth}{!}{%
-        \begin{tabular}{l c r r}
+    \resizebox{0.85\columnwidth}{!}{%
+        \begin{tabular}{l c r r r r}
             \toprule
-            \textbf{Model} & \textbf{FLOPs (G)} & \textbf{Params (\#)} & \textbf{Size (MB)} \\
+            \multirow{2}{*}[-2.5pt]{\textbf{Model}} & 
+            \multirow{2}{*}[-2.5pt]{\textbf{FLOPs (G)}} & 
+            \multirow{2}{*}[-2.5pt]{\textbf{Params}} & 
+            \multicolumn{3}{c}{\textbf{Size (MB)}} \\
+            \cmidrule(lr){4-6}
+             & & & \textbf{FP32} & \textbf{FP16} & \textbf{INT8} \\
             \midrule
-            MobileNetV4-S \citep{qin2024mobilenetv4}    & 0.3853 & 2,495,586 & 9.49 \\
-            Xie et al. \citep{xie2019automatic}         & 2.8696 & 9,160,194 & 34.95 \\
-            DeiT-Tiny \citep{touvron2021training}       & 2.1493 & 5,524,802 & 21.18 \\
-            MobileViT-XXS \citep{mehta2021mobilevit}    & 0.5384 & 951,666 & 3.80 \\
-            ICAM (Ours) & \textbf{0.1816} & \textbf{47,585} & \textbf{0.30} \\
+            MobileNetV4-S \citep{qin2024mobilenetv4}    & 0.3853 & 2,495,586 & 9.49 & 4.76 & 2.65 \\
+            Xie et al. \citep{xie2019automatic}         & 2.8696 & 9,160,194 & 34.95 & 17.4 & 8.77 \\
+            DeiT-Tiny \citep{touvron2021training}       & 2.1493 & 5,524,802 & 21.18 & 10.6 & 5.81 \\
+            MobileViT-XXS \citep{mehta2021mobilevit}    & 0.5384 &   951,666 & 3.80 & 2.05 & 1.62 \\
+            ICAM (Ours)                                 & \textbf{0.1816} & \textbf{47,585} & \textbf{0.30} & \textbf{0.23} & \textbf{0.35} \\
             \bottomrule
         \end{tabular}%
     }
 \end{table}
 
-
-
 \begin{table*}[h!]
 \centering
-\caption{Performance comparison across different precisions (FP32, FP16, INT8). Models are evaluated on Sewer-ML and Private datasets. Note that Precision, Recall and F1-score are reported with respect to the \textbf{Abnormal} class.}
+\caption{Performance comparison across different precisions (FP32, FP16, INT8). Models are evaluated on Sewer-ML and Private dataset. Note that Precision, Recall and F1-score are reported with respect to the \textbf{Abnormal} class.}
 \label{tab:precision_based}
 \resizebox{\textwidth}{!}{
 \begin{tabular}{llcccccccc}
@@ -620,85 +641,128 @@ In this section, we validate the practical feasibility of ICAM by comparing it w
 \midrule
 % --- FP32 Block ---
 \multirow{5}{*}{FP32}
- & MobileNetV4-S \citep{qin2024mobilenetv4} & 90.53& 89.49& 90.56& 90.02& 84.66& 81.44& 86.62& 83.95\\
- & Xie et al. \citep{xie2019automatic} & 89.49& 88.54& 89.30& 88.92& 81.42& 77.65& 84.08& 80.73\\
- & DeiT-Tiny \citep{touvron2021training} & 89.08& 88.40& 88.47& 88.43& 80.83& 76.74& 84.08& 80.24\\
- & MobileViT-XXS \citep{mehta2021mobilevit} & 91.16& 90.72& 90.53& 90.62& 82.60& 81.41& 80.89& 81.15\\
- & Ours & 91.30& 89.79& 92.02& 90.89& 87.02& 84.66& 87.90& 86.25\\
+ & MobileNetV4-S \citep{qin2024mobilenetv4} & 90.53 & 89.49 & 90.56 & 90.02 & 84.66 & 81.44 & \textbf{86.62} & 83.95 \\
+ & Xie et al. \citep{xie2019automatic}     & 89.49 & 88.54 & 89.30 & 88.92 & 81.42 & 77.65 & 84.08 & 80.73 \\
+ & DeiT-Tiny \citep{touvron2021training}   & 89.08 & 88.40 & 88.47 & 88.43 & 80.83 & 76.74 & 84.08 & 80.24 \\
+ & MobileViT-XXS \citep{mehta2021mobilevit} & 91.16 & \textbf{90.72} & 90.53 & 90.62 & 82.60 & 81.41 & 80.89 & 81.15 \\
+ & ICAM (Ours)                              & \textbf{91.32} & 89.60 & \textbf{92.31} & \textbf{90.94} & \textbf{86.43} & \textbf{87.25} & 82.80 & \textbf{84.97} \\
 \midrule
 % --- FP16 Block ---
 \multirow{5}{*}{FP16} 
- & MobileNetV4-S \citep{qin2024mobilenetv4} & 90.53& 89.50& 90.55& 90.02& 84.66& 81.44& 86.62& 83.95\\
- & Xie et al. \citep{xie2019automatic} & 89.50& 88.55& 89.29& 88.92& 81.42& 77.65& 84.08& 80.73\\
- & DeiT-Tiny \citep{touvron2021training} & 89.08& 88.40& 88.47& 88.44& 80.83& 76.74& 84.08& 80.24\\
- & MobileViT-XXS \citep{mehta2021mobilevit} & 91.16& 90.72& 90.54& 90.63& 82.01& 81.17& 79.62& 80.39\\
- & Ours & 91.30& 89.78& 92.03& 90.89& 87.32& 85.19& 87.90& 86.52\\
+ & MobileNetV4-S \citep{qin2024mobilenetv4} & 90.53 & 89.50 & 90.55 & 90.02 & 84.66 & 81.44 & \textbf{86.62} & 83.95 \\
+ & Xie et al. \citep{xie2019automatic}     & 89.50 & 88.55 & 89.29 & 88.92 & 81.42 & 77.65 & 84.08 & 80.73 \\
+ & DeiT-Tiny \citep{touvron2021training}   & 89.08 & 88.40 & 88.47 & 88.44 & 80.83 & 76.74 & 84.08 & 80.24 \\
+ & MobileViT-XXS \citep{mehta2021mobilevit} & 91.16 & \textbf{90.72} & 90.54 & 90.63 & 82.01 & 81.17 & 79.62 & 80.39 \\
+ & ICAM (Ours)                              & \textbf{91.32} & 89.64 & \textbf{92.28} & \textbf{90.94} & \textbf{86.43} & \textbf{87.25} & 82.80 & \textbf{84.97} \\
 \midrule
 % --- INT8 Block ---
 \multirow{5}{*}{INT8} 
- & MobileNetV4-S \citep{qin2024mobilenetv4} & 83.20& 96.55& 66.79& 78.96& 84.96& 81.93& 86.62& 84.21\\
- & Xie et al. \citep{xie2019automatic} & 89.47& 88.92& 88.74& 88.83s& 81.42& 77.65& 84.08& 80.73\\
- & DeiT-Tiny \citep{touvron2021training} & 85.82& 81.52& 90.44& 85.75& 78.76& 72.73& 86.62& 79.09\\
- & MobileViT-XXS \citep{mehta2021mobilevit} & 90.41& 91.85& 87.42& 89.58& 82.89& 82.35& 80.25& 81.29\\
- & Ours & 91.24& 90.28& 91.27& 90.77& 87.02& 84.66& 87.90& 86.25\\
+ & MobileNetV4-S \citep{qin2024mobilenetv4} & 83.20 & \textbf{96.55} & 66.79 & 78.96 & 84.96 & 81.93 & \textbf{86.62} & 84.21 \\
+ & Xie et al. \citep{xie2019automatic}     & 89.47 & 88.92 & 88.74 & 88.83 & 81.42 & 77.65 & 84.08 & 80.73 \\
+ & DeiT-Tiny \citep{touvron2021training}   & 85.82 & 81.52 & 90.44 & 85.75 & 78.76 & 72.73 & \textbf{86.62} & 79.09 \\
+ & MobileViT-XXS \citep{mehta2021mobilevit} & 90.41 & 91.85 & 87.42 & 89.58 & 82.89 & 82.35 & 80.25 & 81.29 \\
+ & ICAM (Ours)                              & \textbf{91.26} & 89.70 & \textbf{92.05} & \textbf{90.86} & \textbf{86.43} & \textbf{87.25} & 82.80 & \textbf{84.97} \\
 \bottomrule
 \end{tabular}
 }
 \end{table*}
 
 
-\begin{table*}[t!]
+\begin{table*}[h!]
     \centering
-    \caption{Inference latency and Peak Resident Set Size (RSS) performance analysis. 
+    \caption{Inference latency and Peak Resident Set Size (RSS) performance analysis across precisions. 
     A warm-up phase was executed to stabilize the runtime state prior to measurement.
-    Latency reports the average inference execution time of the \texttt{sess.run()} call, strictly excluding model loading and warm-up overheads.
-    Peak RSS captures the maximum physical memory footprint of the entire process lifetime via the OS command \texttt{/usr/bin/time -v}, encompassing interpreter startup, model loading, warm-up, and inference.}
-    \label{tab:original_efficiency}
+    Latency reports the average inference execution time, excluding model loading and warm-up overheads.
+    Peak RSS captures the maximum physical memory footprint of the entire process lifetime, including interpreter startup, model loading, warm-up, and inference.}
+    \label{tab:efficiency_precision}
     \resizebox{\textwidth}{!}{%
-    \begin{tabular}{l r@{ $\pm$ }l r@{ $\pm$ }l r@{ $\pm$ }l r@{ $\pm$ }l r@{ $\pm$ }l}
+    \begin{tabular}{ll c@{ $\pm$ }c c@{ $\pm$ }c c@{ $\pm$ }c c@{ $\pm$ }c c@{ $\pm$ }c}
         \toprule
-        \multirow{2}{*}[-2.5pt]{\textbf{Model}} & \multicolumn{8}{c}{\textbf{Latency (ms)}} & \multicolumn{2}{c}{\textbf{RSS (MB)}} \\
-        \cmidrule(lr){2-9} \cmidrule(lr){10-11}
-         & \multicolumn{2}{c}{\textbf{Mean}} & \multicolumn{2}{c}{\textbf{P50}} & \multicolumn{2}{c}{\textbf{P95}} & \multicolumn{2}{c}{\textbf{P99}} & \multicolumn{2}{c}{\textbf{Peak}} \\
+        \multirow{2}{*}[-2.5pt]{\textbf{Precision}} & \multirow{2}{*}[-2.5pt]{\textbf{Model}} & \multicolumn{8}{c}{\textbf{Latency (ms)}} & \multicolumn{2}{c}{\textbf{RSS (MB)}} \\
+        \cmidrule(lr){3-10} \cmidrule(lr){11-12}
+         & & \multicolumn{2}{c}{\textbf{Mean}} & \multicolumn{2}{c}{\textbf{P50}} & \multicolumn{2}{c}{\textbf{P95}} & \multicolumn{2}{c}{\textbf{P99}} & \multicolumn{2}{c}{\textbf{Peak}} \\
         \midrule
-        MobileNetV4-S \citep{qin2024mobilenetv4}   &  7.73& 0.03&  7.68& 0.01&  \textbf{7.92}& \textbf{0.11}& \textbf{9.05}& \textbf{0.40}& 74.79& 0.18\\
-        Xie et al. \citep{xie2019automatic}        & 33.92 & 0.16 & 33.71 & 0.12 & 34.97 & 0.25 & 40.84 & 10.02 & 123.18 & 0.45 \\
-        DeiT-Tiny \citep{touvron2021training}       & 33.12 & 0.17 & 32.93 & 0.20 & 34.41 & 0.15 & 35.71 & 0.16 & 91.24 & 2.40 \\
-        MobileViT-XXS \citep{mehta2021mobilevit}   & 22.20 & 0.11 & 22.05 & 0.06 & 22.89 & 0.29 & 24.50 & 0.67 & 78.37 & 0.01 \\
-        ICAM (Ours)  &  \textbf{7.68}& \textbf{0.02}&  \textbf{7.60}& \textbf{0.03}& 7.95& 0.09& 9.22& 0.55& \textbf{71.56}& \textbf{0.23}\\
+        % --- FP32 Block ---
+        \multirow{5}{*}{FP32}
+         & MobileNetV4-S \citep{qin2024mobilenetv4}   & 7.73 & 0.06 & 7.68 & 0.05 & 7.91 & 0.10 & 9.14 & 0.52 & 74.85 & 0.02 \\
+         & Xie et al. \citep{xie2019automatic}        & 33.89 & 0.19 & 33.75 & 0.18 & 35.00 & 0.38 & 36.20 & 0.28 & 123.14 & 0.26 \\
+         & DeiT-Tiny \citep{touvron2021training}      & 33.05 & 0.15 & 32.80 & 0.12 & 34.37 & 0.27 & 36.11 & 0.41 & 91.70 & 0.90 \\
+         & MobileViT-XXS \citep{mehta2021mobilevit}   & 22.22 & 0.17 & 22.09 & 0.17 & 22.82 & 0.22 & 24.57 & 0.28 & 78.34 & 0.06 \\
+         & ICAM (Ours)                                & \textbf{7.66} & \textbf{0.04} & \textbf{7.61} & \textbf{0.05} & \textbf{7.86} & \textbf{0.06} & \textbf{9.04} & \textbf{0.38} & \textbf{71.67} & \textbf{0.27} \\
+        \midrule
+        % --- FP16 Block ---
+        \multirow{5}{*}{FP16}
+         & MobileNetV4-S \citep{qin2024mobilenetv4}   & 4.44 & 0.01 & 4.42 & 0.02 & 4.54 & 0.09 & 5.04 & 0.26 & 72.23 & 0.01 \\
+         & Xie et al. \citep{xie2019automatic}        & 25.98 & 0.11 & 25.91 & 0.11 & 26.51 & 0.15 & 27.35 & 0.13 & 183.42 & 4.23 \\
+         & DeiT-Tiny \citep{touvron2021training}      & 53.11 & 0.17 & 52.88 & 0.15 & 54.61 & 0.26 & 55.67 & 0.32 & 115.28 & 1.80\\
+         & MobileViT-XXS \citep{mehta2021mobilevit}   & 37.07 & 0.19 & 36.90 & 0.16 & 38.03 & 0.22 & 39.15 & 0.47 & 81.53 & 0.12 \\
+         & ICAM (Ours)                                & \textbf{3.84} & \textbf{0.02} & \textbf{3.81} & \textbf{0.02} & \textbf{3.97} & \textbf{0.11} & \textbf{4.67} & \textbf{0.46} & \textbf{67.38} & \textbf{0.24} \\
+        \midrule
+        % --- INT8 Block ---
+        \multirow{5}{*}{INT8}
+         & MobileNetV4-S \citep{qin2024mobilenetv4}   & \textbf{2.68} & \textbf{0.01} & \textbf{2.66} & \textbf{0.02} & \textbf{2.78} & \textbf{0.10} & \textbf{3.30} & \textbf{0.30} & \textbf{67.28} & \textbf{0.26} \\
+         & Xie et al. \citep{xie2019automatic}        & 16.10 & 0.07 & 16.05 & 0.05 & 16.37 & 0.10 & 17.11 & 0.18 & 109.07 & 0.16 \\
+         & DeiT-Tiny \citep{touvron2021training}      & 37.12 & 0.10 & 36.92 & 0.08 & 38.46 & 0.30 & 39.84 & 0.95 & 81.59 & 0.29 \\
+         & MobileViT-XXS \citep{mehta2021mobilevit}   & 17.00 & 0.05 & 16.92 & 0.05 & 17.32 & 0.06 & 18.49 & 0.41 & 77.56 & 0.28 \\
+         & ICAM (Ours)                                & 5.02 & 0.01 & 4.99 & 0.01 & 5.13 & 0.03 & 5.76 & 0.24 & 72.50 & 0.21 \\
         \bottomrule
     \end{tabular}
     }
 \end{table*}
 
 
+% &  &  &  &  &  &  &  &  &  &  &  &  \\
 
-\begin{table*}[t!]
+
+
+\begin{table*}[h!]
     \centering
-    \caption{Comprehensive memory usage analysis comparing scenarios with and without warm-up. 
+    \caption{Comprehensive memory usage analysis across different precisions. 
             Values represent RSS deltas ($\Delta$) in MB measured via \texttt{psutil} sampling at 1 ms intervals.
-            Load $\Delta$ measures the memory increase during model initialization.
-            Inference $\Delta$ is measured relative to the baseline before warm-up (post-load) for \textbf{w/ Warm-up}, and after warm-up (steady-state) for \textbf{w/o Warm-up}.
+            Load $\Delta$ measures the memory increase during initialization.
+            Inference $\Delta$ is measured relative to the baseline before warm-up (cold-start), and after warm-up (steady-state).
+            Inference $\Delta$ is measured relative to the post-load baseline.
             Total $\Delta$ represents the peak total memory footprint increase from the pre-load state.}
-    \label{tab:original_memory}
+    \label{tab:memory_precision}
     \resizebox{\textwidth}{!}{%
-    \begin{tabular}{l r@{ $\pm$ }l r@{ $\pm$ }l r@{ $\pm$ }l r@{ $\pm$ }l r@{ $\pm$ }l r@{ $\pm$ }l}
+    \begin{tabular}{ll c@{ $\pm$ }c c@{ $\pm$ }c c@{ $\pm$ }c c@{ $\pm$ }c c@{ $\pm$ }c c@{ $\pm$ }c}
         \toprule
-        \multirow{2}{*}[-2.5pt]{\textbf{Model}} & \multicolumn{6}{c}{\textbf{w/ Warm-up ($\Delta$ MB)}} & \multicolumn{6}{c}{\textbf{w/o Warm-up ($\Delta$ MB)}} \\
-        \cmidrule(lr){2-7} \cmidrule(lr){8-13}
-         & \multicolumn{2}{c}{\textbf{Load}} & \multicolumn{2}{c}{\textbf{Infer.}} & \multicolumn{2}{c}{\textbf{Total}} & \multicolumn{2}{c}{\textbf{Load}} & \multicolumn{2}{c}{\textbf{Infer.}} & \multicolumn{2}{c}{\textbf{Total}} \\
+        \multirow{2}{*}[-2.5pt]{\textbf{Precision}} & \multirow{2}{*}[-2.5pt]{\textbf{Model}} & \multicolumn{6}{c}{\textbf{Cold Start (MB)}} & \multicolumn{6}{c}{\textbf{Steady State (MB)}} \\
+        \cmidrule(lr){3-8} \cmidrule(lr){9-14}
+         & & \multicolumn{2}{c}{\textbf{Load $\Delta$}} & \multicolumn{2}{c}{\textbf{Infer. $\Delta$}} & \multicolumn{2}{c}{\textbf{Total $\Delta$}} & \multicolumn{2}{c}{\textbf{Load $\Delta$}} & \multicolumn{2}{c}{\textbf{Infer. $\Delta$}} & \multicolumn{2}{c}{\textbf{Total $\Delta$}} \\
         \midrule
-        MobileNetV4-S \citep{qin2024mobilenetv4}   & 15.31 & 0.00 &  \textbf{0.42} & \textbf{0.01} & 15.73 & 0.01 & 15.31 & 0.00 & 0.02 & 0.00 & 15.73 & 0.00 \\
-        Xie et al. \citep{xie2019automatic}        & 38.30 & 0.00 & 28.20 & 0.01 & 66.50 & 0.01 & 38.30 & 0.00 & 0.02 & 0.00 & 66.50 & 0.01 \\
-        DeiT-Tiny \citep{touvron2021training}       & 24.84 & 1.13 &  2.28 & 0.01 & 27.12 & 1.13 & 26.67 & 1.46 & \textbf{0.01} & \textbf{0.01} & 29.12 & 1.69 \\
-        MobileViT-XXS \citep{mehta2021mobilevit}   &  6.82 & 0.44 & 12.04 & 0.50 & 18.86 & 0.11 &  6.63 & 0.35 & 0.02 & 0.00 & 18.86 & 0.10 \\
-        ICAM (Ours) &  \textbf{2.42}& \textbf{0.01}& 12.00& 0.01& \textbf{14.41}& \textbf{0.01}& \textbf{2.42}& \textbf{0.02}& 0.02 &0.01 & \textbf{14.41}& \textbf{0.01} \\
+        % --- FP32 Block ---
+        \multirow{5}{*}{FP32}
+         & MobileNetV4-S \citep{qin2024mobilenetv4}   & 15.30 & 0.00 & \textbf{0.45} & \textbf{0.01} & 15.75 & 0.01 & 15.30 & 0.00 & \textbf{0.03} & \textbf{0.01} & 15.75 & 0.02 \\
+         & Xie et al. \citep{xie2019automatic}        & 38.28 & 0.00 & 28.22 & 0.01 & 66.50 & 0.01 & 38.28 & 0.00 & \textbf{0.03} & \textbf{0.01} & 66.51 & 0.01 \\
+         & DeiT-Tiny \citep{touvron2021training}      & 25.79 & 1.16 & 2.31 & 0.02 & 28.11 & 1.15 & 25.30 & 1.13 & \textbf{0.03} & \textbf{0.01} & 27.61 & 1.13 \\
+         & MobileViT-XXS \citep{mehta2021mobilevit}   & 6.92 & 0.45 & 11.92 & 0.52 & 18.84 & 0.13 & 6.95 & 0.48 & 0.04 & 0.01 & 18.83 & 0.14 \\
+         & ICAM (Ours)                                & \textbf{2.40} & \textbf{0.01} & 12.03 & 0.02 & \textbf{14.43} & \textbf{0.01} & \textbf{2.40} & \textbf{0.01} & 0.04 & 0.01 & \textbf{14.43} & \textbf{0.01} \\
+        \midrule
+        % --- FP16 Block ---
+        \multirow{5}{*}{FP16}
+         & MobileNetV4-S \citep{qin2024mobilenetv4}   & 7.97 & 0.00 & 3.18 & 0.01 & 11.15 & 0.01 & 7.97 & 0.00 & 0.03 & 0.01 & 11.15 & 0.01 \\
+         & Xie et al. \citep{xie2019automatic}        & 61.23 & 0.92 & 43.57 & 5.52 & 104.80 & 6.37 & 60.52 & 1.37 & 0.03 & 0.01 & 102.32 & 6.77 \\
+         & DeiT-Tiny \citep{touvron2021training}      & 46.34 & 1.34 & \textbf{1.88} & \textbf{0.98} & 48.22 & 2.13 & 45.92 & 1.30 & 0.03 & 0.01 & 48.10 & 1.34 \\
+         & MobileViT-XXS \citep{mehta2021mobilevit}   & 9.24 & 0.01 & 11.23 & 0.23 & 20.48 & 0.18 & 9.17 & 0.02 & \textbf{0.02} & \textbf{0.01} & 20.54 & 0.16 \\
+         & ICAM (Ours)                                & \textbf{3.79} & \textbf{0.01} & 6.72 & 0.01 & \textbf{10.51} & \textbf{0.01} & \textbf{3.78} & \textbf{0.01} & 0.04 & 0.02 & \textbf{10.52} & \textbf{0.02} \\
+        \midrule
+        % --- INT8 Block ---
+        \multirow{5}{*}{INT8}
+         & MobileNetV4-S \citep{qin2024mobilenetv4}   & 7.28 & 0.05 & \textbf{0.96} & \textbf{0.01} & \textbf{8.24} & \textbf{0.05} & 7.30 & 0.03 & \textbf{0.02} & \textbf{0.01} & \textbf{8.25} & \textbf{0.03} \\
+         & Xie et al. \citep{xie2019automatic}        & 28.27 & 0.01 & 30.08 & 0.01 & 58.35 & 0.01 & 28.28 & 0.00 & 0.03 & 0.01 & 58.34 & 0.00 \\
+         & DeiT-Tiny \citep{touvron2021training}      & 11.89 & 0.24 & 5.88 & 0.02 & 17.78 & 0.24 & 11.59 & 0.22 & 0.03 & 0.01 & 17.49 & 0.22 \\
+         & MobileViT-XXS \citep{mehta2021mobilevit}   & 8.59 & 0.03 & 8.48 & 0.01 & 17.07 & 0.03 & 8.60 & 0.04 & \textbf{0.02} & \textbf{0.01} & 17.07 & 0.04 \\
+         & ICAM (Ours)                                & \textbf{4.47} & \textbf{0.01} & 10.16 & 0.01 & 14.63 & 0.02 & \textbf{4.48} & \textbf{0.02} & 0.03 & 0.01 & 14.64 & 0.02 \\
         \bottomrule
     \end{tabular}
     }
 \end{table*}
 
 
+
+
+% &  &  &  &  &  &  &  &  &  &  &  &  \\
 
 
 % Near-zero inference peak deltas indicate stable steady-state inference with memory reuse and no additional dynamic allocation.
