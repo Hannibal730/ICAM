@@ -62,6 +62,10 @@ python3 onnx_benchmark.py \
   --json-out memory_benchmark.json
 
 
+3-2) warmup 제거 하려면 --mem-include-warmup 옵션을 false로 수정 필요
+
+
+
 
 주의
 - 본 스크립트 내부 RSS 샘플링(--mode memory)은 보조 지표입니다.
