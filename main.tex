@@ -543,10 +543,8 @@ The CPU governor is set to \texttt{performance} during benchmarking.
 
 \paragraph{Efficiency Metrics}
 We measure inference latency and memory usage with a fixed protocol: warm-up (50 runs), timed phase (1{,}000 runs), random input, single-sample batch size ($B=1$), and seed 42. For robustness, each benchmark is repeated five times as independent fresh-process executions, and we report Mean $\pm$ Std across repeats.
-
 For \textbf{latency}, we exclude the warm-up runs to eliminate initialization effects such as JIT compilation, cache warming, and dynamic frequency scaling, following the evaluation protocols established by the MLPerf Inference benchmark \citep{reddi2020mlperf}.
 We measure the elapsed time using \texttt{time.perf\_counter\_ns()}. To capture both average performance and runtime stability (tail latency), we report the mean, P50, P90, P95, and P99 percentiles.
-
 For \textbf{memory usage}, we report the Peak Resident Set Size (RSS) to evaluate the actual physical memory footprint during inference.
 Captured via the standard GNU time utility (\texttt{/usr/bin/time -v}), this metric represents the maximum physical memory allocated by the process.
 This includes persistent memory for weights and the non-persistent arena for activation maps, consistent with memory management architectures for TinyML systems \citep{david2021tensorflow}.
@@ -604,11 +602,11 @@ In this section, we validate the practical feasibility of ICAM by comparing it w
 
 
 
-\begin{table}[h!]
+\begin{table}[b]
     \centering
     \caption{Comparison of model complexity in terms of FLOPs, parameters, and storage size. FLOPs are reported assuming $2 \times$ FLOPs per MAC. Size denotes the physical storage requirements of the converted ONNX file across different precisions.}
-    \label{tab:original_spec}
-    \resizebox{0.85\columnwidth}{!}{%
+    \label{tab:unpruned_structure}
+    \resizebox{0.9\columnwidth}{!}{%
         \begin{tabular}{l c r r r r}
             \toprule
             \multirow{2}{*}[-2.5pt]{\textbf{Model}} & 
@@ -631,7 +629,7 @@ In this section, we validate the practical feasibility of ICAM by comparing it w
 \begin{table*}[h!]
 \centering
 \caption{Performance comparison across different precisions (FP32, FP16, INT8). Models are evaluated on Sewer-ML and Private dataset. Note that Precision, Recall and F1-score are reported with respect to the \textbf{Abnormal} class.}
-\label{tab:precision_based}
+\label{tab:unpruned_performance}
 \resizebox{\textwidth}{!}{
 \begin{tabular}{llcccccccc}
 \toprule
@@ -668,13 +666,14 @@ In this section, we validate the practical feasibility of ICAM by comparing it w
 \end{table*}
 
 
+
 \begin{table*}[h!]
     \centering
     \caption{Inference latency and Peak Resident Set Size (RSS) performance analysis across precisions. 
     A warm-up phase was executed to stabilize the runtime state prior to measurement.
     Latency reports the average inference execution time, excluding model loading and warm-up overheads.
     Peak RSS captures the maximum physical memory footprint of the entire process lifetime, including interpreter startup, model loading, warm-up, and inference.}
-    \label{tab:efficiency_precision}
+    \label{tab:unpruned_latency_mem}
     \resizebox{\textwidth}{!}{%
     \begin{tabular}{ll c@{ $\pm$ }c c@{ $\pm$ }c c@{ $\pm$ }c c@{ $\pm$ }c c@{ $\pm$ }c}
         \toprule
@@ -706,9 +705,10 @@ In this section, we validate the practical feasibility of ICAM by comparing it w
          & MobileViT-XXS \citep{mehta2021mobilevit}   & 17.00 & 0.05 & 16.92 & 0.05 & 17.32 & 0.06 & 18.49 & 0.41 & 77.56 & 0.28 \\
          & ICAM (Ours)                                & 5.02 & 0.01 & 4.99 & 0.01 & 5.13 & 0.03 & 5.76 & 0.24 & 72.50 & 0.21 \\
         \bottomrule
-    \end{tabular}
-    }
+\end{tabular}
+}
 \end{table*}
+
 
 
 % &  &  &  &  &  &  &  &  &  &  &  &  \\
@@ -723,7 +723,7 @@ In this section, we validate the practical feasibility of ICAM by comparing it w
             Inference $\Delta$ is measured relative to the baseline before warm-up (cold-start), and after warm-up (steady-state).
             Inference $\Delta$ is measured relative to the post-load baseline.
             Total $\Delta$ represents the peak total memory footprint increase from the pre-load state.}
-    \label{tab:memory_precision}
+    \label{tab:unpruned_mem_delta}
     \resizebox{\textwidth}{!}{%
     \begin{tabular}{ll c@{ $\pm$ }c c@{ $\pm$ }c c@{ $\pm$ }c c@{ $\pm$ }c c@{ $\pm$ }c c@{ $\pm$ }c}
         \toprule
@@ -755,9 +755,38 @@ In this section, we validate the practical feasibility of ICAM by comparing it w
          & MobileViT-XXS \citep{mehta2021mobilevit}   & 8.59 & 0.03 & 8.48 & 0.01 & 17.07 & 0.03 & 8.60 & 0.04 & \textbf{0.02} & \textbf{0.01} & 17.07 & 0.04 \\
          & ICAM (Ours)                                & \textbf{4.47} & \textbf{0.01} & 10.16 & 0.01 & 14.63 & 0.02 & \textbf{4.48} & \textbf{0.02} & 0.03 & 0.01 & 14.64 & 0.02 \\
         \bottomrule
-    \end{tabular}
-    }
+\end{tabular}
+}
 \end{table*}
+
+\paragraph{Unpruned Performance}
+Tables~\ref{tab:unpruned_structure} through \ref{tab:unpruned_mem_delta} summarize the experimental results for unpruned models. 
+Table~\ref{tab:unpruned_structure} highlights the extreme compactness of ICAM, which requires orders of magnitude fewer parameters and FLOPs than all baselines. 
+Notably, the INT8 file size for ICAM is slightly larger than its FP32 counterpart; this overhead stems from the QDQ representation, where auxiliary QuantizeLinear/DequantizeLinear nodes and per-channel metadata dominate storage costs at such a minute scale \citep{gholami2022survey}.
+
+Table~\ref{tab:unpruned_performance} demonstrates that ICAM achieves the best accuracy and abnormal-class F1 on both datasets, as well as the highest recall on Sewer-ML, effectively minimizing missed defect detections.
+Crucially, ICAM maintains this robust performance across FP32, FP16, and INT8 precisions. 
+In contrast, while MobileNetV4-S attains high recall on the Private dataset, it suffers from lower precision and exhibits significant instability under quantization; specifically, its recall drops severely to 66.79\% in the INT8 regime.
+
+Efficiency metrics in Table~\ref{tab:unpruned_latency_mem} show that ICAM offers the fastest inference and the lowest Peak RSS in FP32 and FP16. 
+While MobileNetV4-S achieves lower latency in INT8, this comes at the cost of the aforementioned recall degradation. 
+Interestingly, reduced precision does not uniformly yield efficiency gains for larger models; for instance, Xie et al. exhibits its highest Peak RSS under FP16, and DeiT-Tiny incurs higher latency in FP16 compared to FP32.
+
+Finally, Table~\ref{tab:unpruned_mem_delta} shows that load memory deltas correlate with model size (ICAM being the smallest), while steady‑state inference deltas are negligible across models, indicating effective memory reuse after warm‑up.
+For ICAM, cold‑start inference deltas exceed load deltas, suggesting that activation buffers dominate transient memory footprints even when weights are minimal.”
+
+
+
+
+\paragraph{Iso-FLOPs Performance}
+Under the iso-FLOPs constraint ($\approx$0.18\,GFLOPs), Tables~\ref{tab:sewer_ml_iso_flops} and \ref{tab:private_iso_flops} compare performance on Sewer-ML and the Private dataset, isolating representational efficiency at a fixed arithmetic budget. The corresponding iso-FLOPs latency/Peak RSS and RSS-delta results quantify whether matched FLOPs translate into matched runtime and memory on Raspberry Pi 5; any gaps reflect architectural differences in operator mix and memory access.
+
+
+
+
+
+\paragraph{Iso-Params Performance}
+Under the iso-Params constraint ($\approx$47.59K parameters), Tables~\ref{tab:sewer_ml_iso_params } and \ref{tab:private_iso_params} compare performance on both datasets, revealing which architectures remain reliable under a strict storage budget. The matching iso-Params efficiency tables provide latency/Peak RSS and RSS-delta comparisons, highlighting that parameter parity does not necessarily imply equal runtime or activation memory due to depth and feature-map footprints.
 
 
 
@@ -889,7 +918,7 @@ In this section, we validate the practical feasibility of ICAM by comparing it w
 % \paragraph{Comparison under Iso-Params}
 
 % We further simulate strict edge storage constraints by limiting the model size.
-% Tables~\ref{tab:swer_ml_iso_params} and \ref{tab:private_iso_params} present the comparison results where all baselines are heavily pruned to match the parameter count of ICAM ($\approx$ 31K parameters).
+% Tables~\ref{tab:sewer_ml_iso_params } and \ref{tab:private_iso_params} present the comparison results where all baselines are heavily pruned to match the parameter count of ICAM ($\approx$ 31K parameters).
 
 
 
@@ -937,7 +966,7 @@ In this section, we validate the practical feasibility of ICAM by comparing it w
 
 
 
-% Table~\ref{tab:swer_ml_iso_params} shows the performance of baselines on the Sewer-ML dataset, which pruned to match the parameter level of ICAM.
+% Table~\ref{tab:sewer_ml_iso_params } shows the performance of baselines on the Sewer-ML dataset, which pruned to match the parameter level of ICAM.
 
 
 % Table~\ref{tab:private_iso_params} shows the performance of baselines on the private dataset, which pruned to match the parameter level of ICAM.
