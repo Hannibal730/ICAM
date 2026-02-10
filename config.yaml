@@ -93,7 +93,7 @@ training_main:
 # 3. 훈련 하이퍼파라미터 (baseline.py 전용)
 # =============================================================================
 training_baseline:
-  epochs: 90                  
+  epochs: 10                  
   batch_size: 256               
   pre_trained: false             # true: ImageNet 사전 훈련 가중치 사용, false: 무작위 초기화 가중치 사용
   optimizer: 'adamw'            # 사용할 옵티마이저. 옵션: 'adamw', 'sgd', 'nadam', 'radam', 'rmsprop'

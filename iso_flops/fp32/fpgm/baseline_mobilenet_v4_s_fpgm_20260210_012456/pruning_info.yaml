@@ -1,0 +1,5 @@
+model_name: mobilenet_v4_s
+pruning_method: fpgm
+target_type: flops
+target_value: 0.1816
+optimal_sparsity: 0.327744140625

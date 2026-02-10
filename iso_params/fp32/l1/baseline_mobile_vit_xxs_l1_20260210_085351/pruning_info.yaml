@@ -1,0 +1,5 @@
+model_name: mobile_vit_xxs
+pruning_method: l1
+target_type: params
+target_value: 0.047585
+optimal_sparsity: 0.86431640625
