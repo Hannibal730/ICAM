@@ -64,64 +64,7 @@ class CnnFeatureExtractor(nn.Module):
         self.cnn_feature_extractor_name = cnn_feature_extractor_name
 
         # CNN 모델 이름에 따라 모델과 잘라낼 레이어, 기본 출력 채널을 설정합니다.
-        if cnn_feature_extractor_name == 'resnet18_layer1':
-            base_model = models.resnet18(weights=models.ResNet18_Weights.IMAGENET1K_V1 if pretrained else None)
-            self.conv_front = nn.Sequential(*list(base_model.children())[:5])  # layer1까지
-            base_out_channels = 64
-        elif cnn_feature_extractor_name == 'resnet18_layer2':
-            base_model = models.resnet18(weights=models.ResNet18_Weights.IMAGENET1K_V1 if pretrained else None)
-            self.conv_front = nn.Sequential(*list(base_model.children())[:6])  # layer2까지
-            base_out_channels = 128
-
-        elif cnn_feature_extractor_name == 'mobilenet_v3_small_feat1':
-            base_model = models.mobilenet_v3_small(weights=models.MobileNet_V3_Small_Weights.IMAGENET1K_V1 if pretrained else None)
-            self.conv_front = base_model.features[:2]  # features의 2번째 블록까지
-            base_out_channels = 16
-        elif cnn_feature_extractor_name == 'mobilenet_v3_small_feat3':
-            base_model = models.mobilenet_v3_small(weights=models.MobileNet_V3_Small_Weights.IMAGENET1K_V1 if pretrained else None)
-            self.conv_front = base_model.features[:4]  # features의 4번째 블록까지
-            base_out_channels = 24
-        elif cnn_feature_extractor_name == 'mobilenet_v3_small_feat4':
-            base_model = models.mobilenet_v3_small(weights=models.MobileNet_V3_Small_Weights.IMAGENET1K_V1 if pretrained else None)
-            self.conv_front = base_model.features[:5]  # features의 5번째 블록까지
-            base_out_channels = 40
-
-        elif cnn_feature_extractor_name == 'efficientnet_b0_feat2':
-            base_model = models.efficientnet_b0(weights=models.EfficientNet_B0_Weights.IMAGENET1K_V1 if pretrained else None)
-            self.conv_front = base_model.features[:3]  # features의 3번째 블록까지
-            base_out_channels = 24
-        elif cnn_feature_extractor_name == 'efficientnet_b0_feat3':
-            base_model = models.efficientnet_b0(weights=models.EfficientNet_B0_Weights.IMAGENET1K_V1 if pretrained else None)
-            self.conv_front = base_model.features[:4]  # features의 4번째 블록까지
-            base_out_channels = 40
-
-        # --- MobileNetV4 (timm) ---
-        elif cnn_feature_extractor_name == 'mobilenet_v4_feat1':
-            if timm is None:
-                raise ImportError("timm is required for mobilenet_v4_* backbones. Install with: pip install timm")
-            base_model = timm.create_model('mobilenetv4_conv_small', pretrained=pretrained, features_only=True, out_indices=(0,))
-            self.conv_front = base_model
-            base_out_channels = 32  # feat1 출력 채널
-        elif cnn_feature_extractor_name == 'mobilenet_v4_feat2':
-            if timm is None:
-                raise ImportError("timm is required for mobilenet_v4_* backbones. Install with: pip install timm")
-            base_model = timm.create_model('mobilenetv4_conv_small', pretrained=pretrained, features_only=True, out_indices=(0, 1))
-            self.conv_front = base_model
-            base_out_channels = 48  # feat2 출력 채널
-        elif cnn_feature_extractor_name == 'mobilenet_v4_feat3':
-            if timm is None:
-                raise ImportError("timm is required for mobilenet_v4_* backbones. Install with: pip install timm")
-            base_model = timm.create_model('mobilenetv4_conv_small', pretrained=pretrained, features_only=True, out_indices=(0, 1, 2))
-            self.conv_front = base_model
-            base_out_channels = 64  # feat3 출력 채널
-        elif cnn_feature_extractor_name == 'mobilenet_v4_feat4':
-            if timm is None:
-                raise ImportError("timm is required for mobilenet_v4_* backbones. Install with: pip install timm")
-            base_model = timm.create_model('mobilenetv4_conv_small', pretrained=pretrained, features_only=True, out_indices=(0, 1, 2, 3))
-            self.conv_front = base_model
-            base_out_channels = 96  # feat4 출력 채널
-
-        elif cnn_feature_extractor_name == 'custom24':
+        if cnn_feature_extractor_name == 'custom24':
             # EfficientNet-B0 feat2 구조를 기반으로 코드 구현 (커스터마이징 용도)
             # 주의: 이 옵션은 pretrained 가중치를 자동으로 로드하지 않습니다.
             bn_eps = 1e-5
