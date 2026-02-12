@@ -25,6 +25,11 @@ try:
 except ImportError:
     cpuinfo = None
 
+try:
+    from thop import profile
+except ImportError:
+    profile = None
+
 from dataloader import prepare_data # 데이터 로딩 함수 임포트
 
 from plot import plot_and_save_train_val_accuracy_graph, plot_and_save_val_accuracy_graph, plot_and_save_confusion_matrix, plot_and_save_attention_maps, plot_and_save_f1_normal_graph, plot_and_save_loss_graph, plot_and_save_lr_graph, plot_and_save_compiled_graph
@@ -131,7 +136,6 @@ def log_model_parameters(model):
     logging.info(f"    - Init Key Proj (W_K_init):         {w_k_init_params:,} 개")
     logging.info(f"    - Init Value Proj (W_V_init):       {w_v_init_params:,} 개")
     logging.info(f"    - Learnable Queries:                {query_params:,} 개")
-    # logging.info(f"    - Positional Encoding (learnable):  {pe_params:,} 개")
     logging.info(f"    - Decoder Layers:                   {decoder_layers_params:,} 개")
     logging.info(f"  - Classifier (Projection MLP):        {classifier_total_params:,} 개")
 
@@ -353,6 +357,36 @@ def inference(run_cfg, model_cfg, model, data_loader, device, run_dir_path, time
     # [Optimization] CPU 추론 시 Channels Last 메모리 포맷 적용 (속도 향상 및 메모리 효율화)
     if device.type == 'cpu':
         model = model.to(memory_format=torch.channels_last)
+
+    # [추가] FLOPs 및 MACs 측정
+    if profile:
+        try:
+            logging.info("FLOPs 및 MACs 측정을 시작합니다...")
+            dummy_input = torch.randn(1, 3, model_cfg.img_size, model_cfg.img_size).to(device)
+            if device.type == 'cpu':
+                dummy_input = dummy_input.to(memory_format=torch.channels_last)
+            
+            # thop는 모델에 hook을 등록하므로, 원본 모델 오염 방지를 위해 복사본 사용
+            model_for_profiling = copy.deepcopy(model)
+            model_for_profiling.eval()
+            
+            macs, params = profile(model_for_profiling, inputs=(dummy_input,), verbose=False)
+            
+            gmacs = macs / 1e9
+            gflops = macs * 2 / 1e9 # 통상적으로 1 MAC = 2 FLOPs (Multiply + Add)
+            
+            logging.info(f"Model FLOPs: {gflops:.4f} GFLOPs")
+            logging.info(f"Model MACs: {gmacs:.4f} GMACs")
+            logging.info(f"Model Params (thop): {params / 1e6:.4f} M")
+            
+            del model_for_profiling
+            gc.collect()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+        except Exception as e:
+            logging.warning(f"FLOPs/MACs 측정 중 오류 발생: {e}")
+    else:
+        logging.info("thop 라이브러리가 설치되지 않아 FLOPs/MACs 측정을 건너뜁니다. (pip install thop)")
 
     # 2. 테스트셋 성능 평가
     only_inference_mode = getattr(run_cfg, 'only_inference', False)

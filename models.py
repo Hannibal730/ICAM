@@ -9,47 +9,12 @@ except ImportError:  # timm is optional unless you select a timm-based backbone
 import math
 from torch import Tensor
 from torchvision import models
-
-# [추가] DropPath (Stochastic Depth) 구현
-# timm 라이브러리가 없어도 동작하도록 내장 구현
-class DropPath(nn.Module):
-    """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
-    def __init__(self, drop_prob: float = 0., scale_by_keep: bool = True):
-        super(DropPath, self).__init__()
-        self.drop_prob = drop_prob
-        self.scale_by_keep = scale_by_keep
-
-    def forward(self, x):
-        if self.drop_prob == 0. or not self.training:
-            return x
-        keep_prob = 1 - self.drop_prob
-        shape = (x.shape[0],) + (1,) * (x.ndim - 1)
-        random_tensor = x.new_empty(shape).bernoulli_(keep_prob)
-        if keep_prob > 0.0 and self.scale_by_keep:
-            random_tensor.div_(keep_prob)
-        return x * random_tensor
+from torchvision.ops import StochasticDepth, Conv2dNormActivation
+from functools import partial
 
 # =============================================================================
 # 1. 이미지 인코더 모델 정의
 # =============================================================================
-class SqueezeExcitation(nn.Module):
-    """EfficientNet의 SE Block"""
-    def __init__(self, input_channels, squeeze_channels):
-        super().__init__()
-        self.avg_pool = nn.AdaptiveAvgPool2d(1)
-        self.fc1 = nn.Conv2d(input_channels, squeeze_channels, 1)
-        self.act1 = nn.SiLU(inplace=True)
-        self.fc2 = nn.Conv2d(squeeze_channels, input_channels, 1)
-        self.act2 = nn.Sigmoid()
-
-    def forward(self, x):
-        scale = self.avg_pool(x)
-        scale = self.fc1(scale)
-        scale = self.act1(scale)
-        scale = self.fc2(scale)
-        scale = self.act2(scale)
-        return x * scale
-
 class MBConvBlock(nn.Module):
     """EfficientNet의 MBConv Block"""
     def __init__(self, in_channels, out_channels, kernel_size, stride, expand_ratio):
@@ -62,27 +27,21 @@ class MBConvBlock(nn.Module):
 
         # 1. Expansion phase
         if expand_ratio != 1:
-            layers.extend([
-                nn.Conv2d(in_channels, hidden_dim, 1, bias=False),
-                nn.BatchNorm2d(hidden_dim),
-                nn.ReLU6(inplace=True)
-            ])
+            layers.append(
+                Conv2dNormActivation(in_channels, hidden_dim, kernel_size=1, norm_layer=nn.BatchNorm2d, activation_layer=nn.ReLU6)
+            )
 
         # 2. Depthwise convolution phase
-        layers.extend([
-            nn.Conv2d(hidden_dim, hidden_dim, kernel_size, stride,
-                      padding=kernel_size//2, groups=hidden_dim, bias=False),
-            nn.BatchNorm2d(hidden_dim),
-            nn.ReLU6(inplace=True)
-        ])
+        layers.append(
+            Conv2dNormActivation(hidden_dim, hidden_dim, kernel_size=kernel_size, stride=stride, groups=hidden_dim, norm_layer=nn.BatchNorm2d, activation_layer=nn.ReLU6)
+        )
 
         # 3. Squeeze and Excitation phase (Removed for embedded optimization)
 
         # 4. Output phase
-        layers.extend([
-            nn.Conv2d(hidden_dim, out_channels, 1, bias=False),
-            nn.BatchNorm2d(out_channels)
-        ])
+        layers.append(
+            Conv2dNormActivation(hidden_dim, out_channels, kernel_size=1, norm_layer=nn.BatchNorm2d, activation_layer=None)
+        )
 
         self.conv = nn.Sequential(*layers)
 
@@ -169,9 +128,9 @@ class CnnFeatureExtractor(nn.Module):
             bn_momentum = 0.1
             layers = [
                 # Stem: 채널3 -> 32, stride 2: 해상도224-> 112
-                nn.Conv2d(3, 32, kernel_size=3, stride=2, padding=1, bias=False),
-                nn.BatchNorm2d(32, eps=bn_eps, momentum=bn_momentum),
-                nn.ReLU6(inplace=True),
+                Conv2dNormActivation(3, 32, kernel_size=3, stride=2, padding=1, 
+                                     norm_layer=partial(nn.BatchNorm2d, eps=bn_eps, momentum=bn_momentum), 
+                                     activation_layer=nn.ReLU6),
 
                 # Block 1: MBConv1, 3x3, 32->16, stride 1, expand 1
                 MBConvBlock(32, 16, kernel_size=3, stride=1, expand_ratio=1),
@@ -190,9 +149,9 @@ class CnnFeatureExtractor(nn.Module):
             bn_momentum = 0.1
             layers = [
                 # Stem: 채널3 -> 32, stride 2: 해상도224-> 112
-                nn.Conv2d(3, 32, kernel_size=3, stride=2, padding=1, bias=False),
-                nn.BatchNorm2d(32, eps=bn_eps, momentum=bn_momentum),
-                nn.ReLU6(inplace=True),
+                Conv2dNormActivation(3, 32, kernel_size=3, stride=2, padding=1, 
+                                     norm_layer=partial(nn.BatchNorm2d, eps=bn_eps, momentum=bn_momentum), 
+                                     activation_layer=nn.ReLU6),
 
                 # Block 1: MBConv1, 3x3, 32->16, stride 1, expand 1
                 MBConvBlock(32, 16, kernel_size=3, stride=1, expand_ratio=1),
@@ -328,7 +287,7 @@ class Embedding4Decoder(nn.Module):
         # --- 학습 가능한 쿼리(Learnable Query) ---
         self.learnable_queries = nn.Parameter(torch.empty(num_decoder_patches, emb_dim))
         # ViT/BERT 등에서 널리 사용되는 방식인 정규분포 초기화를 적용합니다.
-        nn.init.normal_(self.learnable_queries, std=0.02)
+        nn.init.trunc_normal_(self.learnable_queries, std=0.02)
 
         # --- 2D Sinusoidal Positional Encoding (fixed) ---
         self.use_positional_encoding = positional_encoding
@@ -488,7 +447,7 @@ class DecoderLayer(nn.Module):
         )
         self.dropout_attn = nn.Dropout(dropout, inplace=True)
         # [수정] DropPath 적용
-        self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
+        self.drop_path = StochasticDepth(drop_path, mode="row") if drop_path > 0. else nn.Identity()
         self.norm_attn = nn.LayerNorm(emb_dim)
 
         self.ffn = nn.Sequential(
