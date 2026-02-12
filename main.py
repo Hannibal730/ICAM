@@ -381,7 +381,7 @@ def inference(run_cfg, model_cfg, model, data_loader, device, run_dir_path, time
                 all_confidences.extend(confidences.cpu().numpy())
 
                 # 어텐션 맵 저장 (시각화를 위해)
-                if model_cfg.save_attention:
+                if model_cfg.visualize_attention:
                     all_attention_maps.append(model.decoder.embedding4decoder.decoder.layers[-1].attn.cpu())
         
         # 결과를 DataFrame으로 만들어 CSV 파일로 저장
@@ -410,7 +410,7 @@ def inference(run_cfg, model_cfg, model, data_loader, device, run_dir_path, time
             plot_and_save_confusion_matrix(eval_results['labels'], eval_results['preds'], class_names, save_dir, timestamp)
 
     # 4. 어텐션 맵 시각화 (설정이 True인 경우)
-    if model_cfg.save_attention:
+    if model_cfg.visualize_attention:
         try:
             # 1. 어텐션 맵을 저장할 전용 폴더 생성
             attn_save_dir = os.path.join(save_dir, f'attention_map_{timestamp}')
@@ -565,7 +565,7 @@ def main():
         'decoder_ff_ratio': model_cfg.decoder_ff_ratio,
         'dropout': model_cfg.dropout,
         'positional_encoding': model_cfg.positional_encoding,
-        'save_attention': model_cfg.save_attention,
+        'visualize_attention': model_cfg.visualize_attention,
         'drop_path_ratio': getattr(model_cfg, 'drop_path_ratio', 0.0), # [수정] drop_path_ratio 설정 전달
     }
     decoder_args = SimpleNamespace(**decoder_params)

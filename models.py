@@ -313,7 +313,7 @@ class Embedding4Decoder(nn.Module):
         attn_dropout=0.0,
         dropout=0.0,
         drop_path_ratio=0.0,
-        save_attention=False,
+        visualize_attention=False,
         positional_encoding=True,
     ):
         super().__init__()
@@ -354,7 +354,7 @@ class Embedding4Decoder(nn.Module):
             dropout=dropout,
             drop_path_ratio=drop_path_ratio,
             num_decoder_layers=num_decoder_layers,
-            save_attention=save_attention,
+            visualize_attention=visualize_attention,
         )
 
     def get_2d_sincos_pos_embed(self, embed_dim, grid_h, grid_w):
@@ -428,7 +428,7 @@ class Decoder(nn.Module):
         dropout=0.0,
         drop_path_ratio=0.0,
         num_decoder_layers=1,
-        save_attention=False,
+        visualize_attention=False,
     ):
         super().__init__()
 
@@ -446,7 +446,7 @@ class Decoder(nn.Module):
                     attn_dropout=attn_dropout,
                     dropout=dropout,
                     drop_path=drop_path_rates[i],
-                    save_attention=save_attention,
+                    visualize_attention=visualize_attention,
                 )
                 for i in range(num_decoder_layers)
             ]
@@ -469,7 +469,7 @@ class DecoderLayer(nn.Module):
         num_decoder_patches,
         num_heads,
         decoder_ff_dim=256,
-        save_attention=False,
+        visualize_attention=False,
         attn_dropout=0,
         drop_path=0.0, # [추가] DropPath 비율
         dropout=0.0,
@@ -484,6 +484,7 @@ class DecoderLayer(nn.Module):
             attn_dropout=attn_dropout,
             proj_dropout=dropout,
             qkv_bias=False,
+            visualize_attention=visualize_attention,
         )
         self.dropout_attn = nn.Dropout(dropout, inplace=True)
         # [수정] DropPath 적용
@@ -499,7 +500,7 @@ class DecoderLayer(nn.Module):
         self.dropout_ffn = nn.Dropout(dropout, inplace=True)
         self.norm_ffn = nn.LayerNorm(emb_dim)
 
-        self.save_attention = save_attention
+        self.visualize_attention = visualize_attention
 
     def forward(self, seq_encoder_k: Tensor, seq_encoder_v: Tensor, seq_decoder: Tensor, pos_embed: Tensor = None) -> Tensor:
         # 1) Cross-Attention (Pre-Norm)
@@ -508,7 +509,7 @@ class DecoderLayer(nn.Module):
 
         attn_out, attn = self.cross_attn(seq_decoder, seq_encoder_k, seq_encoder_v, pos_embed=pos_embed)
 
-        if self.save_attention:
+        if self.visualize_attention:
             self.attn = attn
 
         # [수정] DropPath 적용 (추론 시에는 영향 없음)
@@ -532,7 +533,7 @@ class _MultiheadAttention(nn.Module):
         attn_dropout=0.0,
         proj_dropout=0.0,
         qkv_bias=False,
-        save_attention=False,
+        visualize_attention=False,
         **kwargs,
     ):
         super().__init__()
@@ -545,7 +546,7 @@ class _MultiheadAttention(nn.Module):
         self.k_proj = nn.Linear(emb_dim, head_dim * num_heads, bias=qkv_bias)
         self.v_proj = nn.Linear(emb_dim, head_dim * num_heads, bias=qkv_bias)
 
-        self.save_attention = save_attention
+        self.visualize_attention = visualize_attention
         self.attn_dropout = nn.Dropout(attn_dropout)
 
         self.heads_to_emb = nn.Sequential(nn.Linear(num_heads * head_dim, emb_dim), nn.Dropout(proj_dropout))
@@ -567,11 +568,18 @@ class _MultiheadAttention(nn.Module):
         
         v_heads = self.v_proj(V).view(bs, -1, self.num_heads, self.head_dim).permute(0, 2, 1, 3)
 
-        attn_scores = torch.matmul(q_heads, k_heads.transpose(-1, -2)) * self.scale
-        attn_weights = F.softmax(attn_scores, dim=-1)
-        attn_weights = self.attn_dropout(attn_weights)
+        if self.visualize_attention:
+            attn_scores = torch.matmul(q_heads, k_heads.transpose(-1, -2)) * self.scale
+            attn_weights = F.softmax(attn_scores, dim=-1)
+            attn_weights = self.attn_dropout(attn_weights)
+            output = torch.matmul(attn_weights, v_heads)
+        else:
+            dropout_p = self.attn_dropout.p if self.training else 0.0
+            output = F.scaled_dot_product_attention(
+                q_heads, k_heads, v_heads, dropout_p=dropout_p, is_causal=False
+            )
+            attn_weights = None
 
-        output = torch.matmul(attn_weights, v_heads)
         output = output.permute(0, 2, 1, 3).reshape(bs, -1, self.num_heads * self.head_dim)
         output = self.heads_to_emb(output)
 
@@ -593,7 +601,7 @@ class Model(nn.Module):
         dropout = args.dropout           
         attn_dropout = dropout           
         positional_encoding = args.positional_encoding 
-        save_attention = args.save_attention     
+        visualize_attention = args.visualize_attention     
         # [수정] Drop Path Ratio (config에서 설정 가능하도록 하거나 기본값 0.1 사용)
         drop_path_ratio = getattr(args, 'drop_path_ratio', 0.1)
 
@@ -613,7 +621,7 @@ class Model(nn.Module):
                                 adaptive_initial_query=adaptive_initial_query,
                                 num_decoder_layers=num_decoder_layers, emb_dim=emb_dim, num_heads=num_heads, decoder_ff_dim=decoder_ff_dim, positional_encoding=positional_encoding,
                                 attn_dropout=attn_dropout, dropout=dropout, drop_path_ratio=drop_path_ratio,
-                                save_attention=save_attention)
+                                visualize_attention=visualize_attention)
         
 
 
