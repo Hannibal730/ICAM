@@ -27,7 +27,6 @@ except ImportError:
 
 from dataloader import prepare_data # 데이터 로딩 함수 임포트
 
-from utils import flush_memory, MemoryMonitor, measure_model_flops
 from plot import plot_and_save_train_val_accuracy_graph, plot_and_save_val_accuracy_graph, plot_and_save_confusion_matrix, plot_and_save_attention_maps, plot_and_save_f1_normal_graph, plot_and_save_loss_graph, plot_and_save_lr_graph, plot_and_save_compiled_graph
 
 # =============================================================================
@@ -354,105 +353,6 @@ def inference(run_cfg, model_cfg, model, data_loader, device, run_dir_path, time
     # [Optimization] CPU 추론 시 Channels Last 메모리 포맷 적용 (속도 향상 및 메모리 효율화)
     if device.type == 'cpu':
         model = model.to(memory_format=torch.channels_last)
-
-    # --- PyTorch 모델 성능 지표 측정 (FLOPS 및 더미 입력 생성) ---
-    dummy_input = measure_model_flops(model, device, data_loader)
-    single_dummy_input = dummy_input[0].unsqueeze(0) if dummy_input.shape[0] > 1 else dummy_input
-    
-    # [Optimization] 입력 데이터도 Channels Last로 변환
-    if device.type == 'cpu':
-        single_dummy_input = single_dummy_input.to(memory_format=torch.channels_last)
-
-    # --- 샘플 당 Forward Pass 시간 및 메모리 사용량 측정 ---
-    avg_inference_time_per_sample = 0.0
-    logging.info("="*50)
-    logging.info("GPU 캐시를 비우고 측정을 시작합니다.")
-    if device.type == 'cuda' and torch.cuda.is_available():
-        # [추가] Python 가비지 컬렉션 및 CUDA 캐시 비우기
-        flush_memory() # [수정]
-        torch.cuda.empty_cache()
-        torch.cuda.reset_peak_memory_stats(device)
-        
-        # 시간 측정을 위한 예열(warm-up)
-        with torch.no_grad():
-            for _ in range(10):
-                _ = model(single_dummy_input)
-
-        # 실제 시간 측정
-        # 구간별 시간 측정을 위한 이벤트 생성
-        start_event = torch.cuda.Event(enable_timing=True)
-        encoder_end_event = torch.cuda.Event(enable_timing=True)
-        decoder_end_event = torch.cuda.Event(enable_timing=True)
-        classifier_end_event = torch.cuda.Event(enable_timing=True)
-
-        num_iterations = 100
-        # 각 반복의 시간을 저장하기 위한 리스트
-        iteration_times = {'encoder': [], 'decoder': [], 'classifier': [], 'total': []}
-
-        with torch.no_grad():
-            for _ in range(num_iterations):
-                start_event.record()
-                # 1. Encoder 구간
-                encoded_features = model.encoder(single_dummy_input)
-                encoder_end_event.record()
-                # 2. Decoder 구간
-                decoded_features = model.decoder(encoded_features)
-                decoder_end_event.record()
-                # 3. Classifier 구간
-                _ = model.classifier(decoded_features)
-                classifier_end_event.record()
-
-                # 모든 이벤트가 기록된 후 동기화
-                torch.cuda.synchronize()
-                iteration_times['encoder'].append(start_event.elapsed_time(encoder_end_event))
-                iteration_times['decoder'].append(encoder_end_event.elapsed_time(decoder_end_event))
-                iteration_times['classifier'].append(decoder_end_event.elapsed_time(classifier_end_event))
-                iteration_times['total'].append(start_event.elapsed_time(classifier_end_event))
-            
-        # 평균 및 표준편차 계산
-        avg_total_time = np.mean(iteration_times['total'])
-        std_total_time = np.std(iteration_times['total'])
-        avg_encoder_time = np.mean(iteration_times['encoder'])
-        avg_decoder_time = np.mean(iteration_times['decoder'])
-        avg_classifier_time = np.mean(iteration_times['classifier'])
-
-        peak_memory_bytes = torch.cuda.max_memory_allocated(device)
-        peak_memory_mb = peak_memory_bytes / (1024 * 1024)
-        logging.info(f"샘플 당 평균 Forward Pass 시간: {avg_total_time:.2f}ms (std: {std_total_time:.2f}ms) (1개 샘플 x {num_iterations}회 반복)")
-        logging.info(f"  - Encoder: {avg_encoder_time:.2f}ms")
-        logging.info(f"  - Decoder: {avg_decoder_time:.2f}ms")
-        logging.info(f"  - Classifier: {avg_classifier_time:.2f}ms")
-        logging.info(f"샘플 당 Forward Pass 시 최대 GPU 메모리 사용량: {peak_memory_mb:.2f} MB")
-    else:
-        logging.info("CUDA를 사용할 수 없어 CPU 추론 시간을 측정합니다.")
-        
-        # CPU 시간 측정을 위한 예열(warm-up)
-        with torch.no_grad():
-            for _ in range(10):
-                _ = model(single_dummy_input)
-        
-        flush_memory() # [수정] CPU 메모리 측정 전 GC 수행
-
-        # 실제 시간 측정
-        num_iterations = 100
-        iteration_times = []
-        with torch.no_grad():
-            for _ in range(num_iterations):
-                start_time = time.perf_counter()
-                _ = model(single_dummy_input)
-                end_time = time.perf_counter()
-                iteration_times.append((end_time - start_time) * 1000) # ms
-
-        avg_inference_time_per_sample = np.mean(iteration_times)
-        std_inference_time_per_sample = np.std(iteration_times)
-        
-        # FPS 계산 및 통계
-        fps_per_iteration = [1000 / t for t in iteration_times if t > 0]
-        avg_fps = np.mean(fps_per_iteration) if fps_per_iteration else 0
-        std_fps = np.std(fps_per_iteration) if fps_per_iteration else 0
-
-        logging.info(f"샘플 당 평균 Forward Pass 시간 (CPU): {avg_inference_time_per_sample:.2f}ms (std: {std_inference_time_per_sample:.2f}ms)")
-        logging.info(f"샘플 당 평균 FPS (CPU): {avg_fps:.2f} FPS (std: {std_fps:.2f}) (1개 샘플 x {num_iterations}회 반복)")
 
     # 2. 테스트셋 성능 평가
     only_inference_mode = getattr(run_cfg, 'only_inference', False)

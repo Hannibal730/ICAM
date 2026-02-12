@@ -26,14 +26,8 @@ try:
 except ImportError:
     Attention = None
 
-try:
-    import psutil
-except ImportError:
-    psutil = None
-
 from dataloader import prepare_data 
 
-from utils import flush_memory, MemoryMonitor, measure_model_flops
 # [수정] torch_pruning을 전역 스코프에서 import하여 모든 함수에서 접근 가능하게 함
 try:
     from timm.layers import BatchNormAct2d
@@ -459,11 +453,7 @@ def inference(run_cfg, model_cfg, model, data_loader, device, run_dir_path, time
             return None # final_acc가 None이 되도록 반환
         try:
             # [수정] main 함수에서 Pruning이 재적용된 모델에 가중치를 로드합니다.
-            flush_memory() # [수정]
-            with MemoryMonitor() as mem_mon:
-                model.load_state_dict(torch.load(model_path, map_location=device))
-            if psutil:
-                logging.info(f"[Model Load] PyTorch 모델 가중치 로드 중 피크 메모리 - 모델 로드 전 청소 직후 메모리: {mem_mon.peak_memory - mem_mon.start_memory:.2f} MB")
+            model.load_state_dict(torch.load(model_path, map_location=device))
             logging.info(f"'{model_path}' 가중치 로드 완료.")
         except RuntimeError as e:
             logging.error(f"모델 가중치 로딩 중 런타임 오류 발생: {e}")
@@ -475,79 +465,6 @@ def inference(run_cfg, model_cfg, model, data_loader, device, run_dir_path, time
             return None
 
     model.eval()
-
-    # --- PyTorch 모델 성능 지표 측정 (FLOPS 및 더미 입력 생성) ---
-    dummy_input = measure_model_flops(model, device, data_loader)
-    single_dummy_input = dummy_input[0].unsqueeze(0) if dummy_input.shape[0] > 1 else dummy_input
-
-    # --- 샘플 당 Forward Pass 시간 및 메모리 사용량 측정 ---
-    avg_inference_time_per_sample = 0.0
-    logging.info("="*50)
-    logging.info("GPU 캐시를 비우고 측정을 시작합니다.")
-    if device.type == 'cuda' and torch.cuda.is_available():
-        # [추가] GC 및 CUDA 캐시 정리
-        flush_memory() # [수정]
-        torch.cuda.empty_cache()
-        torch.cuda.reset_peak_memory_stats(device)
-
-        # 시간 측정을 위한 예열(warm-up)
-        with torch.no_grad():
-            for _ in range(10):
-                _ = model(single_dummy_input)
-        
-        flush_memory() # [수정]
-
-        # 실제 시간 측정
-        num_iterations = 100
-        iteration_times = []
-        with torch.no_grad():
-            for _ in range(num_iterations):
-                start_event = torch.cuda.Event(enable_timing=True)
-                end_event = torch.cuda.Event(enable_timing=True)
-                start_event.record()
-                _ = model(single_dummy_input)
-                end_event.record()
-                torch.cuda.synchronize()
-                iteration_times.append(start_event.elapsed_time(end_event)) # ms
-        
-        avg_inference_time_per_sample = np.mean(iteration_times)
-        std_inference_time_per_sample = np.std(iteration_times)
-        # FPS 계산 및 통계
-        fps_per_iteration = [1000 / t for t in iteration_times if t > 0]
-        avg_fps = np.mean(fps_per_iteration) if fps_per_iteration else 0
-        std_fps = np.std(fps_per_iteration) if fps_per_iteration else 0
-
-        peak_memory_bytes = torch.cuda.max_memory_allocated(device)
-        peak_memory_mb = peak_memory_bytes / (1024 * 1024)
-        logging.info(f"샘플 당 평균 Forward Pass 시간: {avg_inference_time_per_sample:.2f}ms (std: {std_inference_time_per_sample:.2f}ms), FPS: {avg_fps:.2f} (std: {std_fps:.2f}) (1개 샘플 x {num_iterations}회 반복)")
-        logging.info(f"샘플 당 Forward Pass 시 최대 GPU 메모리 사용량: {peak_memory_mb:.2f} MB")
-    else:
-        logging.info("CUDA를 사용할 수 없어 CPU 추론 시간을 측정합니다.")
-
-        # CPU 시간 측정을 위한 예열(warm-up)
-        with torch.no_grad():
-            for _ in range(10):
-                _ = model(single_dummy_input)
-
-        # 실제 시간 측정
-        num_iterations = 100
-        iteration_times = []
-        with torch.no_grad():
-            for _ in range(num_iterations):
-                start_time = time.perf_counter()
-                _ = model(single_dummy_input)
-                end_time = time.perf_counter()
-                iteration_times.append((end_time - start_time) * 1000) # ms
-
-        avg_inference_time_per_sample = np.mean(iteration_times)
-        std_inference_time_per_sample = np.std(iteration_times)
-
-        # FPS 계산 및 통계
-        fps_per_iteration = [1000 / t for t in iteration_times if t > 0]
-        avg_fps = np.mean(fps_per_iteration) if fps_per_iteration else 0
-        std_fps = np.std(fps_per_iteration) if fps_per_iteration else 0
-
-        logging.info(f"샘플 당 평균 Forward Pass 시간 (CPU): {avg_inference_time_per_sample:.2f}ms (std: {std_inference_time_per_sample:.2f}ms), FPS: {avg_fps:.2f} (std: {std_fps:.2f}) (1개 샘플 x {num_iterations}회 반복)")
 
     # --- 평가 또는 순수 추론 ---
     logging.info("테스트 데이터셋에 대한 추론을 시작합니다.")
