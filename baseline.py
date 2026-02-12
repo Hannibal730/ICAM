@@ -26,7 +26,13 @@ try:
 except ImportError:
     Attention = None
 
+try:
+    from thop import profile
+except ImportError:
+    profile = None
+
 from dataloader import prepare_data 
+from utils import measure_model_complexity, log_model_parameters
 
 # [수정] torch_pruning을 전역 스코프에서 import하여 모든 함수에서 접근 가능하게 함
 try:
@@ -216,15 +222,6 @@ def create_baseline_model(model_name, num_labels, pretrained):
     else:
         raise ValueError(f"지원하지 않는 baseline 모델 이름입니다: {model_name}")    
     return model
-
-def log_model_parameters(model):
-    """모델의 총 파라미터 수를 계산하고 로깅합니다."""
-    total_params = sum(p.numel() for p in model.parameters())
-    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    logging.info("="*50)
-    logging.info("모델 파라미터 수:")
-    logging.info(f"  - 총 파라미터: {total_params:,} 개")
-    logging.info(f"  - 학습 가능한 파라미터: {trainable_params:,} 개")
 
 # =============================================================================
 # 2. 훈련 및 평가 함수
@@ -465,6 +462,9 @@ def inference(run_cfg, model_cfg, model, data_loader, device, run_dir_path, time
             return None
 
     model.eval()
+
+    # [추가] FLOPs 및 MACs 측정
+    measure_model_complexity(model, model_cfg.img_size, device)
 
     # --- 평가 또는 순수 추론 ---
     logging.info("테스트 데이터셋에 대한 추론을 시작합니다.")
