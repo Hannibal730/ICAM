@@ -18,7 +18,7 @@ import random
 import time 
 import gc
 import copy
-from models import Model as DecoderBackbone, Encoder, Classifier, HybridModel
+from model import Model as DecoderBackbone, Encoder, Classifier, HybridModel
 
 try:
     import cpuinfo
