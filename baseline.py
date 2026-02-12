@@ -208,10 +208,11 @@ class Xie2019(nn.Module):
             nn.ReLU(inplace=True),
             nn.MaxPool2d(2,2)
         )
+        self.avgpool = nn.AdaptiveAvgPool2d((8, 8))
+        
         # [최종 수정] ONNX 변환 오류의 근본 원인인 AdaptiveAvgPool2d 업샘플링을
         # ONNX가 지원하는 Upsample 레이어로 명시적으로 교체합니다.
-        # self.avgpool = nn.AdaptiveAvgPool2d((8, 8))
-        self.avgpool = nn.Upsample(size=(8, 8), mode='bilinear', align_corners=False)
+        # self.avgpool = nn.Upsample(size=(8, 8), mode='bilinear', align_corners=False)
         self.classifier = nn.Sequential(
             nn.Linear(128*8*8, 1024),
             nn.ReLU(inplace=True),
@@ -232,45 +233,39 @@ def create_baseline_model(model_name, num_labels, pretrained):
     """지정된 이름의 torchvision 모델을 생성하고 마지막 레이어를 수정합니다."""
     logging.info(f"Baseline 모델 '{model_name}'을(를) 생성합니다 (사전 훈련 가중치: {'사용' if pretrained else '미사용'}).")
     
-    if model_name == 'resnet18':
-        model = torchvision_models.resnet18(weights=torchvision_models.ResNet18_Weights.IMAGENET1K_V1 if pretrained else None)
-        num_ftrs = model.fc.in_features
-        model.fc = nn.Linear(num_ftrs, num_labels)
-    elif model_name == 'efficientnet_b0':
-        model = torchvision_models.efficientnet_b0(weights=torchvision_models.EfficientNet_B0_Weights.IMAGENET1K_V1 if pretrained else None)
-        num_ftrs = model.classifier[1].in_features
-        model.classifier[1] = nn.Linear(num_ftrs, num_labels)
-    elif model_name == 'mobilenet_v4_s':
-        # timm 라이브러리를 사용하여 MobileNetV4 모델을 생성합니다.
-        # 'mobilenetv4_conv_small'은 가벼운 버전 중 하나입니다.
-        # timm.create_model은 num_classes 인자를 통해 자동으로 마지막 분류 레이어를 교체해줍니다.
+    # Pure CNN
+    if model_name == 'mobilenet_v4_s':
         model = timm.create_model('mobilenetv4_conv_small', pretrained=pretrained, num_classes=num_labels)
-    elif model_name == 'xie2019':
-        # Xie2019 모델은 사전 훈련된 가중치를 지원하지 않습니다.
-        model = Xie2019(num_classes=num_labels)
-    elif model_name == 'vit':
-        # timm 라이브러리를 사용하여 Vision Transformer 모델을 생성합니다.
-        # 'vit_base_patch16_224'는 대표적인 ViT 모델입니다.
-        model = timm.create_model('vit_base_patch16_224', pretrained=pretrained, num_classes=num_labels)
-    elif model_name == 'swin_tiny':
-        # timm 라이브러리를 사용하여 Swin Transformer 모델을 생성합니다.
-        # 'swin_tiny_patch4_window7_224'는 작은 Swin ViT 모델입니다.
-        model = timm.create_model('swin_tiny_patch4_window7_224', pretrained=pretrained, num_classes=num_labels)
+
+    # Full self-attn
     elif model_name == 'deit_tiny':
-        # timm 라이브러리를 사용하여 DeiT (Data-efficient Image Transformer)의 tiny 버전을 생성합니다.
         model = timm.create_model('deit_tiny_patch16_224', pretrained=pretrained, num_classes=num_labels)
-    elif model_name == 'mobile_vit_s':
-        # timm 라이브러리를 사용하여 MobileViT-S 모델을 생성합니다.
-        model = timm.create_model('mobilevit_s', pretrained=pretrained, num_classes=num_labels)
-    elif model_name == 'mobile_vit_xs':
-        # timm 라이브러리를 사용하여 MobileViT-XS 모델을 생성합니다.
-        model = timm.create_model('mobilevit_xs', pretrained=pretrained, num_classes=num_labels)
+
+    # Hybrid
     elif model_name == 'mobile_vit_xxs':
-        # timm 라이브러리를 사용하여 MobileViT-XXS 모델을 생성합니다.
         model = timm.create_model('mobilevit_xxs', pretrained=pretrained, num_classes=num_labels)
+    
+    # Efficient Transformer
+    elif model_name == 'efficientvit_b0':
+        model = timm.create_model('efficientvit_b0', pretrained=pretrained, num_classes=num_labels)
+
+    # Domain-specific
+    elif model_name == 'xie2019':
+        model = Xie2019(num_classes=num_labels)
+    
+    # elif model_name == 'shufflenet_v2_x0_5':
+    #     model = torchvision_models.shufflenet_v2_x0_5(weights=torchvision_models.ShuffleNet_V2_X0_5_Weights.IMAGENET1K_V1 if pretrained else None)
+    #     num_ftrs = model.fc.in_features
+    #     model.fc = nn.Linear(num_ftrs, num_labels)
+
+    # elif model_name == 'deit_tiny_distilled' :
+    #     model = timm.create_model('deit_tiny_distilled_patch16_224', pretrained=pretrained, num_classes=num_labels)
+    
+    # elif model_name == 'edgenext_xxs':
+    #     model = timm.create_model('edgenext_xx_small', pretrained=pretrained, num_classes=num_labels)
+    
     else:
-        raise ValueError(f"지원하지 않는 baseline 모델 이름입니다: {model_name}")
-        
+        raise ValueError(f"지원하지 않는 baseline 모델 이름입니다: {model_name}")    
     return model
 
 def log_model_parameters(model):
