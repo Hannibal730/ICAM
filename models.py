@@ -342,8 +342,6 @@ class Embedding4Decoder(nn.Module):
         if self.adaptive_initial_query:
             self.W_K_init = nn.Linear(emb_dim, emb_dim)
             self.W_V_init = nn.Linear(emb_dim, emb_dim)
-            # inference cache (W_K_init(pos_embed))
-            self.register_buffer('_k_init_pos_cache', None, persistent=False)  # [1, N, D]
 
         # --- 디코더 ---
         self.decoder = Decoder(
@@ -383,32 +381,6 @@ class Embedding4Decoder(nn.Module):
         pos_embed = torch.cat([emb_h, emb_w], dim=1)
         return pos_embed.unsqueeze(0)  # [1, H*W, D]
 
-    # ---------------------------------------------------------------------
-    # Inference cache builders (call AFTER loading weights, BEFORE ONNX export)
-    # ---------------------------------------------------------------------
-    @torch.no_grad()
-    def prepare_inference_caches(self):
-        """Method B에서 pos 성분을 projection-space에서 더하기 위한 캐시를 미리 생성합니다.
-
-        - adaptive_initial_query: _k_init_pos_cache = W_K_init(pos_embed)
-        - decoder layers: 각 cross-attn 모듈의 k_pos_cache = k_proj(pos_embed) (head-split 형태)
-
-        사용 시점:
-          model.eval(); model.embedding4decoder.prepare_inference_caches(); torch.onnx.export(...)
-        """
-        if not self.use_positional_encoding or self.pos_embed is None:
-            return
-
-        # 1) adaptive init cache
-        if self.adaptive_initial_query:
-            dev = self.W_K_init.weight.device
-            dt = self.W_K_init.weight.dtype
-            pos = self.pos_embed.to(device=dev, dtype=dt)
-            self._k_init_pos_cache = self.W_K_init(pos).contiguous()  # [1, N, D]
-
-        # 2) decoder-layer caches
-        self.decoder.prepare_inference_caches(self.pos_embed)
-
     def forward(self, encoder_tokens) -> Tensor:
         # encoder_tokens: [B, num_encoder_patches, encoder_dim]
         batch_size = encoder_tokens.shape[0]
@@ -426,12 +398,8 @@ class Embedding4Decoder(nn.Module):
             # K = content + pos (but implemented as key_proj(content) + key_proj(pos))
             key_init = self.W_K_init(content_tokens)
             if self.use_positional_encoding and self.pos_embed is not None:
-                if (not self.training) and (self._k_init_pos_cache is not None):
-                    key_init = key_init + self._k_init_pos_cache.to(device=key_init.device, dtype=key_init.dtype)
-                else:
-                    # training or cache-miss fallback
-                    pos = self.pos_embed.to(device=key_init.device, dtype=key_init.dtype)
-                    key_init = key_init + self.W_K_init(pos)
+                pos = self.pos_embed.to(device=key_init.device, dtype=key_init.dtype)
+                key_init = key_init + self.W_K_init(pos)
 
             value_init = self.W_V_init(content_tokens)
 
@@ -484,12 +452,6 @@ class Decoder(nn.Module):
             ]
         )
 
-    @torch.no_grad()
-    def prepare_inference_caches(self, pos_embed: Tensor):
-        """각 DecoderLayer의 cross-attn에 대해 k_proj(pos_embed) 캐시를 생성합니다."""
-        for layer in self.layers:
-            layer.prepare_inference_caches(pos_embed)
-
     def forward(self, seq_encoder_k: Tensor, seq_encoder_v: Tensor, seq_decoder: Tensor, pos_embed: Tensor = None):
         """seq_encoder_k/seq_encoder_v: 현재는 content-only가 들어오며,
         cross-attn 내부에서 pos_embed(또는 캐시된 k_pos)를 K projection에 더합니다.
@@ -538,11 +500,6 @@ class DecoderLayer(nn.Module):
         self.norm_ffn = nn.LayerNorm(emb_dim)
 
         self.save_attention = save_attention
-
-    @torch.no_grad()
-    def prepare_inference_caches(self, pos_embed: Tensor):
-        """cross-attn에서 사용할 k_pos cache를 생성합니다."""
-        self.cross_attn.prepare_k_pos_cache(pos_embed)
 
     def forward(self, seq_encoder_k: Tensor, seq_encoder_v: Tensor, seq_decoder: Tensor, pos_embed: Tensor = None) -> Tensor:
         # 1) Cross-Attention (Pre-Norm)
@@ -593,31 +550,6 @@ class _MultiheadAttention(nn.Module):
 
         self.heads_to_emb = nn.Sequential(nn.Linear(num_heads * head_dim, emb_dim), nn.Dropout(proj_dropout))
 
-        # [Method B] inference cache: k_proj(pos_embed) projected & head-split
-        # shape: [1, H, N, Dh]
-        self.register_buffer('_k_pos_cache', None, persistent=False)
-
-    @torch.no_grad()
-    def prepare_k_pos_cache(self, pos_embed: Tensor):
-        """k_proj(pos_embed)를 미리 계산해 head-split 형태로 캐시합니다.
-
-        - pos_embed: [1, N, D]
-        - cache:     [1, H, N, Dh]
-
-        주의: 반드시 weight 로드 후(model.load_state_dict 이후), eval 모드에서 호출 권장.
-        """
-        if pos_embed is None:
-            self._k_pos_cache = None
-            return
-
-        dev = self.k_proj.weight.device
-        dt = self.k_proj.weight.dtype
-        pos = pos_embed.to(device=dev, dtype=dt)
-
-        k_pos = self.k_proj(pos)  # [1, N, H*Dh]
-        k_pos = k_pos.view(1, -1, self.num_heads, self.head_dim).permute(0, 2, 1, 3).contiguous()
-        self._k_pos_cache = k_pos
-
     def forward(self, Q: Tensor, K: Tensor, V: Tensor, pos_embed: Tensor = None):
         bs = Q.size(0)
 
@@ -629,17 +561,9 @@ class _MultiheadAttention(nn.Module):
 
         # [Method B] add positional contribution in projection-space
         if pos_embed is not None:
-            if (not self.training) and (self._k_pos_cache is not None):
-                k_pos = self._k_pos_cache
-                # 안전장치: 디바이스/타입이 다르면 캐스트
-                if k_pos.device != k_heads.device or k_pos.dtype != k_heads.dtype:
-                    k_pos = k_pos.to(device=k_heads.device, dtype=k_heads.dtype)
-                k_heads = k_heads + k_pos
-            else:
-                # training or cache-miss fallback (will appear in ONNX if cache not prepared)
-                pos = pos_embed.to(device=k_heads.device, dtype=k_heads.dtype)
-                k_pos = self.k_proj(pos).view(1, -1, self.num_heads, self.head_dim).permute(0, 2, 1, 3)
-                k_heads = k_heads + k_pos
+            pos = pos_embed.to(device=k_heads.device, dtype=k_heads.dtype)
+            k_pos = self.k_proj(pos).view(1, -1, self.num_heads, self.head_dim).permute(0, 2, 1, 3)
+            k_heads = k_heads + k_pos
         
         v_heads = self.v_proj(V).view(bs, -1, self.num_heads, self.head_dim).permute(0, 2, 1, 3)
 

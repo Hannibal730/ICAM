@@ -25,41 +25,9 @@ try:
 except ImportError:
     cpuinfo = None
 
-try:
-    import psutil
-except ImportError:
-    psutil = None
-
 from dataloader import prepare_data # 데이터 로딩 함수 임포트
 
-try:
-    from thop import profile
-except ImportError:
-    profile = None
-
-try:
-    import onnxruntime
-    from onnxruntime.quantization import quantize_static, CalibrationDataReader, QuantType, QuantFormat, CalibrationMethod
-    from onnxruntime.quantization.preprocess import quant_pre_process
-    import onnx
-    from onnxconverter_common import float16
-except ImportError:
-    onnxruntime = None
-    quantize_static = None
-    quant_pre_process = None
-    CalibrationMethod = None
-    onnx = None
-    float16 = None
-
-# [추가] Static Quantization을 위한 라이브러리 임포트
-try:
-    from torch.ao.quantization import quantize_fx, get_default_qconfig_mapping
-except ImportError:
-    quantize_fx = None
-    get_default_qconfig_mapping = None
-
-from onnx_utils import evaluate_onnx, measure_onnx_performance, measure_model_flops, ONNXCalibrationDataReader, MemoryMonitor, flush_memory
-
+from utils import flush_memory, MemoryMonitor, measure_model_flops
 from plot import plot_and_save_train_val_accuracy_graph, plot_and_save_val_accuracy_graph, plot_and_save_confusion_matrix, plot_and_save_attention_maps, plot_and_save_f1_normal_graph, plot_and_save_loss_graph, plot_and_save_lr_graph, plot_and_save_compiled_graph
 
 # =============================================================================
@@ -365,35 +333,6 @@ def inference(run_cfg, model_cfg, model, data_loader, device, run_dir_path, time
     # 결과 저장 경로 설정 (output_dir이 주어지면 그곳에, 아니면 run_dir_path에 저장)
     save_dir = output_dir if output_dir else run_dir_path
     
-    # --- ONNX 모델 직접 평가 분기 ---
-    onnx_inference_path = getattr(run_cfg, 'onnx_inference_path', None)
-    if onnx_inference_path and os.path.exists(onnx_inference_path):
-        logging.info("="*50)
-        logging.info(f"ONNX 모델 직접 평가를 시작합니다: '{onnx_inference_path}'")
-        if not onnxruntime:
-            logging.error("ONNX Runtime이 설치되지 않았습니다. 'pip install onnxruntime'으로 설치해주세요.")
-            return None
-        try:
-            logging.info(f"ONNX Runtime (v{onnxruntime.__version__})으로 평가를 시작합니다.")
-            
-            flush_memory() # [수정] 정확한 측정을 위해 메모리 정리
-            process = psutil.Process(os.getpid()) if psutil else None
-            mem_before_load = process.memory_info().rss / (1024 * 1024) if process else 0
-
-            with MemoryMonitor() as mem_mon:
-                onnx_session = onnxruntime.InferenceSession(onnx_inference_path, providers=['CPUExecutionProvider'])
-            if psutil:
-                logging.info(f"[Model Load] ONNX 모델 로드 중 피크 메모리 - 모델 로드 전 청소 직후 메모리: {mem_mon.peak_memory - mem_mon.start_memory:.2f} MB")
-
-            dummy_input, _, _ = next(iter(data_loader))
-            inference_peak = measure_onnx_performance(onnx_session, dummy_input)
-            if psutil and inference_peak:
-                logging.info(f"[Total] 추론 중 피크 메모리 - 모델 로드 전 청소 직후 메모리: {inference_peak - mem_before_load:.2f} MB")
-            evaluate_onnx(run_cfg, onnx_session, data_loader, desc=f"[{mode_name} (ONNX)]", class_names=class_names, log_class_metrics=True)
-        except Exception as e:
-            logging.error(f"ONNX 모델 평가 중 오류 발생: {e}")
-        return None # ONNX 직접 평가 후 종료
-    
     logging.info("="*50)
     logging.info(f"{mode_name} 모드를 시작합니다.")
     
@@ -423,186 +362,6 @@ def inference(run_cfg, model_cfg, model, data_loader, device, run_dir_path, time
     # [Optimization] 입력 데이터도 Channels Last로 변환
     if device.type == 'cpu':
         single_dummy_input = single_dummy_input.to(memory_format=torch.channels_last)
-
-    # --- 양자화(Quantization) 적용 ---
-    use_fp16 = getattr(run_cfg, 'use_fp16_inference', False)
-    use_int8 = getattr(run_cfg, 'use_int8_inference', False)
-
-    if use_int8 and use_fp16:
-        logging.error("use_int8_inference과 use_fp16_inference이 동시에 설정되었습니다. 둘 중 하나만 True로 설정해주세요.")
-        raise ValueError("Conflicting quantization options: use_int8_inference and use_fp16_inference are both True.")
-
-    if use_int8:
-        logging.info("="*50)
-        logging.info("INT8 Static Quantization (ONNX)을 적용합니다.")
-        
-        if not onnxruntime:
-            logging.error("ONNX Runtime이 설치되지 않아 INT8 양자화를 수행할 수 없습니다.")
-            return None
-
-        # 1. FP32 ONNX 변환
-        fp32_onnx_path = os.path.join(save_dir, f'model_fp32_for_quant.onnx')
-        # Ensure CPU for export stability
-        model.to('cpu')
-        model.eval()
-        
-        # Dummy input for export
-        dummy_input_cpu = single_dummy_input.to('cpu')
-        
-        torch.onnx.export(model, dummy_input_cpu, fp32_onnx_path,
-                          export_params=True, opset_version=17,
-                          do_constant_folding=True,
-                          input_names=['input'], output_names=['output'],
-                          dynamic_axes={'input': {0: 'batch_size'}, 'output': {0: 'batch_size'}})
-        
-        # [추가] Quantization 전처리 (Graph Optimization & Shape Inference)
-        preprocessed_onnx_path = os.path.join(save_dir, f'model_fp32_preprocessed.onnx')
-        logging.info("Quantization 전처리를 수행합니다 (Fusion, Shape Inference)...")
-        quant_pre_process(fp32_onnx_path, preprocessed_onnx_path)
-
-        # 2. Calibration
-        calib_samples = getattr(run_cfg, 'int8_calib_samples', 256)
-        logging.info(f"Calibration 진행 ({calib_samples} samples)...")
-        
-        # Calibration Data Reader Setup
-        seed = getattr(run_cfg, 'global_seed', 42)
-        g = torch.Generator()
-        g.manual_seed(seed if seed is not None else 42)
-        
-        dataset = data_loader.dataset
-        total_len = len(dataset)
-        num_samples = min(calib_samples, total_len)
-        indices = torch.randperm(total_len, generator=g)[:num_samples].tolist()
-        calib_subset = Subset(dataset, indices)
-        calib_loader = DataLoader(calib_subset, batch_size=1, shuffle=False, num_workers=0, collate_fn=getattr(data_loader, 'collate_fn', None))
-        
-        dr = ONNXCalibrationDataReader(calib_loader, input_name='input')
-
-        # 3. Quantize
-        int8_onnx_path = os.path.join(save_dir, f'best_model_int8.onnx')
-
-        calib_method_str = getattr(run_cfg, 'int8_calibration_method', 'MinMax').lower()
-        
-        # [추가] Activation Type 설정
-        act_type_str = getattr(run_cfg, 'int8_activation_type', 'QInt8').lower()
-        activation_type = QuantType.QUInt8 if act_type_str == 'quint8' else QuantType.QInt8
-
-        # [추가] Extra Options
-        extra_options = {}
-        if calib_method_str == 'percentile':
-            percentile_val = getattr(run_cfg, 'int8_percentile', 99.999)
-            extra_options['Percentile'] = percentile_val
-
-        if calib_method_str == 'entropy':
-            calib_method = CalibrationMethod.Entropy
-        elif calib_method_str == 'percentile':
-            calib_method = CalibrationMethod.Percentile
-        else:
-            calib_method = CalibrationMethod.MinMax
-        logging.info(f"Calibration Method: {calib_method_str} ({calib_method})")
-        logging.info(f"Activation Type: {activation_type} (Extra Options: {extra_options})")
-
-        quantize_static(
-            model_input=preprocessed_onnx_path, # 전처리된 모델 사용
-            model_output=int8_onnx_path,
-            calibration_data_reader=dr,
-            quant_format=QuantFormat.QDQ,
-            per_channel=True,
-            weight_type=QuantType.QInt8,
-            activation_type=activation_type, # [추가]
-            calibrate_method=calib_method,
-            extra_options=extra_options # [추가]
-        )
-
-        logging.info(f"ONNX INT8 모델 저장 완료: {int8_onnx_path}")
-
-        # 4. Evaluate
-        # [수정] 모델 로드 메모리(Static Footprint)와 추론 메모리(Dynamic Overhead) 분리 측정
-        flush_memory() # [수정]
-        # [추가] 전체 메모리 증가량 계산을 위한 기준점 측정
-        process = psutil.Process(os.getpid()) if psutil else None
-        mem_before_load = process.memory_info().rss / (1024 * 1024) if process else 0
-
-        with MemoryMonitor() as mem_mon:
-            sess_options = onnxruntime.SessionOptions()
-            sess_options.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_ENABLE_ALL
-            # [확인용] 최적화된 그래프를 파일로 저장 (Fusion 확인용)
-            sess_options.optimized_model_filepath = os.path.join(save_dir, "model_graph_int8.onnx")
-            onnx_session = onnxruntime.InferenceSession(int8_onnx_path, sess_options=sess_options, providers=['CPUExecutionProvider'])
-        
-        if psutil:
-            logging.info(f"[Model Load] ONNX 모델(INT8) 로드 중 피크 메모리 - 모델 로드 전 청소 직후 메모리: {mem_mon.peak_memory - mem_mon.start_memory:.2f} MB")
-
-        inference_peak = measure_onnx_performance(onnx_session, dummy_input_cpu)
-        if psutil and inference_peak:
-             logging.info(f"[Total] (INT8) 추론 중 피크 메모리 - 모델 로드 전 청소 직후 메모리: {inference_peak - mem_before_load:.2f} MB")
-
-        eval_results = evaluate_onnx(run_cfg, onnx_session, data_loader, desc=f"[{mode_name} (ONNX INT8)]", class_names=class_names, log_class_metrics=True)
-        
-        if eval_results['labels'] and eval_results['preds']:
-            plot_and_save_confusion_matrix(eval_results['labels'], eval_results['preds'], class_names, save_dir, timestamp)
-        
-        return eval_results['accuracy']
-    
-    elif use_fp16:
-        logging.info("="*50)
-        logging.info("FP16 Inference (ONNX via onnxconverter-common)을 적용합니다.")
-
-        if not onnxruntime or not onnx or not float16:
-            logging.error("ONNX Runtime, onnx, 또는 onnxconverter-common이 설치되지 않았습니다.")
-            return None
-
-        # 1. Export FP32 ONNX first
-        # Ensure CPU for export stability
-        model.to('cpu') 
-        model.eval()
-        
-        fp32_onnx_path = os.path.join(save_dir, f'model_fp32_for_fp16.onnx')
-        dummy_input_cpu = single_dummy_input.to('cpu') # FP32 Input
-        
-        torch.onnx.export(model, dummy_input_cpu, fp32_onnx_path,
-                          export_params=True, opset_version=17,
-                          do_constant_folding=True,
-                          input_names=['input'], output_names=['output'],
-                          dynamic_axes={'input': {0: 'batch_size'}, 'output': {0: 'batch_size'}})
-        
-        # 2. Convert to FP16 using onnxconverter-common
-        fp16_onnx_path = os.path.join(save_dir, f'best_model_fp16.onnx')
-        logging.info("onnxconverter-common을 사용하여 float16 변환을 수행합니다...")
-        
-        onnx_model = onnx.load(fp32_onnx_path)
-        fp16_model = float16.convert_float_to_float16(onnx_model, keep_io_types=True)
-        onnx.save(fp16_model, fp16_onnx_path)
-        
-        logging.info(f"ONNX FP16 모델 저장 완료: {fp16_onnx_path}")
-
-        # 3. Evaluate
-        # [수정] 모델 로드 메모리(Static Footprint)와 추론 메모리(Dynamic Overhead) 분리 측정
-        flush_memory() # [수정]
-        # [추가] 전체 메모리 증가량 계산을 위한 기준점 측정
-        process = psutil.Process(os.getpid()) if psutil else None
-        mem_before_load = process.memory_info().rss / (1024 * 1024) if process else 0
-
-        with MemoryMonitor() as mem_mon:
-            sess_options = onnxruntime.SessionOptions()
-            sess_options.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_ENABLE_ALL
-            # [확인용] 최적화된 그래프를 파일로 저장 (Fusion 확인용)
-            sess_options.optimized_model_filepath = os.path.join(save_dir, "model_graph_fp16.onnx")
-            onnx_session = onnxruntime.InferenceSession(fp16_onnx_path, sess_options=sess_options, providers=['CPUExecutionProvider'])
-
-        if psutil:
-            logging.info(f"[Model Load] ONNX 모델(FP16) 로드 중 피크 메모리 - 모델 로드 전 청소 직후 메모리: {mem_mon.peak_memory - mem_mon.start_memory:.2f} MB")
-
-        inference_peak = measure_onnx_performance(onnx_session, dummy_input_cpu)
-        if psutil and inference_peak:
-             logging.info(f"[Total] (FP16) 추론 중 피크 메모리 - 모델 로드 전 청소 직후 메모리: {inference_peak - mem_before_load:.2f} MB")
-
-        eval_results = evaluate_onnx(run_cfg, onnx_session, data_loader, desc=f"[{mode_name} (ONNX FP16)]", class_names=class_names, log_class_metrics=True)
-
-        if eval_results['labels'] and eval_results['preds']:
-            plot_and_save_confusion_matrix(eval_results['labels'], eval_results['preds'], class_names, save_dir, timestamp)
-            
-        return eval_results['accuracy']
 
     # --- 샘플 당 Forward Pass 시간 및 메모리 사용량 측정 ---
     avg_inference_time_per_sample = 0.0
@@ -798,57 +557,6 @@ def inference(run_cfg, model_cfg, model, data_loader, device, run_dir_path, time
             logging.info(f"어텐션 맵 {saved_count}개 저장 완료.")
         except Exception as e:
             logging.error(f"어텐션 맵 시각화 중 오류 발생: {e}")
-    # --- ONNX 변환 및 평가 (config.yaml 설정에 따라) ---
-    evaluate_onnx_flag = getattr(run_cfg, 'evaluate_onnx', False)
-    if evaluate_onnx_flag and onnxruntime and dummy_input is not None:
-        if use_int8 or use_fp16:
-            logging.warning("INT8 양자화 또는 FP16 추론 모드에서는 ONNX 변환 및 평가를 지원하지 않습니다. ONNX 평가를 건너뜁니다.")
-        else:
-            logging.info("="*50)
-            logging.info("ONNX 변환 및 평가를 시작합니다.")
-            onnx_path = os.path.join(save_dir, f'model_{timestamp}.onnx')
-            try:
-                # 모델을 CPU로 이동하여 ONNX로 변환 (일반적으로 더 안정적)
-                model.to('cpu')
-                # --- ONNX 런타임 세션 옵션 설정 ---
-                sess_options = onnxruntime.SessionOptions()
-                sess_options.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_ENABLE_ALL
-                # [확인용] 최적화된 그래프를 파일로 저장 (Fusion 확인용)
-                sess_options.optimized_model_filepath = os.path.join(save_dir, "model_graph_fp32.onnx")
-
-                torch.onnx.export(model, dummy_input.to('cpu'), onnx_path, 
-                                    export_params=True, opset_version=17,
-                                    do_constant_folding=True,
-                                    input_names=['input'], output_names=['output'],
-                                    dynamic_axes={'input': {0: 'batch_size'}, 'output': {0: 'batch_size'}})
-                model.to(device) # 모델을 원래 장치로 복원
-
-                # ONNX 파일 크기 로깅
-                onnx_file_size_bytes = os.path.getsize(onnx_path)
-                onnx_file_size_mb = onnx_file_size_bytes / (1024 * 1024)
-                logging.info(f"모델이 ONNX 형식으로 변환되어 '{onnx_path}'에 저장되었습니다. (크기: {onnx_file_size_mb:.2f} MB)")
-
-                # ONNX 런타임 세션 생성 및 평가
-                # [수정] 모델 로드 메모리(Static Footprint)와 추론 메모리(Dynamic Overhead) 분리 측정
-                flush_memory() # [수정]
-                # [추가] 전체 메모리 증가량 계산을 위한 기준점 측정
-                process = psutil.Process(os.getpid()) if psutil else None
-                mem_before_load = process.memory_info().rss / (1024 * 1024) if process else 0
-
-                with MemoryMonitor() as mem_mon:
-                    onnx_session = onnxruntime.InferenceSession(onnx_path, sess_options=sess_options, providers=['CPUExecutionProvider'])
-                
-                if psutil:
-                    logging.info(f"[Model Load] ONNX 모델(FP32) 로드 중 피크 메모리 - 모델 로드 전 청소 직후 메모리: {mem_mon.peak_memory - mem_mon.start_memory:.2f} MB")
-
-                inference_peak = measure_onnx_performance(onnx_session, dummy_input)
-                if psutil and inference_peak:
-                    logging.info(f"[Total] (FP32) 추론 중 피크 메모리 - 모델 로드 전 청소 직후 메모리: {inference_peak - mem_before_load:.2f} MB")
-
-                evaluate_onnx(run_cfg, onnx_session, data_loader, desc=f"[{mode_name} (ONNX)]", class_names=class_names, log_class_metrics=True)
-
-            except Exception as e:
-                logging.error(f"ONNX 변환 또는 평가 중 오류 발생: {e}")
 
     return final_acc
 
@@ -895,15 +603,10 @@ def main():
         run_dir_path, timestamp = setup_logging(run_cfg, data_dir_name, run_name_suffix=run_suffix)
         log_dir_path = run_dir_path
     else:
-        # 추론 모드: pth_inference_dir 또는 onnx_inference_path 사용
-        onnx_inference_path = getattr(run_cfg, 'onnx_inference_path', None)
-        if not (onnx_inference_path and os.path.exists(onnx_inference_path)):
-            run_dir_path = getattr(run_cfg, 'pth_inference_dir', None)
-            if getattr(run_cfg, 'show_log', True) and (not run_dir_path or not os.path.isdir(run_dir_path)):
-                logging.error("추론 모드에서는 'config.yaml'에 'pth_inference_dir'를 올바르게 설정해야 합니다.")
-                return
-        else:
-            run_dir_path = '.'
+        run_dir_path = getattr(run_cfg, 'pth_inference_dir', None)
+        if getattr(run_cfg, 'show_log', True) and (not run_dir_path or not os.path.isdir(run_dir_path)):
+            logging.error("추론 모드에서는 'config.yaml'에 'pth_inference_dir'를 올바르게 설정해야 합니다.")
+            return
         log_dir_path, timestamp = setup_logging(run_cfg, data_dir_name, run_name_suffix=run_suffix)
 
     # --- 전역 시드 고정 (로그 파일에 남기기 위해 setup_logging 이후 실행) ---
@@ -1053,15 +756,8 @@ def main():
 
     elif run_cfg.mode == 'inference':
         # 추론 모드에서는 test_loader를 사용해 성능 평가
-        # onnx_inference_path가 지정된 경우, model 객체는 필요 없으므로 None을 전달합니다.
-        onnx_inference_path = getattr(run_cfg, 'onnx_inference_path', None)
-        if onnx_inference_path and os.path.exists(onnx_inference_path):
-            logging.info(f"'{onnx_inference_path}' ONNX 파일 평가를 위해 PyTorch 모델 생성을 건너뜁니다.")
-            inference(run_cfg, model_cfg, None, test_loader, device, run_dir_path, timestamp, mode_name="Inference", class_names=class_names)
-        else:
-            # 모델 생성 후 파라미터 수 로깅
-            inference(run_cfg, model_cfg, model, test_loader, device, run_dir_path, timestamp, mode_name="Inference", class_names=class_names, output_dir=log_dir_path)
-
+        # 모델 생성 후 파라미터 수 로깅
+        inference(run_cfg, model_cfg, model, test_loader, device, run_dir_path, timestamp, mode_name="Inference", class_names=class_names, output_dir=log_dir_path)
 
 # =============================================================================
 # 5. 메인 실행 블록
