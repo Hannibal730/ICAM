@@ -557,5 +557,22 @@ def plot_and_save_attention_maps(attention_maps, image_tensor, save_dir, img_siz
         Image.open(avg_save_path).convert('RGB').save(avg_pdf_path, "PDF", resolution=100.0)
         plt.close()
 
+        # 8. 전체 헤드/쿼리 Max 어텐션 맵 저장 (_max.png) [논문용 추천]
+        # 평균 대신 가장 강한 신호를 잡기 위해 Max 연산 사용
+        # attention_maps: [num_heads, num_queries, num_patches]
+        layer_max_map = attention_maps.max(dim=0)[0].max(dim=0)[0] # [num_patches]
+
+        attn_map_2d = layer_max_map.view(1, 1, num_patches_per_side, num_patches_per_side)
+        upscaled_map = F.interpolate(attn_map_2d, size=(img_size, img_size), mode='bilinear', align_corners=False)
+        upscaled_map = upscaled_map.squeeze().numpy()
+
+        plt.figure(figsize=(8, 8))
+        plt.imshow(image, extent=(0, img_size, 0, img_size))
+        plt.imshow(upscaled_map, cmap='jet', alpha=0.3, extent=(0, img_size, 0, img_size))
+        plt.axis('off')
+        max_save_path = os.path.join(output_folder, f"{base_name}_max.png")
+        plt.savefig(max_save_path, bbox_inches='tight')
+        plt.close()
+
     except Exception as e:
         logging.error(f"어텐션 맵 시각화 중 오류 발생: {e}")
