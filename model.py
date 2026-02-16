@@ -9,8 +9,22 @@ except ImportError:  # timm is optional unless you select a timm-based backbone
 import math
 from torch import Tensor
 from torchvision import models
-from torchvision.ops import StochasticDepth, Conv2dNormActivation
-from functools import partial
+class DropPath(nn.Module):
+    """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
+    def __init__(self, drop_prob: float = 0., scale_by_keep: bool = True):
+        super(DropPath, self).__init__()
+        self.drop_prob = drop_prob
+        self.scale_by_keep = scale_by_keep
+
+    def forward(self, x):
+        if self.drop_prob == 0. or not self.training:
+            return x
+        keep_prob = 1 - self.drop_prob
+        shape = (x.shape[0],) + (1,) * (x.ndim - 1)
+        random_tensor = x.new_empty(shape).bernoulli_(keep_prob)
+        if keep_prob > 0.0 and self.scale_by_keep:
+            random_tensor.div_(keep_prob)
+        return x * random_tensor
 
 # =============================================================================
 # 1. 이미지 인코더 모델 정의
@@ -27,21 +41,27 @@ class MBConvBlock(nn.Module):
 
         # 1. Expansion phase
         if expand_ratio != 1:
-            layers.append(
-                Conv2dNormActivation(in_channels, hidden_dim, kernel_size=1, norm_layer=nn.BatchNorm2d, activation_layer=nn.ReLU6)
-            )
+            layers.extend([
+                nn.Conv2d(in_channels, hidden_dim, 1, bias=False),
+                nn.BatchNorm2d(hidden_dim),
+                nn.ReLU6(inplace=True)
+            ])
 
         # 2. Depthwise convolution phase
-        layers.append(
-            Conv2dNormActivation(hidden_dim, hidden_dim, kernel_size=kernel_size, stride=stride, groups=hidden_dim, norm_layer=nn.BatchNorm2d, activation_layer=nn.ReLU6)
-        )
+        layers.extend([
+            nn.Conv2d(hidden_dim, hidden_dim, kernel_size, stride,
+                    padding=kernel_size//2, groups=hidden_dim, bias=False),
+            nn.BatchNorm2d(hidden_dim),
+            nn.ReLU6(inplace=True)
+        ])
 
         # 3. Squeeze and Excitation phase (Removed for embedded optimization)
 
         # 4. Output phase
-        layers.append(
-            Conv2dNormActivation(hidden_dim, out_channels, kernel_size=1, norm_layer=nn.BatchNorm2d, activation_layer=None)
-        )
+        layers.extend([
+            nn.Conv2d(hidden_dim, out_channels, 1, bias=False),
+            nn.BatchNorm2d(out_channels)
+        ])
 
         self.conv = nn.Sequential(*layers)
 
@@ -63,7 +83,6 @@ class CnnFeatureExtractor(nn.Module):
         super().__init__()
         self.cnn_feature_extractor_name = cnn_feature_extractor_name
 
-        # CNN 모델 이름에 따라 모델과 잘라낼 레이어, 기본 출력 채널을 설정합니다.
         if cnn_feature_extractor_name == 'custom24':
             # EfficientNet-B0 feat2 구조를 기반으로 코드 구현 (커스터마이징 용도)
             # 주의: 이 옵션은 pretrained 가중치를 자동으로 로드하지 않습니다.
@@ -71,9 +90,9 @@ class CnnFeatureExtractor(nn.Module):
             bn_momentum = 0.1
             layers = [
                 # Stem: 채널3 -> 32, stride 2: 해상도224-> 112
-                Conv2dNormActivation(3, 32, kernel_size=3, stride=2, padding=1, 
-                                     norm_layer=partial(nn.BatchNorm2d, eps=bn_eps, momentum=bn_momentum), 
-                                     activation_layer=nn.ReLU6),
+                nn.Conv2d(3, 32, kernel_size=3, stride=2, padding=1, bias=False),
+                nn.BatchNorm2d(32, eps=bn_eps, momentum=bn_momentum),
+                nn.ReLU6(inplace=True),
 
                 # Block 1: MBConv1, 3x3, 32->16, stride 1, expand 1
                 MBConvBlock(32, 16, kernel_size=3, stride=1, expand_ratio=1),
@@ -92,9 +111,9 @@ class CnnFeatureExtractor(nn.Module):
             bn_momentum = 0.1
             layers = [
                 # Stem: 채널3 -> 32, stride 2: 해상도224-> 112
-                Conv2dNormActivation(3, 32, kernel_size=3, stride=2, padding=1, 
-                                     norm_layer=partial(nn.BatchNorm2d, eps=bn_eps, momentum=bn_momentum), 
-                                     activation_layer=nn.ReLU6),
+                nn.Conv2d(3, 32, kernel_size=3, stride=2, padding=1, bias=False),
+                nn.BatchNorm2d(32, eps=bn_eps, momentum=bn_momentum),
+                nn.ReLU6(inplace=True),
 
                 # Block 1: MBConv1, 3x3, 32->16, stride 1, expand 1
                 MBConvBlock(32, 16, kernel_size=3, stride=1, expand_ratio=1),
@@ -191,13 +210,13 @@ class Embedding4Decoder(nn.Module):
     [Method B Refactor]
     - V는 content-only (positional encoding 미적용)
     - K는 content에 positional encoding을 더한 값을 쓰되,
-      (k_proj(content + pos) == k_proj(content) + k_proj(pos)) 선형성을 이용해
-      content+pos 토큰 텐서를 별도로 유지하지 않고 K projection 단계에서 pos 성분을 더합니다.
+    (k_proj(content + pos) == k_proj(content) + k_proj(pos)) 선형성을 이용해
+    content+pos 토큰 텐서를 별도로 유지하지 않고 K projection 단계에서 pos 성분을 더합니다.
 
     주의:
     - eval/inference에서의 출력은 기존 구현과 수치적으로 동일합니다(드롭아웃 비활성).
     - training에서 dropout>0이면 기존과 완전히 동일한 dropout 분포를 보장하지는 않습니다.
-      (inference 최적화 목적이므로, training 정확도 보장이 필요하면 별도 옵션으로 기존 경로 유지 권장)
+    (inference 최적화 목적이므로, training 정확도 보장이 필요하면 별도 옵션으로 기존 경로 유지 권장)
     """
 
     def __init__(
@@ -230,7 +249,7 @@ class Embedding4Decoder(nn.Module):
         # --- 학습 가능한 쿼리(Learnable Query) ---
         self.learnable_queries = nn.Parameter(torch.empty(num_decoder_patches, emb_dim))
         # ViT/BERT 등에서 널리 사용되는 방식인 정규분포 초기화를 적용합니다.
-        nn.init.trunc_normal_(self.learnable_queries, std=0.02)
+        nn.init.normal_(self.learnable_queries, std=0.02)
 
         # --- 2D Sinusoidal Positional Encoding (fixed) ---
         self.use_positional_encoding = positional_encoding
@@ -390,7 +409,7 @@ class DecoderLayer(nn.Module):
         )
         self.dropout_attn = nn.Dropout(dropout, inplace=True)
         # [수정] DropPath 적용
-        self.drop_path = StochasticDepth(drop_path, mode="row") if drop_path > 0. else nn.Identity()
+        self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
         self.norm_attn = nn.LayerNorm(emb_dim)
 
         self.ffn = nn.Sequential(
@@ -452,6 +471,7 @@ class _MultiheadAttention(nn.Module):
         self.attn_dropout = nn.Dropout(attn_dropout)
 
         self.heads_to_emb = nn.Sequential(nn.Linear(num_heads * head_dim, emb_dim), nn.Dropout(proj_dropout))
+        self.cached_k_pos = None
 
     def forward(self, Q: Tensor, K: Tensor, V: Tensor, pos_embed: Tensor = None):
         bs = Q.size(0)
@@ -464,8 +484,17 @@ class _MultiheadAttention(nn.Module):
 
         # [Method B] add positional contribution in projection-space
         if pos_embed is not None:
-            pos = pos_embed.to(device=k_heads.device, dtype=k_heads.dtype)
-            k_pos = self.k_proj(pos).view(1, -1, self.num_heads, self.head_dim).permute(0, 2, 1, 3)
+            if not self.training and self.cached_k_pos is not None and self.cached_k_pos.size(2) == pos_embed.size(1):
+                k_pos = self.cached_k_pos
+            else:
+                pos = pos_embed.to(device=k_heads.device, dtype=k_heads.dtype)
+                # [Bias Handling] Avoid adding bias twice if it exists
+                if self.k_proj.bias is not None:
+                    k_pos = F.linear(pos, self.k_proj.weight).view(1, -1, self.num_heads, self.head_dim).permute(0, 2, 1, 3)
+                else:
+                    k_pos = self.k_proj(pos).view(1, -1, self.num_heads, self.head_dim).permute(0, 2, 1, 3)
+                if not self.training:
+                    self.cached_k_pos = k_pos
             k_heads = k_heads + k_pos
         
         v_heads = self.v_proj(V).view(bs, -1, self.num_heads, self.head_dim).permute(0, 2, 1, 3)

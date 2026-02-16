@@ -121,7 +121,7 @@ model:
   # --- 이미지 및 인코더 설정 ---
   img_size: 224                # 모델에 입력하기 전 이미지의 리사이즈 크기 (정사각형).
   num_patches_per_side: 7    # 인코더에서 생성할 패치 그리드의 한 변 패치 수(가로/세로 동일). 예: 7 -> 7x7=49개 패치.
-  num_decoder_patches: 6     # 디코더에서 사용할 학습 가능한 쿼리(패치)의 수. 모델의 표현력을 조절합니다.
+  num_decoder_patches: 7     # 디코더에서 사용할 학습 가능한 쿼리(패치)의 수. 모델의 표현력을 조절합니다.
   num_decoder_layers: 7      # 모델 내부의 디코더 레이어 수.
   num_heads: 4               # 멀티헤드 어텐션에서 사용할 헤드의 수. `emb_dim`은 `num_heads`로 나누어 떨어져야 합니다.
 
@@ -144,15 +144,17 @@ model:
 # =============================================================================
 baseline:
   # 사용할 baseline 모델의 이름을 지정합니다.
-  # 사용 가능한 옵션: 'mobilenet_v4_s', 'deit_tiny', 'mobile_vit_xxs', 'efficientvit_b0', 'xie2019'
-  model_name: 'efficientvit_b0'
+  # 사용 가능한 옵션: 'mobilenet_v4_s', 'deit_tiny', 'mobile_vit_xxs',  'xie2019'
+  model_name: 'mobilenet_v4_s'
 
   # --- 경량화 옵션 ---
 #   use_l1_pruning: True       # L1 Norm Pruning 적용 여부
 #   use_fpgm_pruning: True     # FPGM Pruning (torch-pruning 라이브러리 사용) 적용 여부
   # use_wanda_pruning: True     # Wanda (Pruning by Weights and Activations, ICLR 2024) # 중요도를 $|Weight| \times ||Input Norm||$으로 정의합니다. 즉, 가중치가 작더라도 입력 신호($X$)가 강하게 들어오는 뉴런은 중요하다고 판단합니다.
 #   num_wanda_calib_samples: 1353 # Wanda Pruning 시 Calibration에 사용할 샘플 수. Sewer-TAPNEW: 1353, Sewer-ML: 4096
-  
+# # Sewer-TAPNEW: 1353,
+# # Sewer-ML: 4096  
+
   # pruning_sparsity: 0.4756640625     # 수동으로 설정할 가지치기 희소도 (0.0 ~ 1.0). 예: 0.5는 50% 제거를 의미. 아래 target_flops가 0보다 클 경우 이 값은 무시됩니다.
 #   pruning_flops_target: 0.1829   # 목표 FLOPs(GFLOPs). 0보다 큰 값으로 설정 시, 이 목표에 가장 가까운 pruning_sparsity를 자동으로 계산합니다.
   # pruning_params_target: 0.031371     # 목표 파라미터 수(단위: M). 0보다 큰 값으로 설정 시, 이 목표에 가장 가까운 pruning_sparsity를 자동으로 계산합니다.
