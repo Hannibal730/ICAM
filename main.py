@@ -578,6 +578,34 @@ def main():
 
         # 훈련 시에는 train_loader와 valid_loader 사용
         train(run_cfg, train_cfg, model, optimizer, scheduler, train_loader, valid_loader, device, run_dir_path, class_names, pos_weight)
+        
+        # [수정] 훈련 종료 후 Best Model 평가를 위해 모델 객체 재생성
+        # 메모리에 남아있는 캐시나 상태(Stale Cache)로 인한 성능 왜곡을 방지하기 위함입니다.
+        best_model_path = os.path.join(run_dir_path, run_cfg.pth_best_name)
+        if os.path.exists(best_model_path):
+            logging.info(f"훈련 완료. 최고 성능 모델 '{best_model_path}'을(를) 불러와 테스트 세트로 최종 평가합니다.")
+            
+            # 모델 객체 새로 생성 (초기화)
+            encoder = Encoder(
+                num_patches_per_side=model_cfg.num_patches_per_side,
+                encoder_dim=model_cfg.encoder_dim,
+                cnn_feature_extractor_name=model_cfg.cnn_feature_extractor['name'],
+                pre_trained=False, # 가중치를 로드할 것이므로 False
+            )
+            decoder = DecoderBackbone(args=decoder_args)
+            classifier = Classifier(
+                num_decoder_patches=model_cfg.num_decoder_patches,
+                emb_dim=model_cfg.emb_dim,
+                num_labels=num_labels,
+                dropout=model_cfg.dropout,
+            )
+            model = HybridModel(encoder, decoder, classifier).to(device)
+            
+            # 가중치 로드
+            model.load_state_dict(torch.load(best_model_path, map_location=device))
+        else:
+            logging.warning("최고 성능 모델 파일을 찾을 수 없습니다. 마지막 에포크 모델로 평가를 진행합니다.")
+
         final_acc = inference(run_cfg, model_cfg, model, test_loader, device, run_dir_path, timestamp, mode_name="Test", class_names=class_names)
 
         # --- 그래프 생성 ---
