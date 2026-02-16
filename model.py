@@ -263,6 +263,7 @@ class Embedding4Decoder(nn.Module):
         if self.adaptive_initial_query:
             self.W_K_init = nn.Linear(emb_dim, emb_dim)
             self.W_V_init = nn.Linear(emb_dim, emb_dim)
+        self.cached_k_pos_init = None
 
         # --- 디코더 ---
         self.decoder = Decoder(
@@ -319,8 +320,18 @@ class Embedding4Decoder(nn.Module):
             # K = content + pos (but implemented as key_proj(content) + key_proj(pos))
             key_init = self.W_K_init(content_tokens)
             if self.use_positional_encoding and self.pos_embed is not None:
-                pos = self.pos_embed.to(device=key_init.device, dtype=key_init.dtype)
-                key_init = key_init + self.W_K_init(pos)
+                if not self.training and self.cached_k_pos_init is not None and self.cached_k_pos_init.size(1) == self.pos_embed.size(1):
+                    k_pos = self.cached_k_pos_init
+                else:
+                    pos = self.pos_embed.to(device=key_init.device, dtype=key_init.dtype)
+                    # [Bias Handling] Avoid adding bias twice if it exists
+                    if self.W_K_init.bias is not None:
+                        k_pos = F.linear(pos, self.W_K_init.weight)
+                    else:
+                        k_pos = self.W_K_init(pos)
+                    if not self.training:
+                        self.cached_k_pos_init = k_pos
+                key_init = key_init + k_pos
 
             value_init = self.W_V_init(content_tokens)
 
