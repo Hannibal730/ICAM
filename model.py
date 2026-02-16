@@ -304,6 +304,12 @@ class Embedding4Decoder(nn.Module):
         pos_embed = torch.cat([emb_h, emb_w], dim=1)
         return pos_embed.unsqueeze(0)  # [1, H*W, D]
 
+    def train(self, mode=True):
+        """학습 모드 전환 시 캐시 초기화"""
+        super().train(mode)
+        if mode:
+            self.cached_k_pos_init = None
+
     def forward(self, encoder_tokens) -> Tensor:
         # encoder_tokens: [B, num_encoder_patches, encoder_dim]
         batch_size = encoder_tokens.shape[0]
@@ -486,6 +492,12 @@ class _MultiheadAttention(nn.Module):
 
         self.heads_to_emb = nn.Sequential(nn.Linear(num_heads * head_dim, emb_dim), nn.Dropout(proj_dropout))
         self.cached_k_pos = None
+
+    def train(self, mode=True):
+        """학습 모드 전환 시 캐시 초기화"""
+        super().train(mode)
+        if mode:
+            self.cached_k_pos = None
 
     def forward(self, Q: Tensor, K: Tensor, V: Tensor, pos_embed: Tensor = None):
         bs = Q.size(0)
