@@ -255,7 +255,8 @@ class Embedding4Decoder(nn.Module):
         self.use_positional_encoding = positional_encoding
         if self.use_positional_encoding:
             pos_embed = self.get_2d_sincos_pos_embed(emb_dim, num_patches_h, num_patches_w)
-            self.register_buffer('pos_embed', pos_embed, persistent=False)  # [1, N, D]
+            # [수정] persistent=True(기본값)로 변경하여 pos_embed가 state_dict에 저장되도록 함.
+            self.register_buffer('pos_embed', pos_embed)  # [1, N, D]
         else:
             self.pos_embed = None
 
@@ -335,9 +336,11 @@ class Embedding4Decoder(nn.Module):
 
             value_init = self.W_V_init(content_tokens)
 
-            init_attn_scores = torch.bmm(learnable_queries, key_init.transpose(1, 2)) * self.scale
-            init_attn_weights = F.softmax(init_attn_scores, dim=-1)
-            query_tokens = torch.bmm(init_attn_weights, value_init)
+            # [최적화] Instance-Adaptive Initialization에도 SDPA 적용
+            # Single Head Attention으로 간주하여 차원 추가: [B, N, D] -> [B, 1, N, D]
+            query_tokens = F.scaled_dot_product_attention(
+                learnable_queries.unsqueeze(1), key_init.unsqueeze(1), value_init.unsqueeze(1)
+            ).squeeze(1)
         else:
             query_tokens = self.learnable_queries.unsqueeze(0).expand(batch_size, -1, -1)
 
