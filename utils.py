@@ -30,7 +30,6 @@ def measure_model_complexity(model, img_size, device):
             
             logging.info(f"Model FLOPs: {gflops:.4f} GFLOPs")
             logging.info(f"Model MACs: {gmacs:.4f} GMACs")
-            logging.info(f"Model Params (thop): {params / 1e6:.4f} M ({int(params):,} params)")
             
             del model_for_profiling
             gc.collect()
