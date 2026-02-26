@@ -193,7 +193,8 @@ class Encoder(nn.Module):
         pooled_grid = self.grid_pool(cnn_features)
 
         # 3) Flatten: [B, D, H_p, W_p] -> [B, H_p*W_p, D]
-        patch_tokens = pooled_grid.permute(0, 2, 3, 1).contiguous().view(batch_size, -1, self.encoder_dim)
+        current_encoder_dim = pooled_grid.shape[1]
+        patch_tokens = pooled_grid.permute(0, 2, 3, 1).contiguous().view(batch_size, -1, current_encoder_dim)
 
         # Layer Normalization
         patch_tokens = self.norm_tokens(patch_tokens)
@@ -265,6 +266,7 @@ class Embedding4Decoder(nn.Module):
             self.W_K_init = nn.Linear(emb_dim, emb_dim)
             self.W_V_init = nn.Linear(emb_dim, emb_dim)
         self.cached_k_pos_init = None
+        self._warned_pos_dim_mismatch_init = False
 
         # --- 디코더 ---
         self.decoder = Decoder(
@@ -304,6 +306,19 @@ class Embedding4Decoder(nn.Module):
         pos_embed = torch.cat([emb_h, emb_w], dim=1)
         return pos_embed.unsqueeze(0)  # [1, H*W, D]
 
+    @staticmethod
+    def _match_last_dim(x: Tensor, target_dim: int) -> Tensor:
+        """구조적 프루닝 이후 차원 정렬: 감소한 경우만 슬라이스를 허용합니다."""
+        current_dim = x.size(-1)
+        if current_dim == target_dim:
+            return x
+        if current_dim > target_dim:
+            return x[..., :target_dim]
+        raise RuntimeError(
+            f"positional dim({current_dim}) < target dim({target_dim}) 입니다. "
+            "구조적 프루닝에서 채널 증가가 발생했거나 의존성이 깨졌습니다."
+        )
+
     def train(self, mode=True):
         """학습 모드 전환 시 캐시 초기화"""
         super().train(mode)
@@ -331,6 +346,15 @@ class Embedding4Decoder(nn.Module):
                     k_pos = self.cached_k_pos_init
                 else:
                     pos = self.pos_embed.to(device=key_init.device, dtype=key_init.dtype)
+                    target_in_dim = self.W_K_init.in_features
+                    if pos.size(-1) != target_in_dim:
+                        if not self._warned_pos_dim_mismatch_init:
+                            logging.warning(
+                                f"[Embedding4Decoder] pos_embed dim({pos.size(-1)})과 "
+                                f"W_K_init.in_features({target_in_dim})가 달라 자동 정렬합니다."
+                            )
+                            self._warned_pos_dim_mismatch_init = True
+                        pos = self._match_last_dim(pos, target_in_dim)
                     # [Bias Handling] Avoid adding bias twice if it exists
                     if self.W_K_init.bias is not None:
                         k_pos = F.linear(pos, self.W_K_init.weight)
@@ -492,6 +516,19 @@ class _MultiheadAttention(nn.Module):
 
         self.heads_to_emb = nn.Sequential(nn.Linear(num_heads * head_dim, emb_dim), nn.Dropout(proj_dropout))
         self.cached_k_pos = None
+        self._warned_pos_dim_mismatch_attn = False
+
+    @staticmethod
+    def _match_last_dim(x: Tensor, target_dim: int) -> Tensor:
+        current_dim = x.size(-1)
+        if current_dim == target_dim:
+            return x
+        if current_dim > target_dim:
+            return x[..., :target_dim]
+        raise RuntimeError(
+            f"positional dim({current_dim}) < target dim({target_dim}) 입니다. "
+            "구조적 프루닝에서 채널 증가가 발생했거나 의존성이 깨졌습니다."
+        )
 
     def train(self, mode=True):
         """학습 모드 전환 시 캐시 초기화"""
@@ -501,12 +538,25 @@ class _MultiheadAttention(nn.Module):
 
     def forward(self, Q: Tensor, K: Tensor, V: Tensor, pos_embed: Tensor = None):
         bs = Q.size(0)
+        proj_dim = self.q_proj.out_features
+        if self.k_proj.out_features != proj_dim or self.v_proj.out_features != proj_dim:
+            raise RuntimeError(
+                "Q/K/V projection 차원이 서로 다릅니다. "
+                "ICAM full pruning 시 attention projection 계층은 동일 차원을 유지해야 합니다."
+            )
+        if proj_dim % self.num_heads != 0:
+            raise RuntimeError(
+                f"q_proj.out_features({proj_dim})가 num_heads({self.num_heads})로 나누어떨어지지 않습니다. "
+                "ICAM full pruning 사용 시 attention projection 제약을 확인하세요."
+            )
+        head_dim = proj_dim // self.num_heads
+        scale = head_dim ** -0.5
 
         # Q Projection
-        q_heads = self.q_proj(Q).view(bs, -1, self.num_heads, self.head_dim).permute(0, 2, 1, 3)
+        q_heads = self.q_proj(Q).view(bs, -1, self.num_heads, head_dim).permute(0, 2, 1, 3)
 
         # K projection (content)
-        k_heads = self.k_proj(K).view(bs, -1, self.num_heads, self.head_dim).permute(0, 2, 1, 3)
+        k_heads = self.k_proj(K).view(bs, -1, self.num_heads, head_dim).permute(0, 2, 1, 3)
 
         # [Method B] add positional contribution in projection-space
         if pos_embed is not None:
@@ -514,19 +564,28 @@ class _MultiheadAttention(nn.Module):
                 k_pos = self.cached_k_pos
             else:
                 pos = pos_embed.to(device=k_heads.device, dtype=k_heads.dtype)
+                target_in_dim = self.k_proj.in_features
+                if pos.size(-1) != target_in_dim:
+                    if not self._warned_pos_dim_mismatch_attn:
+                        logging.warning(
+                            f"[_MultiheadAttention] pos_embed dim({pos.size(-1)})과 "
+                            f"k_proj.in_features({target_in_dim})가 달라 자동 정렬합니다."
+                        )
+                        self._warned_pos_dim_mismatch_attn = True
+                    pos = self._match_last_dim(pos, target_in_dim)
                 # [Bias Handling] Avoid adding bias twice if it exists
                 if self.k_proj.bias is not None:
-                    k_pos = F.linear(pos, self.k_proj.weight).view(1, -1, self.num_heads, self.head_dim).permute(0, 2, 1, 3)
+                    k_pos = F.linear(pos, self.k_proj.weight).view(1, -1, self.num_heads, head_dim).permute(0, 2, 1, 3)
                 else:
-                    k_pos = self.k_proj(pos).view(1, -1, self.num_heads, self.head_dim).permute(0, 2, 1, 3)
+                    k_pos = self.k_proj(pos).view(1, -1, self.num_heads, head_dim).permute(0, 2, 1, 3)
                 if not self.training:
                     self.cached_k_pos = k_pos
             k_heads = k_heads + k_pos
         
-        v_heads = self.v_proj(V).view(bs, -1, self.num_heads, self.head_dim).permute(0, 2, 1, 3)
+        v_heads = self.v_proj(V).view(bs, -1, self.num_heads, head_dim).permute(0, 2, 1, 3)
 
         if self.visualize_attention:
-            attn_scores = torch.matmul(q_heads, k_heads.transpose(-1, -2)) * self.scale
+            attn_scores = torch.matmul(q_heads, k_heads.transpose(-1, -2)) * scale
             attn_weights = F.softmax(attn_scores, dim=-1)
             attn_weights = self.attn_dropout(attn_weights)
             output = torch.matmul(attn_weights, v_heads)
@@ -537,7 +596,7 @@ class _MultiheadAttention(nn.Module):
             )
             attn_weights = None
 
-        output = output.permute(0, 2, 1, 3).reshape(bs, -1, self.num_heads * self.head_dim)
+        output = output.permute(0, 2, 1, 3).reshape(bs, -1, self.num_heads * head_dim)
         output = self.heads_to_emb(output)
 
         return output, attn_weights

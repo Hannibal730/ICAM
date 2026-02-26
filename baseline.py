@@ -506,7 +506,7 @@ def inference(run_cfg, model_cfg, model, data_loader, device, run_dir_path, time
     return final_acc
 
 # [수정] inference 함수 등 외부에서 호출할 수 있도록 Pruning 관련 함수들을 전역 스코프로 이동
-def run_torch_pruning(model, baseline_cfg, model_cfg, device, train_loader=None, criterion=None):
+def run_torch_pruning(model, baseline_cfg, model_cfg, device, train_loader=None, criterion=None, extra_ignored_layers=None):
     """torch-pruning 라이브러리를 사용하여 DepGraph 기반 Pruning을 수행합니다."""
     if tp is None:
         logging.error("DepGraph Pruning을 사용하려면 'torch-pruning' 라이브러리를 설치해야 합니다. (pip install torch-pruning)")
@@ -659,7 +659,18 @@ def run_torch_pruning(model, baseline_cfg, model_cfg, device, train_loader=None,
     elif hasattr(model, 'classifier') and isinstance(model.classifier, nn.Sequential):
         last_layer = model.classifier[-1]
     elif hasattr(model, 'classifier'):
-        last_layer = model.classifier
+        classifier_module = model.classifier
+        # ICAM Classifier처럼 projection 내부 마지막 Linear만 head인 경우를 우선 처리
+        if hasattr(classifier_module, 'projection') and isinstance(classifier_module.projection, nn.Sequential):
+            projection = classifier_module.projection
+            if len(projection) > 0 and isinstance(projection[-1], nn.Linear):
+                last_layer = projection[-1]
+            else:
+                last_layer = classifier_module
+        elif isinstance(classifier_module, nn.Linear):
+            last_layer = classifier_module
+        else:
+            last_layer = classifier_module
     elif hasattr(model, 'head'):
         last_layer = model.head
     
@@ -674,10 +685,34 @@ def run_torch_pruning(model, baseline_cfg, model_cfg, device, train_loader=None,
                 ignored_layers.append(module)
         logging.info(f"ViT 계열 모델의 모든 qkv 레이어를 Pruning 대상에서 제외합니다.")
 
+    if extra_ignored_layers:
+        ignored_layers.extend([layer for layer in extra_ignored_layers if layer is not None])
+
+    # 중복 제거 (동일 모듈/파라미터가 여러 규칙에 의해 추가될 수 있음)
+    unique_ignored_layers = []
+    seen = set()
+    for layer in ignored_layers:
+        layer_id = id(layer)
+        if layer_id not in seen:
+            unique_ignored_layers.append(layer)
+            seen.add(layer_id)
+    ignored_layers = unique_ignored_layers
+
+    # unwrapped nn.Parameter(예: learnable_queries)는 pruning dim을 명시해
+    # torch-pruning의 자동 추론/경고를 제거합니다.
+    unwrapped_parameters = []
+    for layer in ignored_layers:
+        if isinstance(layer, nn.Parameter):
+            non_singleton_dims = [i for i, s in enumerate(layer.shape) if s > 1]
+            if len(non_singleton_dims) > 0:
+                pruning_dim = non_singleton_dims[-1]
+                unwrapped_parameters.append((layer, pruning_dim))
+
     pruner = pruner_class(
         model,
         dummy_input,
         ignored_layers=ignored_layers,
+        unwrapped_parameters=unwrapped_parameters if len(unwrapped_parameters) > 0 else None,
         **pruner_kwargs
     )
 
@@ -689,7 +724,7 @@ def run_torch_pruning(model, baseline_cfg, model_cfg, device, train_loader=None,
     logging.info("="*50)
     return model
 
-def find_sparsity_for_target_flops(model, baseline_cfg, model_cfg, device, train_loader, criterion):
+def find_sparsity_for_target_flops(model, baseline_cfg, model_cfg, device, train_loader, criterion, pruning_run_kwargs=None):
     """이진 탐색을 사용하여 목표 FLOPs에 가장 가까운 pruning_sparsity를 찾습니다."""
     target_gflops = getattr(baseline_cfg, 'pruning_flops_target', 0.0)
     if target_gflops <= 0:
@@ -715,7 +750,15 @@ def find_sparsity_for_target_flops(model, baseline_cfg, model_cfg, device, train
         temp_baseline_cfg.pruning_sparsity = current_sparsity
         
         try:
-            pruned_temp_model = run_torch_pruning(temp_model, temp_baseline_cfg, model_cfg, device, train_loader=train_loader, criterion=criterion)
+            pruned_temp_model = run_torch_pruning(
+                temp_model,
+                temp_baseline_cfg,
+                model_cfg,
+                device,
+                train_loader=train_loader,
+                criterion=criterion,
+                **(pruning_run_kwargs or {})
+            )
             macs, _ = profile(pruned_temp_model, inputs=(dummy_input,), verbose=False)
             current_gflops = macs * 2 / 1e9
             flops_diff = abs(current_gflops - target_gflops)
@@ -738,7 +781,7 @@ def find_sparsity_for_target_flops(model, baseline_cfg, model_cfg, device, train
     logging.info("="*80)
     return best_sparsity
 
-def find_sparsity_for_target_params(model, baseline_cfg, model_cfg, device, train_loader, criterion):
+def find_sparsity_for_target_params(model, baseline_cfg, model_cfg, device, train_loader, criterion, pruning_run_kwargs=None):
     """이진 탐색을 사용하여 목표 파라미터 수에 가장 가까운 pruning_sparsity를 찾습니다."""
     target_m_params = getattr(baseline_cfg, 'pruning_params_target', 0.0)
     if target_m_params <= 0:
@@ -763,7 +806,15 @@ def find_sparsity_for_target_params(model, baseline_cfg, model_cfg, device, trai
         temp_baseline_cfg.pruning_sparsity = current_sparsity
         
         try:
-            pruned_temp_model = run_torch_pruning(temp_model, temp_baseline_cfg, model_cfg, device, train_loader=train_loader, criterion=criterion)
+            pruned_temp_model = run_torch_pruning(
+                temp_model,
+                temp_baseline_cfg,
+                model_cfg,
+                device,
+                train_loader=train_loader,
+                criterion=criterion,
+                **(pruning_run_kwargs or {})
+            )
             current_params = sum(p.numel() for p in pruned_temp_model.parameters())
             current_m_params = current_params / 1e6
             params_diff = abs(current_m_params - target_m_params)
@@ -796,10 +847,38 @@ def main():
         config = yaml.safe_load(f)
 
     run_cfg = SimpleNamespace(**config['run'])
-    train_cfg = SimpleNamespace(**config['training_baseline'])
+    train_cfg_dict = config['training_baseline']
+    train_cfg = SimpleNamespace(**train_cfg_dict)
     model_cfg = SimpleNamespace(**config['model'])
-    baseline_cfg = SimpleNamespace(**config.get('baseline', {})) # baseline 섹션 로드
-    finetune_cfg = SimpleNamespace(**config.get('finetuning_pruned', {})) # Fine-tuning 설정 로드
+    finetune_cfg_dict = config.get('finetuning_pruned', {})
+    finetune_cfg = SimpleNamespace(**finetune_cfg_dict) # Fine-tuning 설정 로드
+
+    baseline_section_dict = config.get('baseline', {}) or {}
+    pruning_keys = [
+        'use_l1_pruning', 'use_l2_pruning', 'use_fpgm_pruning', 'use_lamp_pruning',
+        'use_slimming_pruning', 'use_taylor_pruning', 'use_wanda_pruning',
+        'use_depgraph_pruning', 'use_isomorphic_pruning',
+        'num_wanda_calib_samples',
+        'pruning_sparsity', 'pruning_flops_target', 'pruning_params_target',
+        'pruning_scope', 'exclude_attention_qkv_pruning', 'exclude_embedding_bridge_pruning',
+        'exclude_learnable_queries_pruning'
+    ]
+    baseline_cfg_dict = dict(baseline_section_dict)
+
+    # Baseline 모델 지정은 training_baseline 섹션을 우선 사용합니다.
+    if 'model_name' in train_cfg_dict:
+        baseline_cfg_dict['model_name'] = train_cfg_dict['model_name']
+    elif 'model_name' in baseline_section_dict:
+        baseline_cfg_dict['model_name'] = baseline_section_dict['model_name']
+
+    # Pruning 옵션은 finetuning_pruned 섹션을 우선 사용합니다.
+    for key in pruning_keys:
+        if key in finetune_cfg_dict:
+            baseline_cfg_dict[key] = finetune_cfg_dict[key]
+        elif key in baseline_section_dict:
+            baseline_cfg_dict[key] = baseline_section_dict[key]
+
+    baseline_cfg = SimpleNamespace(**baseline_cfg_dict)
     # 중첩된 scheduler_params 딕셔너리를 SimpleNamespace로 변환
     if hasattr(train_cfg, 'scheduler_params') and isinstance(train_cfg.scheduler_params, dict):
         train_cfg.scheduler_params = SimpleNamespace(**train_cfg.scheduler_params)

@@ -17,8 +17,8 @@ from datetime import datetime
 import random
 import time 
 import gc
-import copy
 from model import Model as DecoderBackbone, Encoder, Classifier, HybridModel
+from baseline import run_torch_pruning, find_sparsity_for_target_flops, find_sparsity_for_target_params
 
 try:
     import cpuinfo
@@ -66,6 +66,203 @@ def setup_logging(run_cfg, data_dir_name, run_name_suffix=None):
     )
     logging.info(f"로그 파일이 '{log_filename}'에 저장됩니다.")
     return run_dir_path, timestamp
+
+def build_hybrid_model(model_cfg, pre_trained, num_labels, device):
+    """config 기반으로 ICAM HybridModel을 생성합니다."""
+    num_patches_h = model_cfg.num_patches_per_side
+    num_patches_w = model_cfg.num_patches_per_side
+    num_encoder_patches = num_patches_h * num_patches_w
+
+    decoder_params = {
+        'num_encoder_patches': num_encoder_patches,
+        'num_patches_h': num_patches_h,
+        'num_patches_w': num_patches_w,
+        'num_labels': num_labels,
+        'num_decoder_layers': model_cfg.num_decoder_layers,
+        'num_decoder_patches': model_cfg.num_decoder_patches,
+        'encoder_dim': model_cfg.encoder_dim,
+        'adaptive_initial_query': getattr(model_cfg, 'adaptive_initial_query', False),
+        'emb_dim': model_cfg.emb_dim,
+        'num_heads': model_cfg.num_heads,
+        'decoder_ff_ratio': model_cfg.decoder_ff_ratio,
+        'dropout': model_cfg.dropout,
+        'positional_encoding': model_cfg.positional_encoding,
+        'visualize_attention': model_cfg.visualize_attention,
+        'drop_path_ratio': getattr(model_cfg, 'drop_path_ratio', 0.0),
+    }
+    decoder_args = SimpleNamespace(**decoder_params)
+
+    encoder = Encoder(
+        num_patches_per_side=model_cfg.num_patches_per_side,
+        encoder_dim=model_cfg.encoder_dim,
+        cnn_feature_extractor_name=model_cfg.cnn_feature_extractor['name'],
+        pre_trained=pre_trained,
+    )
+    decoder = DecoderBackbone(args=decoder_args)
+    classifier = Classifier(
+        num_decoder_patches=model_cfg.num_decoder_patches,
+        emb_dim=model_cfg.emb_dim,
+        num_labels=num_labels,
+        dropout=model_cfg.dropout,
+    )
+    model = HybridModel(encoder, decoder, classifier).to(device)
+    return model
+
+def create_optimizer_and_scheduler(cfg, model):
+    """설정에 맞춰 옵티마이저/스케줄러를 생성합니다."""
+    optimizer_name = getattr(cfg, 'optimizer', 'adamw').lower()
+    optimizer = None
+    scheduler = None
+
+    if optimizer_name == 'sgd':
+        momentum = getattr(cfg, 'momentum', 0.9)
+        weight_decay = getattr(cfg, 'weight_decay', 0.0001)
+        logging.info(f"옵티마이저: SGD (lr={cfg.lr}, momentum={momentum}, weight_decay={weight_decay})")
+        optimizer = optim.SGD(model.parameters(), lr=cfg.lr, momentum=momentum, weight_decay=weight_decay)
+    elif optimizer_name == 'nadam':
+        weight_decay = getattr(cfg, 'weight_decay', 0.0)
+        logging.info(f"옵티마이저: NAdam (lr={cfg.lr}, weight_decay={weight_decay})")
+        optimizer = optim.NAdam(model.parameters(), lr=cfg.lr, weight_decay=weight_decay)
+    elif optimizer_name == 'radam':
+        weight_decay = getattr(cfg, 'weight_decay', 0.0)
+        logging.info(f"옵티마이저: RAdam (lr={cfg.lr}, weight_decay={weight_decay})")
+        optimizer = optim.RAdam(model.parameters(), lr=cfg.lr, weight_decay=weight_decay)
+    elif optimizer_name == 'rmsprop':
+        weight_decay = getattr(cfg, 'weight_decay', 0.0)
+        momentum = getattr(cfg, 'momentum', 0.0)
+        logging.info(f"옵티마이저: RMSprop (lr={cfg.lr}, weight_decay={weight_decay}, momentum={momentum})")
+        optimizer = optim.RMSprop(model.parameters(), lr=cfg.lr, weight_decay=weight_decay, momentum=momentum)
+    else:
+        weight_decay = getattr(cfg, 'weight_decay', 0.01)
+        logging.info(f"옵티마이저: AdamW (lr={cfg.lr}, weight_decay={weight_decay})")
+        optimizer = optim.AdamW(model.parameters(), lr=cfg.lr, weight_decay=weight_decay)
+
+    scheduler_params = getattr(cfg, 'scheduler_params', SimpleNamespace())
+    scheduler_name = getattr(cfg, 'scheduler', 'none').lower()
+    if scheduler_name == 'multisteplr':
+        milestones = getattr(cfg, 'milestones', [])
+        gamma = getattr(cfg, 'gamma', 0.1)
+        logging.info(f"스케줄러: MultiStepLR (milestones={milestones}, gamma={gamma})")
+        scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=milestones, gamma=gamma)
+    elif scheduler_name == 'cosineannealinglr':
+        T_max = getattr(scheduler_params, 'T_max', cfg.epochs)
+        eta_min = getattr(scheduler_params, 'eta_min', 0.0)
+        logging.info(f"스케줄러: CosineAnnealingLR (T_max={T_max}, eta_min={eta_min})")
+        scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=T_max, eta_min=eta_min)
+    else:
+        logging.info("스케줄러를 사용하지 않습니다.")
+
+    return optimizer, scheduler
+
+def is_pruning_enabled(baseline_cfg):
+    pruning_flags = [
+        'use_l1_pruning', 'use_l2_pruning', 'use_fpgm_pruning', 'use_lamp_pruning',
+        'use_slimming_pruning', 'use_taylor_pruning', 'use_wanda_pruning'
+    ]
+    return any(getattr(baseline_cfg, flag, False) for flag in pruning_flags)
+
+def get_icam_pruning_ignored_layers(model, baseline_cfg):
+    """ICAM Pruning 제외 레이어를 구성합니다."""
+    prunable_types = (nn.Conv2d, nn.Linear, nn.BatchNorm2d, nn.LayerNorm)
+    ignored_layers = []
+    pruning_scope = getattr(baseline_cfg, 'pruning_scope', 'full_model').lower()
+
+    # 마지막 분류층은 baseline과 동일하게 제외
+    if hasattr(model, 'classifier') and hasattr(model.classifier, 'projection'):
+        projection = model.classifier.projection
+        if isinstance(projection, nn.Sequential) and len(projection) > 0 and isinstance(projection[-1], nn.Linear):
+            ignored_layers.append(projection[-1])
+
+    # baseline의 ViT qkv 제외 정책과 동일 취지로, ICAM의 핵심 attention projection은 기본 제외
+    # (원하면 config에서 false로 변경 가능)
+    exclude_attention_qkv = getattr(baseline_cfg, 'exclude_attention_qkv_pruning', True)
+    if exclude_attention_qkv:
+        attention_proj_keywords = ('q_proj', 'k_proj', 'v_proj', 'W_K_init', 'W_V_init')
+        for name, module in model.named_modules():
+            if isinstance(module, nn.Linear) and any(keyword in name for keyword in attention_proj_keywords):
+                ignored_layers.append(module)
+
+    # Embedding bridge(feat_to_emb)가 줄어들면 pos_embed와 adaptive query 경로에서
+    # 차원 불일치가 발생할 수 있어 기본적으로 제외합니다.
+    exclude_embedding_bridge = getattr(baseline_cfg, 'exclude_embedding_bridge_pruning', True)
+    if exclude_embedding_bridge:
+        for name, module in model.named_modules():
+            if isinstance(module, nn.Linear) and 'feat_to_emb' in name:
+                ignored_layers.append(module)
+
+    # Learnable query는 module에 속하지 않는 nn.Parameter이므로 별도 제외
+    # (torch-pruning 기본 동작의 unwrapped auto-pruning 방지)
+    exclude_learnable_queries = getattr(baseline_cfg, 'exclude_learnable_queries_pruning', True)
+    if exclude_learnable_queries and hasattr(model, 'decoder') and hasattr(model.decoder, 'embedding4decoder'):
+        learnable_queries = getattr(model.decoder.embedding4decoder, 'learnable_queries', None)
+        if isinstance(learnable_queries, nn.Parameter):
+            ignored_layers.append(learnable_queries)
+
+    if pruning_scope == 'encoder_only':
+        encoder_prunable_prefix = "encoder.shared_conv.0.conv_front"
+        for name, module in model.named_modules():
+            if isinstance(module, prunable_types) and not name.startswith(encoder_prunable_prefix):
+                ignored_layers.append(module)
+        logging.info(
+            "ICAM Pruning 정책: encoder_only (decoder/classifier 제외). "
+            f"ignored_layers={len(ignored_layers)}"
+        )
+    else:
+        logging.info(
+            "ICAM Pruning 정책: full_model (encoder+decoder+classifier 대상, 마지막 분류층/attention qkv/embedding bridge/learnable queries 제외). "
+            f"ignored_layers={len(ignored_layers)}"
+        )
+
+    return ignored_layers
+
+def create_loss_for_pruning(train_cfg, pos_weight, device):
+    """Pruning 전처리(예: Taylor 중요도 계산)에 사용할 손실 함수를 생성합니다."""
+    loss_function_name = getattr(train_cfg, 'loss_function', 'CrossEntropyLoss').lower()
+    if loss_function_name == 'bcewithlogitsloss':
+        weight_value = getattr(train_cfg, 'bce_pos_weight', None)
+        if weight_value == 'auto':
+            final_pos_weight = pos_weight.to(device) if pos_weight is not None else None
+        else:
+            final_pos_weight = torch.tensor(float(weight_value), dtype=torch.float).to(device) if weight_value is not None else None
+        return nn.BCEWithLogitsLoss(pos_weight=final_pos_weight)
+    label_smoothing = getattr(train_cfg, 'label_smoothing', 0.0)
+    return nn.CrossEntropyLoss(label_smoothing=label_smoothing)
+
+def save_pruning_info(run_dir_path, baseline_cfg, target_type, target_value, optimal_sparsity):
+    pruning_method = 'unknown'
+    for method_name, cfg_name in (
+        ('l1', 'use_l1_pruning'),
+        ('l2', 'use_l2_pruning'),
+        ('fpgm', 'use_fpgm_pruning'),
+        ('lamp', 'use_lamp_pruning'),
+        ('slimming', 'use_slimming_pruning'),
+        ('taylor', 'use_taylor_pruning'),
+        ('wanda', 'use_wanda_pruning'),
+    ):
+        if getattr(baseline_cfg, cfg_name, False):
+            pruning_method = method_name
+            break
+
+    pruning_info = {
+        'model_name': 'icam',
+        'pruning_method': pruning_method,
+        'target_type': target_type,
+        'target_value': float(target_value),
+        'optimal_sparsity': float(optimal_sparsity),
+    }
+    pruning_info_path = os.path.join(run_dir_path, 'pruning_info.yaml')
+    with open(pruning_info_path, 'w', encoding='utf-8') as f:
+        yaml.dump(pruning_info, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
+    logging.info(
+        f"계산된 Pruning 정보(희소도: {optimal_sparsity:.4f})를 '{pruning_info_path}'에 저장했습니다."
+    )
+
+def merge_namespace_with_defaults(primary_cfg, default_cfg):
+    """primary_cfg에 없는 필드는 default_cfg로 채운 새 SimpleNamespace를 반환합니다."""
+    merged = SimpleNamespace(**vars(default_cfg))
+    for key, value in vars(primary_cfg).items():
+        setattr(merged, key, value)
+    return merged
 
 # =============================================================================
 # 2. 훈련 및 평가 함수
@@ -413,9 +610,30 @@ def main():
     run_cfg = SimpleNamespace(**config['run'])
     train_cfg = SimpleNamespace(**config['training_main'])
     model_cfg = SimpleNamespace(**config['model'])
+    finetune_cfg_dict = config.get('finetuning_pruned', {})
+    finetune_cfg = SimpleNamespace(**finetune_cfg_dict)
+
+    # Pruning 관련 설정은 finetuning_pruned 섹션을 우선 사용합니다.
+    baseline_section_dict = config.get('baseline', {}) or {}
+    pruning_keys = [
+        'use_l1_pruning', 'use_l2_pruning', 'use_fpgm_pruning', 'use_lamp_pruning',
+        'use_slimming_pruning', 'use_taylor_pruning', 'use_wanda_pruning',
+        'use_depgraph_pruning', 'use_isomorphic_pruning',
+        'num_wanda_calib_samples',
+        'pruning_sparsity', 'pruning_flops_target', 'pruning_params_target',
+        'pruning_scope', 'exclude_attention_qkv_pruning', 'exclude_embedding_bridge_pruning',
+        'exclude_learnable_queries_pruning'
+    ]
+    baseline_cfg_dict = dict(baseline_section_dict)
+    for key in pruning_keys:
+        if key in finetune_cfg_dict:
+            baseline_cfg_dict[key] = finetune_cfg_dict[key]
+    baseline_cfg = SimpleNamespace(**baseline_cfg_dict)
     # 중첩된 scheduler_params 딕셔너리를 SimpleNamespace로 변환
     if hasattr(train_cfg, 'scheduler_params') and isinstance(train_cfg.scheduler_params, dict):
         train_cfg.scheduler_params = SimpleNamespace(**train_cfg.scheduler_params)
+    if hasattr(finetune_cfg, 'scheduler_params') and isinstance(finetune_cfg.scheduler_params, dict):
+        finetune_cfg.scheduler_params = SimpleNamespace(**finetune_cfg.scheduler_params)
 
     # dataset_cfg도 SimpleNamespace로 변환
     run_cfg.dataset = SimpleNamespace(**run_cfg.dataset)
@@ -484,132 +702,146 @@ def main():
     train_loader, valid_loader, test_loader, num_labels, class_names, pos_weight = prepare_data(run_cfg, train_cfg, model_cfg)
 
     # --- 모델 구성 ---
-    num_patches_h = model_cfg.num_patches_per_side
-    num_patches_w = model_cfg.num_patches_per_side
-    num_encoder_patches = num_patches_h * num_patches_w
-    logging.info(f"이미지 크기: {model_cfg.img_size}, 그리드 크기: {model_cfg.num_patches_per_side}x{model_cfg.num_patches_per_side} -> 인코더 패치 수: {num_encoder_patches}개")
-
-    decoder_params = {
-        'num_encoder_patches': num_encoder_patches,
-        'num_patches_h': num_patches_h,
-        'num_patches_w': num_patches_w,
-        'num_labels': num_labels,
-        'num_decoder_layers': model_cfg.num_decoder_layers,
-        'num_decoder_patches': model_cfg.num_decoder_patches,
-        'encoder_dim': model_cfg.encoder_dim,
-        'adaptive_initial_query': getattr(model_cfg, 'adaptive_initial_query', False),
-        'emb_dim': model_cfg.emb_dim,
-        'num_heads': model_cfg.num_heads,
-        'decoder_ff_ratio': model_cfg.decoder_ff_ratio,
-        'dropout': model_cfg.dropout,
-        'positional_encoding': model_cfg.positional_encoding,
-        'visualize_attention': model_cfg.visualize_attention,
-        'drop_path_ratio': getattr(model_cfg, 'drop_path_ratio', 0.0), # [수정] drop_path_ratio 설정 전달
-    }
-    decoder_args = SimpleNamespace(**decoder_params)
-
-    encoder = Encoder(
-        num_patches_per_side=model_cfg.num_patches_per_side,
-        encoder_dim=model_cfg.encoder_dim,
-        cnn_feature_extractor_name=model_cfg.cnn_feature_extractor['name'],
-        pre_trained=train_cfg.pre_trained,
+    num_encoder_patches = model_cfg.num_patches_per_side * model_cfg.num_patches_per_side
+    logging.info(
+        f"이미지 크기: {model_cfg.img_size}, 그리드 크기: {model_cfg.num_patches_per_side}x{model_cfg.num_patches_per_side} "
+        f"-> 인코더 패치 수: {num_encoder_patches}개"
     )
-    decoder = DecoderBackbone(args=decoder_args)
-
-    # Classifier는 num_decoder_patches와 emb_dim을 기반으로 입력을 처리합니다.
-    classifier = Classifier(
-        num_decoder_patches=model_cfg.num_decoder_patches,
-        emb_dim=model_cfg.emb_dim,
-        num_labels=num_labels,
-        dropout=model_cfg.dropout,
-    )
-    model = HybridModel(encoder, decoder, classifier).to(device)
+    model = build_hybrid_model(model_cfg, train_cfg.pre_trained, num_labels, device)
 
     # 모델 생성 후 파라미터 수 로깅
     log_hybrid_model_parameters(model)
     
     # --- 모드에 따라 실행 ---
     if run_cfg.mode == 'train':
-        # --- 옵티마이저 및 스케줄러 설정 ---
-        optimizer, scheduler = None, None
-        optimizer_name = getattr(train_cfg, 'optimizer', 'adamw').lower()
-        logging.info("="*50)
-        if optimizer_name == 'sgd':
-            # SGD 옵티마이저에 필요한 파라미터들을 train_cfg에서 가져옵니다.
-            momentum = getattr(train_cfg, 'momentum', 0.9)
-            weight_decay = getattr(train_cfg, 'weight_decay', 0.0001)
-            logging.info(f"옵티마이저: SGD (lr={train_cfg.lr}, momentum={momentum}, weight_decay={weight_decay})")
-            optimizer = optim.SGD(model.parameters(), lr=train_cfg.lr, momentum=momentum, weight_decay=weight_decay)
-        elif optimizer_name == 'nadam':
-            weight_decay = getattr(train_cfg, 'weight_decay', 0.0)
-            logging.info(f"옵티마이저: NAdam (lr={train_cfg.lr}, weight_decay={weight_decay})")
-            optimizer = optim.NAdam(model.parameters(), lr=train_cfg.lr, weight_decay=weight_decay)
-        elif optimizer_name == 'radam':
-            weight_decay = getattr(train_cfg, 'weight_decay', 0.0)
-            logging.info(f"옵티마이저: RAdam (lr={train_cfg.lr}, weight_decay={weight_decay})")
-            optimizer = optim.RAdam(model.parameters(), lr=train_cfg.lr, weight_decay=weight_decay)
-        elif optimizer_name == 'rmsprop':
-            weight_decay = getattr(train_cfg, 'weight_decay', 0.0)
-            momentum = getattr(train_cfg, 'momentum', 0.0)
-            logging.info(f"옵티마이저: RMSprop (lr={train_cfg.lr}, weight_decay={weight_decay}, momentum={momentum})")
-            optimizer = optim.RMSprop(model.parameters(), lr=train_cfg.lr, weight_decay=weight_decay, momentum=momentum)
-        else:
-            # 기본값 또는 'adamw'로 설정된 경우
-            weight_decay = getattr(train_cfg, 'weight_decay', 0.01)
-            logging.info(f"옵티마이저: AdamW (lr={train_cfg.lr}, weight_decay={weight_decay})")
-            optimizer = optim.AdamW(model.parameters(), lr=train_cfg.lr, weight_decay=weight_decay)
+        use_pruning = is_pruning_enabled(baseline_cfg)
+        if use_pruning:
+            if len(vars(finetune_cfg)) == 0:
+                logging.warning("finetuning_pruned 설정이 없어 training_main 설정을 재사용합니다.")
+            finetune_cfg = merge_namespace_with_defaults(finetune_cfg, train_cfg)
 
-        # scheduler_params가 없으면 빈 객체로 초기화
-        scheduler_params = getattr(train_cfg, 'scheduler_params', SimpleNamespace())
-
-        scheduler_name = getattr(train_cfg, 'scheduler', 'none').lower()
-        if scheduler_name == 'multisteplr':
-            milestones = getattr(train_cfg, 'milestones', [])
-            gamma = getattr(train_cfg, 'gamma', 0.1)
-            logging.info(f"스케줄러: MultiStepLR (milestones={milestones}, gamma={gamma})")
-            scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=milestones, gamma=gamma)
-        elif scheduler_name == 'cosineannealinglr':
-            T_max = getattr(scheduler_params, 'T_max', train_cfg.epochs)
-            eta_min = getattr(scheduler_params, 'eta_min', 0.0)
-            logging.info(f"스케줄러: CosineAnnealingLR (T_max={T_max}, eta_min={eta_min})")
-            scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=T_max, eta_min=eta_min)
-        else:
-            logging.info("스케줄러를 사용하지 않습니다.")
-
-        # 훈련 시에는 train_loader와 valid_loader 사용
+        logging.info("="*80)
+        logging.info("단계 1/2: training_main 기반 사전 훈련(Pre-training)을 시작합니다.")
+        logging.info("="*80)
+        optimizer, scheduler = create_optimizer_and_scheduler(train_cfg, model)
         train(run_cfg, train_cfg, model, optimizer, scheduler, train_loader, valid_loader, device, run_dir_path, class_names, pos_weight)
-        
-        # [수정] 훈련 종료 후 Best Model 평가를 위해 모델 객체 재생성
-        # 메모리에 남아있는 캐시나 상태(Stale Cache)로 인한 성능 왜곡을 방지하기 위함입니다.
+
+        if use_pruning:
+            logging.info("="*80)
+            logging.info("단계 2/2: Pruning 및 finetuning_pruned 기반 미세 조정을 시작합니다.")
+            logging.info("="*80)
+
+            best_model_path = os.path.join(run_dir_path, run_cfg.pth_best_name)
+            if not os.path.exists(best_model_path):
+                logging.error(f"사전 훈련된 모델 '{best_model_path}'을 찾을 수 없어 Pruning 단계를 중단합니다.")
+            else:
+                model.load_state_dict(torch.load(best_model_path, map_location=device))
+                logging.info(f"사전 훈련된 모델 '{best_model_path}'을(를) 불러왔습니다.")
+
+                ignored_layers = get_icam_pruning_ignored_layers(model, baseline_cfg)
+                pruning_run_kwargs = {'extra_ignored_layers': ignored_layers}
+                pruning_criterion = create_loss_for_pruning(train_cfg, pos_weight, device)
+
+                if getattr(baseline_cfg, 'pruning_flops_target', 0.0) > 0:
+                    optimal_sparsity = find_sparsity_for_target_flops(
+                        model, baseline_cfg, model_cfg, device, train_loader, pruning_criterion,
+                        pruning_run_kwargs=pruning_run_kwargs
+                    )
+                    baseline_cfg.pruning_sparsity = optimal_sparsity
+                    save_pruning_info(
+                        run_dir_path,
+                        baseline_cfg,
+                        target_type='flops',
+                        target_value=getattr(baseline_cfg, 'pruning_flops_target'),
+                        optimal_sparsity=optimal_sparsity
+                    )
+                elif getattr(baseline_cfg, 'pruning_params_target', 0.0) > 0:
+                    optimal_sparsity = find_sparsity_for_target_params(
+                        model, baseline_cfg, model_cfg, device, train_loader, pruning_criterion,
+                        pruning_run_kwargs=pruning_run_kwargs
+                    )
+                    baseline_cfg.pruning_sparsity = optimal_sparsity
+                    save_pruning_info(
+                        run_dir_path,
+                        baseline_cfg,
+                        target_type='params',
+                        target_value=getattr(baseline_cfg, 'pruning_params_target'),
+                        optimal_sparsity=optimal_sparsity
+                    )
+
+                model = run_torch_pruning(
+                    model,
+                    baseline_cfg,
+                    model_cfg,
+                    device,
+                    train_loader=train_loader,
+                    criterion=pruning_criterion,
+                    **pruning_run_kwargs
+                )
+                log_hybrid_model_parameters(model)
+
+                finetune_train_loader = train_loader
+                finetune_valid_loader = valid_loader
+                finetune_pos_weight = pos_weight
+                finetune_batch_size = getattr(finetune_cfg, 'batch_size', train_cfg.batch_size)
+                if finetune_batch_size != train_cfg.batch_size:
+                    logging.info(
+                        f"finetuning_pruned.batch_size={finetune_batch_size}를 적용하기 위해 DataLoader를 재생성합니다."
+                    )
+                    finetune_train_loader, finetune_valid_loader, _, _, _, finetune_pos_weight = prepare_data(
+                        run_cfg, finetune_cfg, model_cfg
+                    )
+
+                logging.info("Pruning 이후 finetuning_pruned 설정으로 미세 조정을 수행합니다.")
+                finetune_optimizer, finetune_scheduler = create_optimizer_and_scheduler(finetune_cfg, model)
+                train(
+                    run_cfg,
+                    finetune_cfg,
+                    model,
+                    finetune_optimizer,
+                    finetune_scheduler,
+                    finetune_train_loader,
+                    finetune_valid_loader,
+                    device,
+                    run_dir_path,
+                    class_names,
+                    finetune_pos_weight
+                )
+
+        # 훈련 종료 후 Best Model 평가를 위해 모델 객체 재생성
         best_model_path = os.path.join(run_dir_path, run_cfg.pth_best_name)
         if os.path.exists(best_model_path):
             logging.info(f"훈련 완료. 최고 성능 모델 '{best_model_path}'을(를) 불러와 테스트 세트로 최종 평가합니다.")
-            
-            # 모델 객체 새로 생성 (초기화)
-            encoder = Encoder(
-                num_patches_per_side=model_cfg.num_patches_per_side,
-                encoder_dim=model_cfg.encoder_dim,
-                cnn_feature_extractor_name=model_cfg.cnn_feature_extractor['name'],
-                pre_trained=False, # 가중치를 로드할 것이므로 False
-            )
-            decoder = DecoderBackbone(args=decoder_args)
-            classifier = Classifier(
-                num_decoder_patches=model_cfg.num_decoder_patches,
-                emb_dim=model_cfg.emb_dim,
-                num_labels=num_labels,
-                dropout=model_cfg.dropout,
-            )
-            model = HybridModel(encoder, decoder, classifier).to(device)
-            
-            # 가중치 로드
-            model.load_state_dict(torch.load(best_model_path, map_location=device))
+            final_model = build_hybrid_model(model_cfg, pre_trained=False, num_labels=num_labels, device=device)
+
+            if use_pruning:
+                pruning_info_path = os.path.join(run_dir_path, 'pruning_info.yaml')
+                if os.path.exists(pruning_info_path):
+                    with open(pruning_info_path, 'r', encoding='utf-8') as f:
+                        pruning_info = yaml.safe_load(f) or {}
+                    if 'optimal_sparsity' in pruning_info:
+                        baseline_cfg.pruning_sparsity = pruning_info['optimal_sparsity']
+
+                final_ignored_layers = get_icam_pruning_ignored_layers(final_model, baseline_cfg)
+                final_pruning_criterion = create_loss_for_pruning(train_cfg, pos_weight, device)
+                final_model = run_torch_pruning(
+                    final_model,
+                    baseline_cfg,
+                    model_cfg,
+                    device,
+                    train_loader=train_loader,
+                    criterion=final_pruning_criterion,
+                    extra_ignored_layers=final_ignored_layers
+                )
+
+            final_model.load_state_dict(torch.load(best_model_path, map_location=device))
+            model = final_model
         else:
             logging.warning("최고 성능 모델 파일을 찾을 수 없습니다. 마지막 에포크 모델로 평가를 진행합니다.")
 
         final_acc = inference(run_cfg, model_cfg, model, test_loader, device, run_dir_path, timestamp, mode_name="Test", class_names=class_names)
 
         # --- 그래프 생성 ---
-        # 로그 파일 이름은 setup_logging에서 생성된 패턴을 기반으로 함
         log_filename = f"log_{timestamp}.log"
         log_file_path = os.path.join(run_dir_path, log_filename)
         if final_acc is not None:
@@ -621,8 +853,31 @@ def main():
             plot_and_save_compiled_graph(run_dir_path, timestamp)
 
     elif run_cfg.mode == 'inference':
-        # 추론 모드에서는 test_loader를 사용해 성능 평가
-        # 모델 생성 후 파라미터 수 로깅
+        use_pruning_in_inference = is_pruning_enabled(baseline_cfg)
+        if use_pruning_in_inference:
+            pruning_info_path = os.path.join(run_dir_path, 'pruning_info.yaml')
+            if os.path.exists(pruning_info_path):
+                with open(pruning_info_path, 'r', encoding='utf-8') as f:
+                    pruning_info = yaml.safe_load(f) or {}
+                if 'optimal_sparsity' in pruning_info:
+                    baseline_cfg.pruning_sparsity = pruning_info['optimal_sparsity']
+                    logging.info(
+                        f"'{pruning_info_path}'에서 Pruning 희소도({baseline_cfg.pruning_sparsity:.4f})를 불러왔습니다."
+                    )
+
+            inference_ignored_layers = get_icam_pruning_ignored_layers(model, baseline_cfg)
+            inference_pruning_criterion = create_loss_for_pruning(train_cfg, pos_weight, device)
+            model = run_torch_pruning(
+                model,
+                baseline_cfg,
+                model_cfg,
+                device,
+                train_loader=train_loader,
+                criterion=inference_pruning_criterion,
+                extra_ignored_layers=inference_ignored_layers
+            )
+            log_hybrid_model_parameters(model)
+
         inference(run_cfg, model_cfg, model, test_loader, device, run_dir_path, timestamp, mode_name="Inference", class_names=class_names, output_dir=log_dir_path)
 
 # =============================================================================

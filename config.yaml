@@ -21,8 +21,8 @@ run:
   
   # --- 데이터셋 설정 ---
   dataset:
-    name: 'Sewer-ML' # 사용할 데이터셋 이름 (로깅 및 폴더명 생성에 사용) Sewer-TAPNEW, Sewer-TAP, Sewer-ML
-    type: 'csv' # type: 'csv' (이미지 폴더 + CSV 라벨) 또는 'image_folder' (클래스별 폴더 구조)
+    name: 'Sewer_TAPNEW' # 사용할 데이터셋 이름 (로깅 및 폴더명 생성에 사용) Sewer_TAPNEW, Sewer_TAP, Sewer_ML
+    type: 'image_folder' # type: 'csv' (이미지 폴더 + CSV 라벨) 또는 'image_folder' (클래스별 폴더 구조)
     train_split_ratio: 0.8 # 'image_folder' 타입일 때 사용할 훈련 데이터 비율 (나머지는 테스트/검증 데이터가 됨)
 
     # 데이터셋 경로 설정
@@ -45,72 +45,9 @@ run:
     test: 1.0
   num_workers: 16 # 데이터 로딩 시 사용할 CPU 프로세스 수. 0이면 메인 프로세스만 사용. (시스템 권장값으로 수정)
 
-# =============================================================================
-# 2. 훈련 하이퍼파라미터 (main.py 전용)
-# =============================================================================
-training_main:
-  epochs: 90                 
-  batch_size: 256                
-  pre_trained: false             # true: ImageNet 사전 훈련 가중치 사용, false: 무작위 초기화 가중치 사용
-  optimizer: 'adamw'            # 사용할 옵티마이저. 옵션: 'adamw', 'sgd', 'nadam', 'radam', 'rmsprop'
-  lr: 0.001                     # 옵티마이저의 학습률.
-  weight_decay: 0.0001             # AdamW 옵티마이저의 가중치 감쇠(Weight Decay) 값.
-  loss_function: 'CrossEntropyLoss' # 사용할 손실 함수. 옵션: 'CrossEntropyLoss', 'BCEWithLogitsLoss'
-  label_smoothing: 0.1            # 레이블 스무딩(Label Smoothing) 값. 0.0은 비활성화. (과적합 방지, 모델 일반화 성능 향상)
-  
-
-# --- 'BCEWithLogitsLoss' 사용 시 양성 클래스 가중치 ---
-  # bce_pos_weight: 'auto'        # 'auto'로 설정 시 자동 계산, 특정 값(예: 9.0)으로 수동 설정 가능. (num_labels=2여도 코드가 자동으로 [B, 1]로 변환하여 처리)
-
-  # 사용할 학습률 스케줄러를 설정합니다.
-  scheduler: 'cosineannealinglr' # 옵션: 'multisteplr', 'cosineannealinglr', 'none'
-  scheduler_params:
-    # CosineAnnealingLR: T_max (주기, 보통 epochs), eta_min (최소 학습률)
-    T_max: 90
-    eta_min: 0.0001
-  best_model_criterion: 'val_loss'  # 최고 모델 저장 기준. 옵션: 'val_loss', 'F1_average', 'F1_Normal', 'F1_Defect'.
-
 
 # =============================================================================
-# 3. 훈련 하이퍼파라미터 (baseline.py 전용)
-# =============================================================================
-training_baseline:
-  epochs: 10                  
-  batch_size: 256               
-  pre_trained: false             # true: ImageNet 사전 훈련 가중치 사용, false: 무작위 초기화 가중치 사용
-  optimizer: 'adamw'            # 사용할 옵티마이저. 옵션: 'adamw', 'sgd', 'nadam', 'radam', 'rmsprop'
-  lr: 0.001                     # 옵티마이저의 학습률.
-  weight_decay: 0.0001             # AdamW 옵티마이저의 가중치 감쇠(Weight Decay) 값.
-  loss_function: 'CrossEntropyLoss' # 사용할 손실 함수. 옵션: 'CrossEntropyLoss', 'BCEWithLogitsLoss'
-  label_smoothing: 0.1            # 레이블 스무딩(Label Smoothing) 값. 0.0은 비활성화. (과적합 방지, 모델 일반화 성능 향상)
-
-  scheduler: 'cosineannealinglr' # 옵션: 'multisteplr', 'cosineannealinglr', 'none'
-  scheduler_params:
-    # CosineAnnealingLR: T_max (주기, 보통 epochs), eta_min (최소 학습률)
-    T_max: 10
-    eta_min: 0.0001
-  best_model_criterion: 'val_loss'  # 최고 모델 저장 기준. 옵션: 'val_loss', 'F1_average', 'F1_Normal', 'F1_Defect'.
-
-# =============================================================================
-# 6. Pruning 후 미세 조정(Fine-tuning) 하이퍼파라미터 (baseline.py 전용)
-# =============================================================================
-finetuning_pruned:
-  epochs: 80                     # Pruning 후 성능 복구를 위해 추가 훈련할 에포크 수.
-  batch_size: 256                # 미세 조정 시 사용할 배치 크기.
-  optimizer: 'adamw'             # 사용할 옵티마이저.
-  lr: 0.001                     # 미세 조정 시에는 사전 훈련보다 낮은 학습률을 사용하는 것이 일반적입니다.
-  weight_decay: 0.0001           # 가중치 감쇠 값.
-  loss_function: 'CrossEntropyLoss' # 손실 함수.
-  label_smoothing: 0.1           # 레이블 스무딩 값.
-
-  scheduler: 'cosineannealinglr'
-  scheduler_params:
-    T_max: 80 # fine-tuning epochs에 맞춰 조정
-    eta_min: 0.0001
-  best_model_criterion: 'val_loss'
-
-# =============================================================================
-# 4. 모델 아키텍처 파라미터 (main.py 전용)
+# 2. 모델 아키텍처 파라미터 (main.py 전용)
 # =============================================================================
 model:
   # --- 이미지 및 인코더 설정 ---
@@ -134,22 +71,89 @@ model:
   visualize_attention: false       # 추론 시 어텐션 맵을 저장할지 여부. True로 설정하면 시각화에 사용할 수 있습니다.
   num_plot_attention: 500     # 어텐션 맵을 시각화하여 저장할 최대 샘플 수.
 
-# =============================================================================
-# 5. Baseline 모델 설정 (baseline.py 전용)
-# =============================================================================
-baseline:
-  # 사용할 baseline 모델의 이름을 지정합니다.
-  # 사용 가능한 옵션: 'mobilenet_v4_s', 'deit_tiny', 'mobile_vit_xxs',  'xie2019'
-  model_name: 'mobilenet_v4_s'
 
-  # --- 경량화 옵션 ---
-#   use_l1_pruning: True       # L1 Norm Pruning 적용 여부
+
+# =============================================================================
+# 3. 훈련 하이퍼파라미터 (main.py 전용)
+# =============================================================================
+training_main:
+  epochs: 10                 
+  batch_size: 16                
+  pre_trained: false             # true: ImageNet 사전 훈련 가중치 사용, false: 무작위 초기화 가중치 사용
+  optimizer: 'adamw'            # 사용할 옵티마이저. 옵션: 'adamw', 'sgd', 'nadam', 'radam', 'rmsprop'
+  lr: 0.001                     # 옵티마이저의 학습률.
+  weight_decay: 0.0001             # AdamW 옵티마이저의 가중치 감쇠(Weight Decay) 값.
+  loss_function: 'CrossEntropyLoss' # 사용할 손실 함수. 옵션: 'CrossEntropyLoss', 'BCEWithLogitsLoss'
+  label_smoothing: 0.1            # 레이블 스무딩(Label Smoothing) 값. 0.0은 비활성화. (과적합 방지, 모델 일반화 성능 향상)
+  
+
+# --- 'BCEWithLogitsLoss' 사용 시 양성 클래스 가중치 ---
+  # bce_pos_weight: 'auto'        # 'auto'로 설정 시 자동 계산, 특정 값(예: 9.0)으로 수동 설정 가능. (num_labels=2여도 코드가 자동으로 [B, 1]로 변환하여 처리)
+
+  # 사용할 학습률 스케줄러를 설정합니다.
+  scheduler: 'cosineannealinglr' # 옵션: 'multisteplr', 'cosineannealinglr', 'none'
+  scheduler_params:
+    # CosineAnnealingLR: T_max (주기, 보통 epochs), eta_min (최소 학습률)
+    T_max: 10
+    eta_min: 0.0001
+  best_model_criterion: 'val_loss'  # 최고 모델 저장 기준. 옵션: 'val_loss', 'F1_average', 'F1_Normal', 'F1_Defect'.
+
+
+# =============================================================================
+# 4. 훈련 하이퍼파라미터 (baseline.py 전용)
+# =============================================================================
+training_baseline:
+  # 사용할 baseline 모델의 이름을 지정합니다.
+  # 사용 가능한 옵션: 'mobilenet_v4_s', 'deit_tiny', 'mobile_vit_xxs', 'xie2019'
+  model_name: 'mobilenet_v4_s'
+  epochs: 10                  
+  batch_size: 16               
+  pre_trained: false             # true: ImageNet 사전 훈련 가중치 사용, false: 무작위 초기화 가중치 사용
+  optimizer: 'adamw'            # 사용할 옵티마이저. 옵션: 'adamw', 'sgd', 'nadam', 'radam', 'rmsprop'
+  lr: 0.001                     # 옵티마이저의 학습률.
+  weight_decay: 0.0001             # AdamW 옵티마이저의 가중치 감쇠(Weight Decay) 값.
+  loss_function: 'CrossEntropyLoss' # 사용할 손실 함수. 옵션: 'CrossEntropyLoss', 'BCEWithLogitsLoss'
+  label_smoothing: 0.1            # 레이블 스무딩(Label Smoothing) 값. 0.0은 비활성화. (과적합 방지, 모델 일반화 성능 향상)
+
+  scheduler: 'cosineannealinglr' # 옵션: 'multisteplr', 'cosineannealinglr', 'none'
+  scheduler_params:
+    # CosineAnnealingLR: T_max (주기, 보통 epochs), eta_min (최소 학습률)
+    T_max: 10
+    eta_min: 0.0001
+  best_model_criterion: 'val_loss'  # 최고 모델 저장 기준. 옵션: 'val_loss', 'F1_average', 'F1_Normal', 'F1_Defect'.
+
+
+# =============================================================================
+# 5. Pruning 후 미세 조정(Fine-tuning) 하이퍼파라미터 (main.py, baseline.py 공용)
+# =============================================================================
+finetuning_pruned:
+  epochs: 80                     # Pruning 후 성능 복구를 위해 추가 훈련할 에포크 수.
+  batch_size: 16                # 미세 조정 시 사용할 배치 크기.
+  optimizer: 'adamw'             # 사용할 옵티마이저.
+  lr: 0.001                     # 미세 조정 시에는 사전 훈련보다 낮은 학습률을 사용하는 것이 일반적입니다.
+  weight_decay: 0.0001           # 가중치 감쇠 값.
+  loss_function: 'CrossEntropyLoss' # 손실 함수.
+  label_smoothing: 0.1           # 레이블 스무딩 값.
+
+  scheduler: 'cosineannealinglr'
+  scheduler_params:
+    T_max: 80 # fine-tuning epochs에 맞춰 조정
+    eta_min: 0.0001
+  best_model_criterion: 'val_loss'
+
+  # --- 경량화 옵션 (main.py, baseline.py 공용) ---
+  use_l1_pruning: True       # L1 Norm Pruning 적용 여부
 #   use_fpgm_pruning: True     # FPGM Pruning (torch-pruning 라이브러리 사용) 적용 여부
   # use_wanda_pruning: True     # Wanda (Pruning by Weights and Activations, ICLR 2024) # 중요도를 $|Weight| \times ||Input Norm||$으로 정의합니다. 즉, 가중치가 작더라도 입력 신호($X$)가 강하게 들어오는 뉴런은 중요하다고 판단합니다.
 #   num_wanda_calib_samples: 1353 # Wanda Pruning 시 Calibration에 사용할 샘플 수. Sewer-TAPNEW: 1353, Sewer-ML: 4096
 # # Sewer-TAPNEW: 1353,
-# # Sewer-ML: 4096  
+# # Sewer-ML: 4096
 
-  # pruning_sparsity: 0.4756640625     # 수동으로 설정할 가지치기 희소도 (0.0 ~ 1.0). 예: 0.5는 50% 제거를 의미. 아래 target_flops가 0보다 클 경우 이 값은 무시됩니다.
+  pruning_sparsity: 0.5     # 수동으로 설정할 가지치기 희소도 (0.0 ~ 1.0). 예: 0.5는 50% 제거를 의미. 아래 target_flops가 0보다 클 경우 이 값은 무시됩니다.
 #   pruning_flops_target: 0.1829   # 목표 FLOPs(GFLOPs). 0보다 큰 값으로 설정 시, 이 목표에 가장 가까운 pruning_sparsity를 자동으로 계산합니다.
   # pruning_params_target: 0.031371     # 목표 파라미터 수(단위: M). 0보다 큰 값으로 설정 시, 이 목표에 가장 가까운 pruning_sparsity를 자동으로 계산합니다.
+
+  # --- ICAM 차원 안정성 관련 Pruning 제외 옵션 ---
+  exclude_attention_qkv_pruning: True      # q_proj/k_proj/v_proj + W_K_init/W_V_init 제외
+  exclude_embedding_bridge_pruning: True   # feat_to_emb 제외 (positional/query 차원 불일치 방지)
+  exclude_learnable_queries_pruning: True  # decoder.embedding4decoder.learnable_queries 제외
