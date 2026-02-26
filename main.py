@@ -156,8 +156,7 @@ def create_optimizer_and_scheduler(cfg, model):
 
 def is_pruning_enabled(baseline_cfg):
     pruning_flags = [
-        'use_l1_pruning', 'use_l2_pruning', 'use_fpgm_pruning', 'use_lamp_pruning',
-        'use_slimming_pruning', 'use_taylor_pruning', 'use_wanda_pruning'
+        'use_l1_pruning', 'use_l2_pruning', 'use_fpgm_pruning', 'use_wanda_pruning'
     ]
     return any(getattr(baseline_cfg, flag, False) for flag in pruning_flags)
 
@@ -216,7 +215,7 @@ def get_icam_pruning_ignored_layers(model, baseline_cfg):
     return ignored_layers
 
 def create_loss_for_pruning(train_cfg, pos_weight, device):
-    """Pruning 전처리(예: Taylor 중요도 계산)에 사용할 손실 함수를 생성합니다."""
+    """Pruning 전처리(예: Wanda calibration)에 사용할 손실 함수를 생성합니다."""
     loss_function_name = getattr(train_cfg, 'loss_function', 'CrossEntropyLoss').lower()
     if loss_function_name == 'bcewithlogitsloss':
         weight_value = getattr(train_cfg, 'bce_pos_weight', None)
@@ -228,33 +227,47 @@ def create_loss_for_pruning(train_cfg, pos_weight, device):
     label_smoothing = getattr(train_cfg, 'label_smoothing', 0.0)
     return nn.CrossEntropyLoss(label_smoothing=label_smoothing)
 
-def save_pruning_info(run_dir_path, baseline_cfg, target_type, target_value, optimal_sparsity):
+def save_pruning_info(run_dir_path, baseline_cfg):
     pruning_method = 'unknown'
     for method_name, cfg_name in (
         ('l1', 'use_l1_pruning'),
         ('l2', 'use_l2_pruning'),
         ('fpgm', 'use_fpgm_pruning'),
-        ('lamp', 'use_lamp_pruning'),
-        ('slimming', 'use_slimming_pruning'),
-        ('taylor', 'use_taylor_pruning'),
         ('wanda', 'use_wanda_pruning'),
     ):
         if getattr(baseline_cfg, cfg_name, False):
             pruning_method = method_name
             break
 
+    pruning_sparsity = float(getattr(baseline_cfg, 'pruning_sparsity', 0.0))
+    pruning_flops_target = float(getattr(baseline_cfg, 'pruning_flops_target', 0.0))
+    pruning_params_target = float(getattr(baseline_cfg, 'pruning_params_target', 0.0))
+
+    if pruning_flops_target > 0:
+        target_type = 'flops'
+        target_value = pruning_flops_target
+    elif pruning_params_target > 0:
+        target_type = 'params'
+        target_value = pruning_params_target
+    else:
+        target_type = 'sparsity'
+        target_value = pruning_sparsity
+
     pruning_info = {
         'model_name': 'icam',
         'pruning_method': pruning_method,
         'target_type': target_type,
         'target_value': float(target_value),
-        'optimal_sparsity': float(optimal_sparsity),
+        'pruning_sparsity': pruning_sparsity,
+        'optimal_sparsity': pruning_sparsity,  # 하위 호환성 유지
+        'pruning_flops_target': pruning_flops_target,
+        'pruning_params_target': pruning_params_target,
     }
     pruning_info_path = os.path.join(run_dir_path, 'pruning_info.yaml')
     with open(pruning_info_path, 'w', encoding='utf-8') as f:
         yaml.dump(pruning_info, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
     logging.info(
-        f"계산된 Pruning 정보(희소도: {optimal_sparsity:.4f})를 '{pruning_info_path}'에 저장했습니다."
+        f"Pruning 정보(희소도: {pruning_sparsity:.4f})를 '{pruning_info_path}'에 저장했습니다."
     )
 
 def merge_namespace_with_defaults(primary_cfg, default_cfg):
@@ -616,8 +629,7 @@ def main():
     # Pruning 관련 설정은 finetuning_pruned 섹션을 우선 사용합니다.
     baseline_section_dict = config.get('baseline', {}) or {}
     pruning_keys = [
-        'use_l1_pruning', 'use_l2_pruning', 'use_fpgm_pruning', 'use_lamp_pruning',
-        'use_slimming_pruning', 'use_taylor_pruning', 'use_wanda_pruning',
+        'use_l1_pruning', 'use_l2_pruning', 'use_fpgm_pruning', 'use_wanda_pruning',
         'use_depgraph_pruning', 'use_isomorphic_pruning',
         'num_wanda_calib_samples',
         'pruning_sparsity', 'pruning_flops_target', 'pruning_params_target',
@@ -748,26 +760,15 @@ def main():
                         pruning_run_kwargs=pruning_run_kwargs
                     )
                     baseline_cfg.pruning_sparsity = optimal_sparsity
-                    save_pruning_info(
-                        run_dir_path,
-                        baseline_cfg,
-                        target_type='flops',
-                        target_value=getattr(baseline_cfg, 'pruning_flops_target'),
-                        optimal_sparsity=optimal_sparsity
-                    )
                 elif getattr(baseline_cfg, 'pruning_params_target', 0.0) > 0:
                     optimal_sparsity = find_sparsity_for_target_params(
                         model, baseline_cfg, model_cfg, device, train_loader, pruning_criterion,
                         pruning_run_kwargs=pruning_run_kwargs
                     )
                     baseline_cfg.pruning_sparsity = optimal_sparsity
-                    save_pruning_info(
-                        run_dir_path,
-                        baseline_cfg,
-                        target_type='params',
-                        target_value=getattr(baseline_cfg, 'pruning_params_target'),
-                        optimal_sparsity=optimal_sparsity
-                    )
+
+                # Pruned pth와 동일 경로(run_dir_path)에 재현용 pruning_info.yaml을 항상 저장
+                save_pruning_info(run_dir_path, baseline_cfg)
 
                 model = run_torch_pruning(
                     model,
@@ -819,8 +820,14 @@ def main():
                 if os.path.exists(pruning_info_path):
                     with open(pruning_info_path, 'r', encoding='utf-8') as f:
                         pruning_info = yaml.safe_load(f) or {}
-                    if 'optimal_sparsity' in pruning_info:
+                    if 'pruning_sparsity' in pruning_info:
+                        baseline_cfg.pruning_sparsity = pruning_info['pruning_sparsity']
+                    elif 'optimal_sparsity' in pruning_info:
                         baseline_cfg.pruning_sparsity = pruning_info['optimal_sparsity']
+                    if 'pruning_flops_target' in pruning_info:
+                        baseline_cfg.pruning_flops_target = pruning_info['pruning_flops_target']
+                    if 'pruning_params_target' in pruning_info:
+                        baseline_cfg.pruning_params_target = pruning_info['pruning_params_target']
 
                 final_ignored_layers = get_icam_pruning_ignored_layers(final_model, baseline_cfg)
                 final_pruning_criterion = create_loss_for_pruning(train_cfg, pos_weight, device)
@@ -859,8 +866,15 @@ def main():
             if os.path.exists(pruning_info_path):
                 with open(pruning_info_path, 'r', encoding='utf-8') as f:
                     pruning_info = yaml.safe_load(f) or {}
-                if 'optimal_sparsity' in pruning_info:
+                if 'pruning_sparsity' in pruning_info:
+                    baseline_cfg.pruning_sparsity = pruning_info['pruning_sparsity']
+                elif 'optimal_sparsity' in pruning_info:
                     baseline_cfg.pruning_sparsity = pruning_info['optimal_sparsity']
+                if 'pruning_flops_target' in pruning_info:
+                    baseline_cfg.pruning_flops_target = pruning_info['pruning_flops_target']
+                if 'pruning_params_target' in pruning_info:
+                    baseline_cfg.pruning_params_target = pruning_info['pruning_params_target']
+                if 'pruning_sparsity' in pruning_info or 'optimal_sparsity' in pruning_info:
                     logging.info(
                         f"'{pruning_info_path}'에서 Pruning 희소도({baseline_cfg.pruning_sparsity:.4f})를 불러왔습니다."
                     )

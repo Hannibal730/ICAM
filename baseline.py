@@ -55,9 +55,7 @@ def setup_logging(run_cfg, data_dir_name, baseline_model_name, baseline_cfg):
     # --- [수정] 경량화 옵션 이름을 폴더명에 추가 ---
     lightweight_option_names = []
     pruning_options = [
-        'use_l1_pruning', 'use_l2_pruning', 'use_fpgm_pruning',
-        'use_lamp_pruning', 'use_slimming_pruning', 'use_taylor_pruning',
-        'use_wanda_pruning'
+        'use_l1_pruning', 'use_l2_pruning', 'use_fpgm_pruning', 'use_wanda_pruning'
     ]
     for option in pruning_options:
         if getattr(baseline_cfg, option, False):
@@ -367,18 +365,6 @@ def train(run_cfg, train_cfg, baseline_cfg, config, model, optimizer, scheduler,
                 loss = criterion(outputs, labels)
             loss.backward()
 
-            # Network Slimming을 위한 L1 정규화 손실
-            is_slimming_pretrain = getattr(baseline_cfg, 'use_slimming_pruning', False) and \
-                                    train_cfg.epochs == config.get('training_baseline', {}).get('epochs')
-
-            if is_slimming_pretrain:
-                l1_loss = torch.tensor(0., device=device)
-                slimming_l1_strength = 1e-4
-                for module in model.modules():
-                    if isinstance(module, nn.BatchNorm2d):
-                        l1_loss += torch.norm(module.weight, 1)
-                loss += slimming_l1_strength * l1_loss
-
             optimizer.step()
 
             loss_val = loss.item() if isinstance(loss, torch.Tensor) else loss
@@ -592,31 +578,6 @@ def run_torch_pruning(model, baseline_cfg, model_cfg, device, train_loader=None,
         imp = tp.importance.MagnitudeImportance(p=2)
         pruner_class = tp.pruner.MagnitudePruner
         pruner_kwargs = {'importance': imp, 'pruning_ratio': pruning_sparsity}
-    elif getattr(baseline_cfg, 'use_lamp_pruning', False):
-        logging.info("LAMP Pruning을 시작합니다.")
-        imp = tp.importance.LAMPImportance(p=2, group_reduction="mean")
-        pruner_class = tp.pruner.MagnitudePruner
-        pruner_kwargs = {'importance': imp, 'pruning_ratio': pruning_sparsity}
-    elif getattr(baseline_cfg, 'use_slimming_pruning', False):
-        logging.info("Network Slimming (BN-Scale) Pruning을 시작합니다.")
-        imp = tp.importance.BNScaleImportance()
-        pruner_class = tp.pruner.BNScalePruner
-        pruner_kwargs = {'importance': imp, 'pruning_ratio': pruning_sparsity}
-    elif getattr(baseline_cfg, 'use_taylor_pruning', False):
-        logging.info("Group Taylor Pruning을 시작합니다.")
-        imp = tp.importance.TaylorImportance()
-        if train_loader is None or criterion is None:
-            logging.error("Taylor Pruning을 사용하려면 train_loader와 criterion이 필요합니다.")
-            return model
-        model.zero_grad()
-        logging.info("Taylor 중요도 계산을 위해 샘플 배치에 대한 그래디언트를 계산합니다.")
-        images, labels, _ = next(iter(train_loader))
-        images, labels = images.to(device), labels.to(device)
-        output = model(images)
-        loss = criterion(output, labels)
-        loss.backward()
-        pruner_class = tp.pruner.MagnitudePruner
-        pruner_kwargs = {'importance': imp, 'pruning_ratio': pruning_sparsity}
     elif getattr(baseline_cfg, 'use_fpgm_pruning', False):
         logging.info("FPGM Pruning을 시작합니다.")
         imp = tp.importance.FPGMImportance(p=2)
@@ -716,10 +677,7 @@ def run_torch_pruning(model, baseline_cfg, model_cfg, device, train_loader=None,
         **pruner_kwargs
     )
 
-    if getattr(baseline_cfg, 'use_taylor_pruning', False):
-        pruner.step(interactive=False)
-    else:
-        pruner.step()
+    pruner.step()
     logging.info(f"torch-pruning 완료. 모델 구조가 희소도({pruning_sparsity})에 맞춰 변경되었습니다.")
     logging.info("="*50)
     return model
@@ -837,6 +795,47 @@ def find_sparsity_for_target_params(model, baseline_cfg, model_cfg, device, trai
     logging.info("="*80)
     return best_sparsity
 
+def get_active_pruning_method(baseline_cfg):
+    for method_name, cfg_name in (
+        ('l1', 'use_l1_pruning'),
+        ('l2', 'use_l2_pruning'),
+        ('fpgm', 'use_fpgm_pruning'),
+        ('wanda', 'use_wanda_pruning'),
+    ):
+        if getattr(baseline_cfg, cfg_name, False):
+            return method_name
+    return 'unknown'
+
+def save_pruning_info(run_dir_path, baseline_cfg):
+    pruning_sparsity = float(getattr(baseline_cfg, 'pruning_sparsity', 0.0))
+    pruning_flops_target = float(getattr(baseline_cfg, 'pruning_flops_target', 0.0))
+    pruning_params_target = float(getattr(baseline_cfg, 'pruning_params_target', 0.0))
+
+    if pruning_flops_target > 0:
+        target_type = 'flops'
+        target_value = pruning_flops_target
+    elif pruning_params_target > 0:
+        target_type = 'params'
+        target_value = pruning_params_target
+    else:
+        target_type = 'sparsity'
+        target_value = pruning_sparsity
+
+    pruning_info = {
+        'model_name': getattr(baseline_cfg, 'model_name', 'unknown'),
+        'pruning_method': get_active_pruning_method(baseline_cfg),
+        'target_type': target_type,
+        'target_value': float(target_value),
+        'pruning_sparsity': pruning_sparsity,
+        'optimal_sparsity': pruning_sparsity,  # 하위 호환성 유지
+        'pruning_flops_target': pruning_flops_target,
+        'pruning_params_target': pruning_params_target,
+    }
+    pruning_info_path = os.path.join(run_dir_path, 'pruning_info.yaml')
+    with open(pruning_info_path, 'w', encoding='utf-8') as f:
+        yaml.dump(pruning_info, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
+    logging.info(f"Pruning 정보(희소도: {pruning_sparsity:.4f})를 '{pruning_info_path}'에 저장했습니다.")
+
 def main():
     """메인 실행 함수"""
     parser = argparse.ArgumentParser(description="YAML 설정을 이용한 Baseline 모델 분류기")
@@ -855,8 +854,7 @@ def main():
 
     baseline_section_dict = config.get('baseline', {}) or {}
     pruning_keys = [
-        'use_l1_pruning', 'use_l2_pruning', 'use_fpgm_pruning', 'use_lamp_pruning',
-        'use_slimming_pruning', 'use_taylor_pruning', 'use_wanda_pruning',
+        'use_l1_pruning', 'use_l2_pruning', 'use_fpgm_pruning', 'use_wanda_pruning',
         'use_depgraph_pruning', 'use_isomorphic_pruning',
         'num_wanda_calib_samples',
         'pruning_sparsity', 'pruning_flops_target', 'pruning_params_target',
@@ -943,11 +941,7 @@ def main():
     use_pruning = getattr(baseline_cfg, 'use_l1_pruning', False) or \
                     getattr(baseline_cfg, 'use_l2_pruning', False) or \
                     getattr(baseline_cfg, 'use_fpgm_pruning', False) or \
-                    getattr(baseline_cfg, 'use_lamp_pruning', False) or \
                     getattr(baseline_cfg, 'use_depgraph_pruning', False) or \
-                    getattr(baseline_cfg, 'use_taylor_pruning', False) or \
-                    getattr(baseline_cfg, 'use_slimming_pruning', False) or \
-                    getattr(baseline_cfg, 'use_slimming_pruning', False) or \
                     getattr(baseline_cfg, 'use_wanda_pruning', False)
     # --- 옵티마이저 및 스케줄러 생성 함수 ---
     def create_optimizer_and_scheduler(cfg, model):
@@ -1005,24 +999,11 @@ def main():
             # 목표 FLOPs가 설정된 경우, 최적의 희소도를 자동으로 계산
             if getattr(baseline_cfg, 'pruning_flops_target', 0.0) > 0:
                 # 이진 탐색으로 최적의 희소도 찾기
-                # Taylor Pruning은 criterion이 필요하므로 임시로 생성
                 loss_function_name = getattr(train_cfg, 'loss_function', 'CrossEntropyLoss').lower()
                 criterion = nn.CrossEntropyLoss() if loss_function_name != 'bcewithlogitsloss' else nn.BCEWithLogitsLoss() # type: ignore
                 optimal_sparsity = find_sparsity_for_target_flops(model, baseline_cfg, model_cfg, device, train_loader, criterion) # type: ignore
                 # 찾은 희소도를 설정에 반영
                 baseline_cfg.pruning_sparsity = optimal_sparsity
-                # 계산된 Pruning 정보를 파일에 저장하여 추론 시 재사용
-                pruning_info = {
-                    'model_name': getattr(baseline_cfg, 'model_name', 'unknown'),
-                    'pruning_method': lightweight_option_names[0] if lightweight_option_names else 'unknown',
-                    'target_type': 'flops',
-                    'target_value': getattr(baseline_cfg, 'pruning_flops_target'),
-                    'optimal_sparsity': optimal_sparsity
-                }
-                pruning_info_path = os.path.join(run_dir_path, 'pruning_info.yaml')
-                with open(pruning_info_path, 'w') as f:
-                    yaml.dump(pruning_info, f, default_flow_style=False, sort_keys=False)
-                logging.info(f"계산된 Pruning 정보(희소도: {optimal_sparsity:.4f})를 '{pruning_info_path}'에 저장했습니다.")
             # 목표 파라미터 수가 설정된 경우, 최적의 희소도를 자동으로 계산
             elif getattr(baseline_cfg, 'pruning_params_target', 0.0) > 0:
                 # 이진 탐색으로 최적의 희소도 찾기
@@ -1031,27 +1012,15 @@ def main():
                 optimal_sparsity = find_sparsity_for_target_params(model, baseline_cfg, model_cfg, device, train_loader, criterion) # type: ignore
                 # 찾은 희소도를 설정에 반영
                 baseline_cfg.pruning_sparsity = optimal_sparsity
-                # 계산된 Pruning 정보를 파일에 저장하여 추론 시 재사용
-                pruning_info = {
-                    'model_name': getattr(baseline_cfg, 'model_name', 'unknown'),
-                    'pruning_method': lightweight_option_names[0] if lightweight_option_names else 'unknown',
-                    'target_type': 'params',
-                    'target_value': getattr(baseline_cfg, 'pruning_params_target'),
-                    'optimal_sparsity': optimal_sparsity
-                }
-                pruning_info_path = os.path.join(run_dir_path, 'pruning_info.yaml')
-                with open(pruning_info_path, 'w') as f:
-                    yaml.dump(pruning_info, f, default_flow_style=False, sort_keys=False)
-                logging.info(f"계산된 Pruning 정보(희소도: {optimal_sparsity:.4f})를 '{pruning_info_path}'에 저장했습니다.")
+
+            # Pruned pth와 동일 경로(run_dir_path)에 재현용 pruning_info.yaml을 항상 저장
+            save_pruning_info(run_dir_path, baseline_cfg)
 
             # Pruning 적용
             # L1, L2 Pruning도 torch-pruning으로 통합
             use_torch_pruning = getattr(baseline_cfg, 'use_l1_pruning', False) or \
                                 getattr(baseline_cfg, 'use_l2_pruning', False) or \
                                 getattr(baseline_cfg, 'use_fpgm_pruning', False) or \
-                                getattr(baseline_cfg, 'use_taylor_pruning', False) or \
-                                getattr(baseline_cfg, 'use_lamp_pruning', False) or \
-                                getattr(baseline_cfg, 'use_slimming_pruning', False) or \
                                 getattr(baseline_cfg, 'use_wanda_pruning', False) or \
                                 getattr(baseline_cfg, 'use_isomorphic_pruning', False)
 
@@ -1065,9 +1034,7 @@ def main():
             original_gflops = original_macs * 2 / 1e9
             if use_torch_pruning:
                 # torch-pruning 계열의 기법은 모델을 직접 수정합니다.
-                # Taylor Pruning은 그래디언트 계산을 위해 추가 정보가 필요합니다.
-                if getattr(baseline_cfg, 'use_taylor_pruning', False) or getattr(baseline_cfg, 'use_wanda_pruning', False):
-                    # 임시 손실 함수 생성
+                if getattr(baseline_cfg, 'use_wanda_pruning', False):
                     loss_function_name = getattr(train_cfg, 'loss_function', 'CrossEntropyLoss').lower()
                     criterion = nn.CrossEntropyLoss() if loss_function_name != 'bcewithlogitsloss' else nn.BCEWithLogitsLoss() # type: ignore
                     model = run_torch_pruning(model, baseline_cfg, model_cfg, device, train_loader=train_loader, criterion=criterion) # type: ignore
@@ -1152,27 +1119,28 @@ def main():
         # 1. 훈련 로그 디렉토리에서 pruning_info.yaml을 읽어 희소도를 가져옵니다.
         pruning_info_path = os.path.join(run_dir_path, 'pruning_info.yaml')
         if os.path.exists(pruning_info_path):
-            with open(pruning_info_path, 'r') as f:
-                pruning_info = yaml.safe_load(f)
+            with open(pruning_info_path, 'r', encoding='utf-8') as f:
+                pruning_info = yaml.safe_load(f) or {}
             # config.yaml의 값보다 pruning_info.yaml의 값을 우선 적용
-            if 'optimal_sparsity' in pruning_info:
+            if 'pruning_sparsity' in pruning_info:
+                baseline_cfg.pruning_sparsity = pruning_info['pruning_sparsity']
+            elif 'optimal_sparsity' in pruning_info:
                 baseline_cfg.pruning_sparsity = pruning_info['optimal_sparsity']
+            if 'pruning_flops_target' in pruning_info:
+                baseline_cfg.pruning_flops_target = pruning_info['pruning_flops_target']
+            if 'pruning_params_target' in pruning_info:
+                baseline_cfg.pruning_params_target = pruning_info['pruning_params_target']
+            if 'pruning_sparsity' in pruning_info or 'optimal_sparsity' in pruning_info:
                 logging.info(f"'{pruning_info_path}'에서 Pruning 희소도({baseline_cfg.pruning_sparsity:.4f})를 불러왔습니다.")
 
         # 2. config.yaml 또는 run_info.yaml의 설정을 바탕으로 Pruning 적용
         use_pruning_in_inference = getattr(baseline_cfg, 'use_l1_pruning', False) or \
                                     getattr(baseline_cfg, 'use_l2_pruning', False) or \
                                     getattr(baseline_cfg, 'use_fpgm_pruning', False) or \
-                                    getattr(baseline_cfg, 'use_taylor_pruning', False) or \
-                                    getattr(baseline_cfg, 'use_lamp_pruning', False) or \
-                                    getattr(baseline_cfg, 'use_slimming_pruning', False) or \
                                     getattr(baseline_cfg, 'use_wanda_pruning', False)
         
         if use_pruning_in_inference:
             logging.info("추론 모드: 훈련된 모델의 Pruning 구조를 재현합니다.")
-            # Taylor Pruning은 그래디언트 계산을 위해 train_loader와 criterion이 필요합니다.
-            # 추론 시에는 정확한 그래디언트 계산이 불가능하므로, L1/L2 등 다른 Pruning 기법 사용을 권장합니다.
-            # 여기서는 실행을 위해 임시 criterion을 생성합니다.
             criterion = nn.CrossEntropyLoss()
             model = run_torch_pruning(model, baseline_cfg, model_cfg, device, train_loader=train_loader, criterion=criterion)
             log_model_parameters(model)
