@@ -4,11 +4,11 @@
 run:
   global_seed: 42 # 프로그램 전체의 재현성을 위한 전역 랜덤 시드. None으로 설정 시 비활성화.
   cuda: true # true: CUDA 사용 시도. false: CPU만 사용. CUDA를 사용할 수 없는 경우 자동으로 CPU로 전환됩니다.
-  mode: 'inference' # 실행 모드. 'train': 모델 훈련, 'inference': 모델 추론 및 성능 평가
+  mode: 'train' # 실행 모드. 'train': 모델 훈련, 'inference': 모델 추론 및 성능 평가
   
 #   pth_inference_dir: './pretrained/proposed_model/original'   # 추론 모드에서 사용할 .pth 모델이 포함된 디렉토리의 경로
 #   pth_inference_dir: './pretrained/baselines/original/mobile_vit_xxs'   # 추론 모드에서 사용할 .pth 모델이 포함된 디렉토리의 경로
-  pth_inference_dir: './log/Sewer-ML/original/main_20260113_041514'   # 추론 모드에서 사용할 .pth 모델이 포함된 디렉토리의 경로  
+  # pth_inference_dir: './log/Sewer-ML/original/main_20260113_041514'   # 추론 모드에서 사용할 .pth 모델이 포함된 디렉토리의 경로  
 #   pth_inference_dir: './log/Sewer-ML/original/baseline_efficientnet_b0_20260109_145449'   # 추론 모드에서 사용할 .pth 모델이 포함된 디렉토리의 경로  
   pth_best_name: 'best_model.pth' # .pth 모델의 파일 이름 또는 추론 시 불러올 모델의 파일 이름.
   
@@ -28,20 +28,15 @@ run:
     # 데이터셋 경로 설정
     paths:
       # 1. 'csv' 타입 데이터셋 경로
-      train_img_dir: '/home/user/workspace/disk/nvme1/data/Sewer/Sewer-ML/train'
-      valid_img_dir: '/home/user/workspace/disk/nvme1/data/Sewer/Sewer-ML/valid'
-      test_img_dir: '/home/user/workspace/disk/nvme1/data/Sewer/Sewer-ML/valid'
-      train_csv: '/home/user/workspace/disk/nvme1/data/Sewer/Sewer-ML/SewerML_Train.csv'
-      valid_csv: '/home/user/workspace/disk/nvme1/data/Sewer/Sewer-ML/SewerML_Val.csv'
-      test_csv: '/home/user/workspace/disk/nvme1/data/Sewer/Sewer-ML/SewerML_Val.csv'
+      train_img_dir: '/home/tai/workspace/ssd1/data/Sewer/Sewer-ML/train'
+      valid_img_dir: '/home/tai/workspace/ssd1/data/Sewer/Sewer-ML/valid'
+      test_img_dir: '/home/tai/workspace/ssd1/data/Sewer/Sewer-ML/valid'
+      train_csv: '/home/tai/workspace/ssd1/data/Sewer/Sewer-ML/SewerML_Train.csv'
+      valid_csv: '/home/tai/workspace/ssd1/data/Sewer/Sewer-ML/SewerML_Val.csv'
+      test_csv: '/home/tai/workspace/ssd1/data/Sewer/Sewer-ML/SewerML_Val.csv'
 
       # 2. 'image_folder' 타입 데이터셋 경로
-      # /home/user/workspace/disk/nvme1/data/Sewer/Sewer-TAP
-      # /home/user/workspace/disk/nvme1/data/Sewer/Sewer-TAPNEW
-      # img_folder: '/home/pi/Desktop/tap_new/data'
-      img_folder: '/home/user/workspace/disk/nvme1/data/Sewer/Sewer-TAPNEW'
-      # img_folder: '/home/user/workspace/CHOI/Sewer-TAPNEW/data' # 5090서버 임시 데이터
-      # img_folder: '/home/cau/workspace/data/Sewer/Sewer-TAPNEW' # 동국대 블랙월 서버
+      img_folder: '/home/tai/workspace/ssd1/data/Sewer/Sewer-TAPNEW'
 
   # 각 데이터셋에서 무작위로 샘플링할 데이터 비율. 1.0이면 전체 데이터 사용.
   random_sampling_ratio:
@@ -122,7 +117,7 @@ model:
   img_size: 224                # 모델에 입력하기 전 이미지의 리사이즈 크기 (정사각형).
   num_patches_per_side: 7    # 인코더에서 생성할 패치 그리드의 한 변 패치 수(가로/세로 동일). 예: 7 -> 7x7=49개 패치.
   num_decoder_patches: 7     # 디코더에서 사용할 학습 가능한 쿼리(패치)의 수. 모델의 표현력을 조절합니다.
-  num_decoder_layers: 7      # 모델 내부의 디코더 레이어 수.
+  num_decoder_layers: 6      # 모델 내부의 디코더 레이어 수.
   num_heads: 4               # 멀티헤드 어텐션에서 사용할 헤드의 수. `emb_dim`은 `num_heads`로 나누어 떨어져야 합니다.
 
   cnn_feature_extractor:
