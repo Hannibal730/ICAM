@@ -1,5 +1,0 @@
-model_name: deit_tiny
-pruning_method: wanda
-target_type: params
-target_value: 0.047585
-optimal_sparsity: 0.9783984374999999

@@ -1,5 +1,0 @@
-model_name: mobilenet_v4_s
-pruning_method: l1
-target_type: params
-target_value: 0.047585
-optimal_sparsity: 0.8754345703125
