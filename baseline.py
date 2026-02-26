@@ -417,6 +417,17 @@ def train(run_cfg, train_cfg, baseline_cfg, config, model, optimizer, scheduler,
         logging.warning(f"훈련 동안 성능 개선이 없어 Best 모델이 저장되지 않았습니다. 마지막 에포크의 모델을 '{model_path}'에 저장합니다.")
     return best_metric
 
+def reset_runtime_attention_caches(model):
+    """가중치 로드 후 stale attention 캐시를 제거해 재현성을 보장합니다."""
+    reset_count = 0
+    for module in model.modules():
+        for attr_name in ('cached_k_pos', 'cached_k_pos_init'):
+            if hasattr(module, attr_name):
+                if getattr(module, attr_name) is not None:
+                    setattr(module, attr_name, None)
+                    reset_count += 1
+    return reset_count
+
 def inference(run_cfg, model_cfg, model, data_loader, device, run_dir_path, timestamp, mode_name="Inference", class_names=None, output_dir=None):
     """저장된 모델로 추론 및 성능 평가를 수행합니다."""
     
@@ -437,6 +448,9 @@ def inference(run_cfg, model_cfg, model, data_loader, device, run_dir_path, time
         try:
             # [수정] main 함수에서 Pruning이 재적용된 모델에 가중치를 로드합니다.
             model.load_state_dict(torch.load(model_path, map_location=device))
+            reset_count = reset_runtime_attention_caches(model)
+            if reset_count > 0:
+                logging.info(f"가중치 로드 후 attention 캐시 {reset_count}개를 초기화했습니다.")
             logging.info(f"'{model_path}' 가중치 로드 완료.")
         except RuntimeError as e:
             logging.error(f"모델 가중치 로딩 중 런타임 오류 발생: {e}")
@@ -492,7 +506,49 @@ def inference(run_cfg, model_cfg, model, data_loader, device, run_dir_path, time
     return final_acc
 
 # [수정] inference 함수 등 외부에서 호출할 수 있도록 Pruning 관련 함수들을 전역 스코프로 이동
-def run_torch_pruning(model, baseline_cfg, model_cfg, device, train_loader=None, criterion=None, extra_ignored_layers=None):
+def _serialize_pruning_history(pruning_history):
+    if pruning_history is None:
+        return None
+    serialized = []
+    for module_name, is_out_channel_pruning, pruning_idx in pruning_history:
+        serialized.append({
+            'module_name': str(module_name),
+            'is_out_channel_pruning': bool(is_out_channel_pruning),
+            'pruning_idx': [int(i) for i in pruning_idx],
+        })
+    return serialized
+
+def _deserialize_pruning_history(pruning_history):
+    if pruning_history is None:
+        return None
+    deserialized = []
+    for item in pruning_history:
+        if isinstance(item, dict):
+            deserialized.append((
+                item['module_name'],
+                bool(item['is_out_channel_pruning']),
+                [int(i) for i in item['pruning_idx']],
+            ))
+        else:
+            module_name, is_out_channel_pruning, pruning_idx = item
+            deserialized.append((
+                str(module_name),
+                bool(is_out_channel_pruning),
+                [int(i) for i in pruning_idx],
+            ))
+    return deserialized
+
+def run_torch_pruning(
+    model,
+    baseline_cfg,
+    model_cfg,
+    device,
+    train_loader=None,
+    criterion=None,
+    extra_ignored_layers=None,
+    pruning_history=None,
+    return_pruning_history=False,
+):
     """torch-pruning 라이브러리를 사용하여 DepGraph 기반 Pruning을 수행합니다."""
     if tp is None:
         logging.error("DepGraph Pruning을 사용하려면 'torch-pruning' 라이브러리를 설치해야 합니다. (pip install torch-pruning)")
@@ -585,28 +641,34 @@ def run_torch_pruning(model, baseline_cfg, model_cfg, device, train_loader=None,
         pruner_kwargs = {'importance': imp, 'pruning_ratio': pruning_sparsity}
     elif getattr(baseline_cfg, 'use_wanda_pruning', False):
         logging.info("Wanda Pruning을 시작합니다.")
-        if train_loader is None:
-            logging.error("Wanda Pruning을 사용하려면 Calibration을 위한 train_loader가 필요합니다.")
-            return model
-        imp = WandaImportance()
-        logging.info("Wanda 중요도 계산을 위해 Calibration을 수행합니다.")
-        model.eval()
-        hooks = []
-        for m in model.modules():
-            if isinstance(m, (nn.Linear, nn.Conv2d)):
-                hooks.append(m.register_forward_hook(imp._hook))
-        
-        # Calibration을 위해 여러 배치를 사용하여 샘플 수를 확보 (예: 128개 샘플 목표)
-        num_wanda_calib_samples = getattr(baseline_cfg, 'num_wanda_calib_samples', 128)
-        num_batches = (num_wanda_calib_samples + train_loader.batch_size - 1) // train_loader.batch_size
-        logging.info(f"  - Calibration Samples: {num_wanda_calib_samples} (approx {num_batches} batches)")
-        
-        with torch.no_grad():
-            for i, (images, _, _) in enumerate(train_loader):
-                if i >= num_batches: break
-                model(images.to(device))
-                
-        for h in hooks: h.remove()
+        if pruning_history is not None:
+            # pruning_history 재현 시에는 importance/calibration이 실제 pruning 구조에 영향을 주지 않으므로 생략
+            logging.info("저장된 pruning_history가 있어 Wanda calibration을 건너뜁니다.")
+            imp = tp.importance.MagnitudeImportance(p=1)
+        else:
+            if train_loader is None:
+                logging.error("Wanda Pruning을 사용하려면 Calibration을 위한 train_loader가 필요합니다.")
+                return model
+            imp = WandaImportance()
+            logging.info("Wanda 중요도 계산을 위해 Calibration을 수행합니다.")
+            model.eval()
+            hooks = []
+            for m in model.modules():
+                if isinstance(m, (nn.Linear, nn.Conv2d)):
+                    hooks.append(m.register_forward_hook(imp._hook))
+            
+            # Calibration을 위해 여러 배치를 사용하여 샘플 수를 확보 (예: 128개 샘플 목표)
+            num_wanda_calib_samples = getattr(baseline_cfg, 'num_wanda_calib_samples', 128)
+            num_batches = (num_wanda_calib_samples + train_loader.batch_size - 1) // train_loader.batch_size
+            logging.info(f"  - Calibration Samples: {num_wanda_calib_samples} (approx {num_batches} batches)")
+            
+            with torch.no_grad():
+                for i, (images, _, _) in enumerate(train_loader):
+                    if i >= num_batches: break
+                    model(images.to(device))
+                    
+            for h in hooks:
+                h.remove()
         pruner_class = tp.pruner.MagnitudePruner
         pruner_kwargs = {'importance': imp, 'pruning_ratio': pruning_sparsity}
     else:
@@ -677,9 +739,18 @@ def run_torch_pruning(model, baseline_cfg, model_cfg, device, train_loader=None,
         **pruner_kwargs
     )
 
-    pruner.step()
+    if pruning_history is not None:
+        deserialized_history = _deserialize_pruning_history(pruning_history)
+        pruner.load_pruning_history(deserialized_history)
+        logging.info("저장된 pruning_history를 사용해 Pruning 구조를 재현했습니다.")
+    else:
+        pruner.step()
+
+    serialized_history = _serialize_pruning_history(pruner.pruning_history())
     logging.info(f"torch-pruning 완료. 모델 구조가 희소도({pruning_sparsity})에 맞춰 변경되었습니다.")
     logging.info("="*50)
+    if return_pruning_history:
+        return model, serialized_history
     return model
 
 def find_sparsity_for_target_flops(model, baseline_cfg, model_cfg, device, train_loader, criterion, pruning_run_kwargs=None):
@@ -806,7 +877,7 @@ def get_active_pruning_method(baseline_cfg):
             return method_name
     return 'unknown'
 
-def save_pruning_info(run_dir_path, baseline_cfg):
+def save_pruning_info(run_dir_path, baseline_cfg, pruning_history=None):
     pruning_sparsity = float(getattr(baseline_cfg, 'pruning_sparsity', 0.0))
     pruning_flops_target = float(getattr(baseline_cfg, 'pruning_flops_target', 0.0))
     pruning_params_target = float(getattr(baseline_cfg, 'pruning_params_target', 0.0))
@@ -831,6 +902,8 @@ def save_pruning_info(run_dir_path, baseline_cfg):
         'pruning_flops_target': pruning_flops_target,
         'pruning_params_target': pruning_params_target,
     }
+    if pruning_history is not None:
+        pruning_info['pruning_history'] = pruning_history
     pruning_info_path = os.path.join(run_dir_path, 'pruning_info.yaml')
     with open(pruning_info_path, 'w', encoding='utf-8') as f:
         yaml.dump(pruning_info, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
@@ -1013,9 +1086,6 @@ def main():
                 # 찾은 희소도를 설정에 반영
                 baseline_cfg.pruning_sparsity = optimal_sparsity
 
-            # Pruned pth와 동일 경로(run_dir_path)에 재현용 pruning_info.yaml을 항상 저장
-            save_pruning_info(run_dir_path, baseline_cfg)
-
             # Pruning 적용
             # L1, L2 Pruning도 torch-pruning으로 통합
             use_torch_pruning = getattr(baseline_cfg, 'use_l1_pruning', False) or \
@@ -1023,6 +1093,7 @@ def main():
                                 getattr(baseline_cfg, 'use_fpgm_pruning', False) or \
                                 getattr(baseline_cfg, 'use_wanda_pruning', False) or \
                                 getattr(baseline_cfg, 'use_isomorphic_pruning', False)
+            pruning_history = None
 
             # Pruning 전 원본 모델의 FLOPs 측정
             original_macs, _ = profile(model, inputs=(torch.randn(1, 3, model_cfg.img_size, model_cfg.img_size).to(device),), verbose=False)
@@ -1037,9 +1108,16 @@ def main():
                 if getattr(baseline_cfg, 'use_wanda_pruning', False):
                     loss_function_name = getattr(train_cfg, 'loss_function', 'CrossEntropyLoss').lower()
                     criterion = nn.CrossEntropyLoss() if loss_function_name != 'bcewithlogitsloss' else nn.BCEWithLogitsLoss() # type: ignore
-                    model = run_torch_pruning(model, baseline_cfg, model_cfg, device, train_loader=train_loader, criterion=criterion) # type: ignore
+                    model, pruning_history = run_torch_pruning(
+                        model, baseline_cfg, model_cfg, device,
+                        train_loader=train_loader, criterion=criterion,
+                        return_pruning_history=True
+                    ) # type: ignore
                 else:
-                    model = run_torch_pruning(model, baseline_cfg, model_cfg, device)
+                    model, pruning_history = run_torch_pruning(
+                        model, baseline_cfg, model_cfg, device,
+                        return_pruning_history=True
+                    )
 
                 log_model_parameters(model) # Pruning 후 파라미터 수 확인
 
@@ -1055,6 +1133,9 @@ def main():
                 logging.info(f"FLOPs가 {original_gflops:.4f} GFLOPs에서 {pruned_gflops:.4f} GFLOPs로 감소했습니다 (감소율: {flops_reduction_ratio:.2f}%).")
 
                 pruner = None # torch-pruning은 NNI pruner 객체를 사용하지 않음.
+
+            # Pruned pth와 동일 경로(run_dir_path)에 재현용 pruning_info.yaml을 항상 저장
+            save_pruning_info(run_dir_path, baseline_cfg, pruning_history=pruning_history)
             
             if use_torch_pruning: # [수정] torch-pruning이 사용된 경우에만 미세조정 실행
                 # 미세 조정을 위한 새로운 옵티마이저 및 스케줄러 생성
@@ -1087,7 +1168,17 @@ def main():
                 logging.info("최종 평가 모델에 Pruning 구조를 재적용합니다.")
                 # Pruning에 필요한 임시 criterion 생성
                 criterion = nn.CrossEntropyLoss()
-                final_model = run_torch_pruning(final_model, baseline_cfg, model_cfg, device, train_loader=train_loader, criterion=criterion)
+                pruning_info_path = os.path.join(run_dir_path, 'pruning_info.yaml')
+                loaded_pruning_history = None
+                if os.path.exists(pruning_info_path):
+                    with open(pruning_info_path, 'r', encoding='utf-8') as f:
+                        pruning_info = yaml.safe_load(f) or {}
+                    loaded_pruning_history = pruning_info.get('pruning_history')
+                final_model = run_torch_pruning(
+                    final_model, baseline_cfg, model_cfg, device,
+                    train_loader=train_loader, criterion=criterion,
+                    pruning_history=loaded_pruning_history
+                )
 
             # 3. 깨끗하게 Pruning된 모델에 저장된 가중치를 불러옵니다.
             # 이 시점에는 모델 객체와 state_dict 모두 thop 오염이 없으므로 오류가 발생하지 않습니다.
@@ -1118,6 +1209,7 @@ def main():
         # 훈련 시 Pruning이 사용되었는지 확인하고 모델 구조를 동일하게 재구성합니다.
         # 1. 훈련 로그 디렉토리에서 pruning_info.yaml을 읽어 희소도를 가져옵니다.
         pruning_info_path = os.path.join(run_dir_path, 'pruning_info.yaml')
+        loaded_pruning_history = None
         if os.path.exists(pruning_info_path):
             with open(pruning_info_path, 'r', encoding='utf-8') as f:
                 pruning_info = yaml.safe_load(f) or {}
@@ -1130,6 +1222,7 @@ def main():
                 baseline_cfg.pruning_flops_target = pruning_info['pruning_flops_target']
             if 'pruning_params_target' in pruning_info:
                 baseline_cfg.pruning_params_target = pruning_info['pruning_params_target']
+            loaded_pruning_history = pruning_info.get('pruning_history')
             if 'pruning_sparsity' in pruning_info or 'optimal_sparsity' in pruning_info:
                 logging.info(f"'{pruning_info_path}'에서 Pruning 희소도({baseline_cfg.pruning_sparsity:.4f})를 불러왔습니다.")
 
@@ -1142,7 +1235,11 @@ def main():
         if use_pruning_in_inference:
             logging.info("추론 모드: 훈련된 모델의 Pruning 구조를 재현합니다.")
             criterion = nn.CrossEntropyLoss()
-            model = run_torch_pruning(model, baseline_cfg, model_cfg, device, train_loader=train_loader, criterion=criterion)
+            model = run_torch_pruning(
+                model, baseline_cfg, model_cfg, device,
+                train_loader=train_loader, criterion=criterion,
+                pruning_history=loaded_pruning_history
+            )
             log_model_parameters(model)
 
         inference(run_cfg, model_cfg, model, test_loader, device, run_dir_path, timestamp, mode_name="Inference", class_names=class_names, output_dir=log_dir_path)

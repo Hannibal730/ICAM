@@ -227,7 +227,7 @@ def create_loss_for_pruning(train_cfg, pos_weight, device):
     label_smoothing = getattr(train_cfg, 'label_smoothing', 0.0)
     return nn.CrossEntropyLoss(label_smoothing=label_smoothing)
 
-def save_pruning_info(run_dir_path, baseline_cfg):
+def save_pruning_info(run_dir_path, baseline_cfg, pruning_history=None):
     pruning_method = 'unknown'
     for method_name, cfg_name in (
         ('l1', 'use_l1_pruning'),
@@ -263,6 +263,8 @@ def save_pruning_info(run_dir_path, baseline_cfg):
         'pruning_flops_target': pruning_flops_target,
         'pruning_params_target': pruning_params_target,
     }
+    if pruning_history is not None:
+        pruning_info['pruning_history'] = pruning_history
     pruning_info_path = os.path.join(run_dir_path, 'pruning_info.yaml')
     with open(pruning_info_path, 'w', encoding='utf-8') as f:
         yaml.dump(pruning_info, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
@@ -276,6 +278,17 @@ def merge_namespace_with_defaults(primary_cfg, default_cfg):
     for key, value in vars(primary_cfg).items():
         setattr(merged, key, value)
     return merged
+
+def reset_runtime_attention_caches(model):
+    """가중치 로드 후 attention 관련 캐시를 초기화합니다."""
+    reset_count = 0
+    for module in model.modules():
+        for attr_name in ('cached_k_pos', 'cached_k_pos_init'):
+            if hasattr(module, attr_name):
+                if getattr(module, attr_name) is not None:
+                    setattr(module, attr_name, None)
+                    reset_count += 1
+    return reset_count
 
 # =============================================================================
 # 2. 훈련 및 평가 함수
@@ -488,6 +501,9 @@ def inference(run_cfg, model_cfg, model, data_loader, device, run_dir_path, time
 
     try:
         model.load_state_dict(torch.load(model_path, map_location=device, weights_only=True))
+        reset_count = reset_runtime_attention_caches(model)
+        if reset_count > 0:
+            logging.info(f"가중치 로드 후 attention 캐시 {reset_count}개를 초기화했습니다.")
         logging.info(f"'{model_path}' 가중치 로드 완료.") # PyTorch 로드 시점에는 별도 메모리 측정을 하지 않으므로 flush_memory 생략 가능하나, 필요시 추가
     except Exception as e:
         logging.error(f"모델 가중치 로딩 중 오류 발생: {e}")
@@ -767,18 +783,19 @@ def main():
                     )
                     baseline_cfg.pruning_sparsity = optimal_sparsity
 
-                # Pruned pth와 동일 경로(run_dir_path)에 재현용 pruning_info.yaml을 항상 저장
-                save_pruning_info(run_dir_path, baseline_cfg)
-
-                model = run_torch_pruning(
+                model, pruning_history = run_torch_pruning(
                     model,
                     baseline_cfg,
                     model_cfg,
                     device,
                     train_loader=train_loader,
                     criterion=pruning_criterion,
+                    return_pruning_history=True,
                     **pruning_run_kwargs
                 )
+
+                # Pruned pth와 동일 경로(run_dir_path)에 재현용 pruning_info.yaml을 항상 저장
+                save_pruning_info(run_dir_path, baseline_cfg, pruning_history=pruning_history)
                 log_hybrid_model_parameters(model)
 
                 finetune_train_loader = train_loader
@@ -817,6 +834,7 @@ def main():
 
             if use_pruning:
                 pruning_info_path = os.path.join(run_dir_path, 'pruning_info.yaml')
+                loaded_pruning_history = None
                 if os.path.exists(pruning_info_path):
                     with open(pruning_info_path, 'r', encoding='utf-8') as f:
                         pruning_info = yaml.safe_load(f) or {}
@@ -828,6 +846,7 @@ def main():
                         baseline_cfg.pruning_flops_target = pruning_info['pruning_flops_target']
                     if 'pruning_params_target' in pruning_info:
                         baseline_cfg.pruning_params_target = pruning_info['pruning_params_target']
+                    loaded_pruning_history = pruning_info.get('pruning_history')
 
                 final_ignored_layers = get_icam_pruning_ignored_layers(final_model, baseline_cfg)
                 final_pruning_criterion = create_loss_for_pruning(train_cfg, pos_weight, device)
@@ -838,10 +857,12 @@ def main():
                     device,
                     train_loader=train_loader,
                     criterion=final_pruning_criterion,
-                    extra_ignored_layers=final_ignored_layers
+                    extra_ignored_layers=final_ignored_layers,
+                    pruning_history=loaded_pruning_history
                 )
 
             final_model.load_state_dict(torch.load(best_model_path, map_location=device))
+            reset_runtime_attention_caches(final_model)
             model = final_model
         else:
             logging.warning("최고 성능 모델 파일을 찾을 수 없습니다. 마지막 에포크 모델로 평가를 진행합니다.")
@@ -863,6 +884,7 @@ def main():
         use_pruning_in_inference = is_pruning_enabled(baseline_cfg)
         if use_pruning_in_inference:
             pruning_info_path = os.path.join(run_dir_path, 'pruning_info.yaml')
+            loaded_pruning_history = None
             if os.path.exists(pruning_info_path):
                 with open(pruning_info_path, 'r', encoding='utf-8') as f:
                     pruning_info = yaml.safe_load(f) or {}
@@ -874,6 +896,7 @@ def main():
                     baseline_cfg.pruning_flops_target = pruning_info['pruning_flops_target']
                 if 'pruning_params_target' in pruning_info:
                     baseline_cfg.pruning_params_target = pruning_info['pruning_params_target']
+                loaded_pruning_history = pruning_info.get('pruning_history')
                 if 'pruning_sparsity' in pruning_info or 'optimal_sparsity' in pruning_info:
                     logging.info(
                         f"'{pruning_info_path}'에서 Pruning 희소도({baseline_cfg.pruning_sparsity:.4f})를 불러왔습니다."
@@ -888,7 +911,8 @@ def main():
                 device,
                 train_loader=train_loader,
                 criterion=inference_pruning_criterion,
-                extra_ignored_layers=inference_ignored_layers
+                extra_ignored_layers=inference_ignored_layers,
+                pruning_history=loaded_pruning_history
             )
             log_hybrid_model_parameters(model)
 

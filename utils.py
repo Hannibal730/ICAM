@@ -8,6 +8,22 @@ try:
 except ImportError:
     profile = None
 
+def _clear_runtime_tensor_cache(model):
+    """
+    forward 중 생성되는 임시 텐서 캐시를 제거합니다.
+    (예: attention map, positional projection cache)
+    """
+    cache_attr_names = ("attn", "cached_k_pos", "cached_k_pos_init")
+    cleared = 0
+    for module in model.modules():
+        for attr_name in cache_attr_names:
+            if hasattr(module, attr_name):
+                attr_val = getattr(module, attr_name)
+                if torch.is_tensor(attr_val):
+                    setattr(module, attr_name, None)
+                    cleared += 1
+    return cleared
+
 def measure_model_complexity(model, img_size, device):
     """
     thop 라이브러리를 사용하여 모델의 FLOPs, MACs, Parameters를 측정하고 로깅합니다.
@@ -18,6 +34,11 @@ def measure_model_complexity(model, img_size, device):
             dummy_input = torch.randn(1, 3, img_size, img_size).to(device)
             if device.type == 'cpu':
                 dummy_input = dummy_input.to(memory_format=torch.channels_last)
+
+            # attention 시각화/캐시에서 남은 non-leaf 텐서가 deepcopy를 깨뜨리는 문제 방지
+            cleared = _clear_runtime_tensor_cache(model)
+            if cleared > 0:
+                logging.info(f"FLOPs 측정 전 런타임 텐서 캐시 {cleared}개를 정리했습니다.")
             
             # thop는 모델에 hook을 등록하므로, 원본 모델 오염 방지를 위해 복사본 사용
             model_for_profiling = copy.deepcopy(model)

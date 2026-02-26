@@ -9,7 +9,7 @@ run:
 #   pth_inference_dir: './pretrained/proposed_model/original'   # 추론 모드에서 사용할 .pth 모델이 포함된 디렉토리의 경로
 #   pth_inference_dir: './pretrained/baselines/original/mobile_vit_xxs'   # 추론 모드에서 사용할 .pth 모델이 포함된 디렉토리의 경로
 #   pth_inference_dir: './log/Sewer-ML/original/main_20260113_041514'   # 추론 모드에서 사용할 .pth 모델이 포함된 디렉토리의 경로  
-#   pth_inference_dir: './log/Sewer-ML/original/baseline_efficientnet_b0_20260109_145449'   # 추론 모드에서 사용할 .pth 모델이 포함된 디렉토리의 경로  
+  # pth_inference_dir: '/home/tai/workspace/choi/ICAM/log/Sewer_TAPNEW/main_20260227_012603_grid7_patch7_layer6_head4'   # 추론 모드에서 사용할 .pth 모델이 포함된 디렉토리의 경로  
   pth_best_name: 'best_model.pth' # .pth 모델의 파일 이름 또는 추론 시 불러올 모델의 파일 이름.
   
   # 정답 레이블이 없는 이미지에 대하여 추론만 수행하게 하는 옵션
@@ -21,8 +21,8 @@ run:
   
   # --- 데이터셋 설정 ---
   dataset:
-    name: 'Sewer_TAPNEW' # 사용할 데이터셋 이름 (로깅 및 폴더명 생성에 사용) Sewer_TAPNEW, Sewer_TAP, Sewer_ML
-    type: 'image_folder' # type: 'csv' (이미지 폴더 + CSV 라벨) 또는 'image_folder' (클래스별 폴더 구조)
+    name: 'Sewer_ML' # 사용할 데이터셋 이름 (로깅 및 폴더명 생성에 사용) Sewer_TAPNEW, Sewer_TAP, Sewer_ML
+    type: 'csv' # type: 'csv' (이미지 폴더 + CSV 라벨) 또는 'image_folder' (클래스별 폴더 구조)
     train_split_ratio: 0.8 # 'image_folder' 타입일 때 사용할 훈련 데이터 비율 (나머지는 테스트/검증 데이터가 됨)
 
     # 데이터셋 경로 설정
@@ -77,8 +77,8 @@ model:
 # 3. 훈련 하이퍼파라미터 (main.py 전용)
 # =============================================================================
 training_main:
-  epochs: 10                 
-  batch_size: 16                
+  epochs: 90                 
+  batch_size: 256                
   pre_trained: false             # true: ImageNet 사전 훈련 가중치 사용, false: 무작위 초기화 가중치 사용
   optimizer: 'adamw'            # 사용할 옵티마이저. 옵션: 'adamw', 'sgd', 'nadam', 'radam', 'rmsprop'
   lr: 0.001                     # 옵티마이저의 학습률.
@@ -94,7 +94,7 @@ training_main:
   scheduler: 'cosineannealinglr' # 옵션: 'multisteplr', 'cosineannealinglr', 'none'
   scheduler_params:
     # CosineAnnealingLR: T_max (주기, 보통 epochs), eta_min (최소 학습률)
-    T_max: 10
+    T_max: 90
     eta_min: 0.0001
   best_model_criterion: 'val_loss'  # 최고 모델 저장 기준. 옵션: 'val_loss', 'F1_average', 'F1_Normal', 'F1_Defect'.
 
@@ -142,14 +142,14 @@ finetuning_pruned:
   best_model_criterion: 'val_loss'
 
   # --- 경량화 옵션 (main.py, baseline.py 공용) ---
-  use_l1_pruning: True       # L1 Norm Pruning 적용 여부
+  # use_l1_pruning: True       # L1 Norm Pruning 적용 여부
 #   use_fpgm_pruning: True     # FPGM Pruning (torch-pruning 라이브러리 사용) 적용 여부
-#   use_wanda_pruning: True     # Wanda (Pruning by Weights and Activations, ICLR 2024) # 중요도를 $|Weight| \times ||Input Norm||$으로 정의합니다. 즉, 가중치가 작더라도 입력 신호($X$)가 강하게 들어오는 뉴런은 중요하다고 판단합니다.
-#   num_wanda_calib_samples: 1353 # Wanda Pruning 시 Calibration에 사용할 샘플 수. Sewer-TAPNEW: 1353, Sewer-ML: 4096
+  # use_wanda_pruning: True     # Wanda (Pruning by Weights and Activations, ICLR 2024) # 중요도를 $|Weight| \times ||Input Norm||$으로 정의합니다. 즉, 가중치가 작더라도 입력 신호($X$)가 강하게 들어오는 뉴런은 중요하다고 판단합니다.
+  # num_wanda_calib_samples: 1353 # Wanda Pruning 시 Calibration에 사용할 샘플 수. Sewer-TAPNEW: 1353, Sewer-ML: 4096
 # # Sewer-TAPNEW: 1353,
 # # Sewer-ML: 4096
 
-  pruning_sparsity: 0.5     # 수동으로 설정할 가지치기 희소도 (0.0 ~ 1.0). 예: 0.5는 50% 제거를 의미. 아래 target_flops가 0보다 클 경우 이 값은 무시됩니다.
+  # pruning_sparsity: 0.3     # 수동으로 설정할 가지치기 희소도 (0.0 ~ 1.0). 예: 0.5는 50% 제거를 의미. 아래 target_flops가 0보다 클 경우 이 값은 무시됩니다.
 #   pruning_flops_target: 0.1829   # 목표 FLOPs(GFLOPs). 0보다 큰 값으로 설정 시, 이 목표에 가장 가까운 pruning_sparsity를 자동으로 계산합니다.
 #   pruning_params_target: 0.031371     # 목표 파라미터 수(단위: M). 0보다 큰 값으로 설정 시, 이 목표에 가장 가까운 pruning_sparsity를 자동으로 계산합니다.
 
