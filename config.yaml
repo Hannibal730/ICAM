@@ -8,7 +8,7 @@ run:
   
 #   pth_inference_dir: './pretrained/proposed_model/original'   # 추론 모드에서 사용할 .pth 모델이 포함된 디렉토리의 경로
 #   pth_inference_dir: './pretrained/baselines/original/mobile_vit_xxs'   # 추론 모드에서 사용할 .pth 모델이 포함된 디렉토리의 경로
-  # pth_inference_dir: './log/Sewer-ML/original/main_20260113_041514'   # 추론 모드에서 사용할 .pth 모델이 포함된 디렉토리의 경로  
+#   pth_inference_dir: './log/Sewer-ML/original/main_20260113_041514'   # 추론 모드에서 사용할 .pth 모델이 포함된 디렉토리의 경로  
 #   pth_inference_dir: './log/Sewer-ML/original/baseline_efficientnet_b0_20260109_145449'   # 추론 모드에서 사용할 .pth 모델이 포함된 디렉토리의 경로  
   pth_best_name: 'best_model.pth' # .pth 모델의 파일 이름 또는 추론 시 불러올 모델의 파일 이름.
   
@@ -68,8 +68,8 @@ model:
   dropout: 0.1               # 모델 내부에 적용될 드롭아웃 비율 (분류기, FFN, 어텐션 출력에 적용).
   positional_encoding: true  # 이미지 패치 시퀀스 (인코더 출력)에 위치 인코딩 추가 여부. False로 설정하면 위치 정보를 사용하지 않습니다.
   drop_path_ratio: 0.2        # 잔차 연결(Residual Connection)의 경로를 무작위로 끊어주는 정규화 기법 (Stochastic Depth)
-  visualize_attention: false       # 추론 시 어텐션 맵을 저장할지 여부. True로 설정하면 시각화에 사용할 수 있습니다.
-  num_plot_attention: 500     # 어텐션 맵을 시각화하여 저장할 최대 샘플 수.
+  visualize_attention: true       # 추론 시 어텐션 맵을 저장할지 여부. True로 설정하면 시각화에 사용할 수 있습니다.
+  num_plot_attention: 1500     # 어텐션 맵을 시각화하여 저장할 최대 샘플 수.
 
 
 
