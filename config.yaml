@@ -53,7 +53,7 @@ model:
   # --- 이미지 및 인코더 설정 ---
   img_size: 224                # 모델에 입력하기 전 이미지의 리사이즈 크기 (정사각형).
   num_patches_per_side: 7    # 인코더에서 생성할 패치 그리드의 한 변 패치 수(가로/세로 동일). 예: 7 -> 7x7=49개 패치.
-  num_decoder_patches: 7     # 디코더에서 사용할 학습 가능한 쿼리(패치)의 수. 모델의 표현력을 조절합니다.
+  num_decoder_patches: 1     # 디코더에서 사용할 학습 가능한 쿼리(패치)의 수. 모델의 표현력을 조절합니다.
   num_decoder_layers: 6      # 모델 내부의 디코더 레이어 수.
   num_heads: 4               # 멀티헤드 어텐션에서 사용할 헤드의 수. `emb_dim`은 `num_heads`로 나누어 떨어져야 합니다.
 
@@ -77,7 +77,7 @@ model:
 # 3. 훈련 하이퍼파라미터 (main.py 전용)
 # =============================================================================
 training_main:
-  epochs: 90                 
+  epochs: 10                 
   batch_size: 256                
   pre_trained: false             # true: ImageNet 사전 훈련 가중치 사용, false: 무작위 초기화 가중치 사용
   optimizer: 'adamw'            # 사용할 옵티마이저. 옵션: 'adamw', 'sgd', 'nadam', 'radam', 'rmsprop'
@@ -85,16 +85,12 @@ training_main:
   weight_decay: 0.0001             # AdamW 옵티마이저의 가중치 감쇠(Weight Decay) 값.
   loss_function: 'CrossEntropyLoss' # 사용할 손실 함수. 옵션: 'CrossEntropyLoss', 'BCEWithLogitsLoss'
   label_smoothing: 0.1            # 레이블 스무딩(Label Smoothing) 값. 0.0은 비활성화. (과적합 방지, 모델 일반화 성능 향상)
-  
 
-# --- 'BCEWithLogitsLoss' 사용 시 양성 클래스 가중치 ---
-  # bce_pos_weight: 'auto'        # 'auto'로 설정 시 자동 계산, 특정 값(예: 9.0)으로 수동 설정 가능. (num_labels=2여도 코드가 자동으로 [B, 1]로 변환하여 처리)
-
-  # 사용할 학습률 스케줄러를 설정합니다.
+    # bce_pos_weight: 'auto'        # 'auto'로 설정 시 자동 계산, 특정 값(예: 9.0)으로 수동 설정 가능. (num_labels=2여도 코드가 자동으로 [B, 1]로 변환하여 처리)
   scheduler: 'cosineannealinglr' # 옵션: 'multisteplr', 'cosineannealinglr', 'none'
   scheduler_params:
     # CosineAnnealingLR: T_max (주기, 보통 epochs), eta_min (최소 학습률)
-    T_max: 90
+    T_max: 10
     eta_min: 0.0001
   best_model_criterion: 'val_loss'  # 최고 모델 저장 기준. 옵션: 'val_loss', 'F1_average', 'F1_Normal', 'F1_Defect'.
 
@@ -128,7 +124,7 @@ training_baseline:
 # =============================================================================
 finetuning_pruned:
   epochs: 80                     # Pruning 후 성능 복구를 위해 추가 훈련할 에포크 수.
-  batch_size: 16                # 미세 조정 시 사용할 배치 크기.
+  batch_size: 256                # 미세 조정 시 사용할 배치 크기.
   optimizer: 'adamw'             # 사용할 옵티마이저.
   lr: 0.001                     # 미세 조정 시에는 사전 훈련보다 낮은 학습률을 사용하는 것이 일반적입니다.
   weight_decay: 0.0001           # 가중치 감쇠 값.
@@ -144,13 +140,13 @@ finetuning_pruned:
   # --- 경량화 옵션 (main.py, baseline.py 공용) ---
   # use_l1_pruning: True       # L1 Norm Pruning 적용 여부
 #   use_fpgm_pruning: True     # FPGM Pruning (torch-pruning 라이브러리 사용) 적용 여부
-  # use_wanda_pruning: True     # Wanda (Pruning by Weights and Activations, ICLR 2024) # 중요도를 $|Weight| \times ||Input Norm||$으로 정의합니다. 즉, 가중치가 작더라도 입력 신호($X$)가 강하게 들어오는 뉴런은 중요하다고 판단합니다.
-  # num_wanda_calib_samples: 1353 # Wanda Pruning 시 Calibration에 사용할 샘플 수. Sewer-TAPNEW: 1353, Sewer-ML: 4096
+  use_wanda_pruning: True     # Wanda (Pruning by Weights and Activations, ICLR 2024) # 중요도를 $|Weight| \times ||Input Norm||$으로 정의합니다. 즉, 가중치가 작더라도 입력 신호($X$)가 강하게 들어오는 뉴런은 중요하다고 판단합니다.
+  num_wanda_calib_samples: 4096 # Wanda Pruning 시 Calibration에 사용할 샘플 수. Sewer-TAPNEW: 1353, Sewer-ML: 4096
 # # Sewer-TAPNEW: 1353,
 # # Sewer-ML: 4096
 
-  # pruning_sparsity: 0.3     # 수동으로 설정할 가지치기 희소도 (0.0 ~ 1.0). 예: 0.5는 50% 제거를 의미. 아래 target_flops가 0보다 클 경우 이 값은 무시됩니다.
-#   pruning_flops_target: 0.1829   # 목표 FLOPs(GFLOPs). 0보다 큰 값으로 설정 시, 이 목표에 가장 가까운 pruning_sparsity를 자동으로 계산합니다.
+  pruning_sparsity: 0.3     # 수동으로 설정할 가지치기 희소도 (0.0 ~ 1.0). 예: 0.5는 50% 제거를 의미. 아래 target_flops가 0보다 클 경우 이 값은 무시됩니다.
+#   pruning_flops_target: 0.2271   # 목표 FLOPs(GFLOPs). 0보다 큰 값으로 설정 시, 이 목표에 가장 가까운 pruning_sparsity를 자동으로 계산합니다.
 #   pruning_params_target: 0.031371     # 목표 파라미터 수(단위: M). 0보다 큰 값으로 설정 시, 이 목표에 가장 가까운 pruning_sparsity를 자동으로 계산합니다.
 
   # --- ICAM 차원 안정성 관련 Pruning 제외 옵션 ---

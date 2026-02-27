@@ -1,0 +1,121 @@
+2026-02-28 08:14:19,599 - INFO - 로그 파일이 'log/Sewer_ML/main_20260228_081419_grid7_patch1_layer6_head4/log_20260228_081419.log'에 저장됩니다.
+2026-02-28 08:14:19,599 - INFO - 전역 랜덤 시드를 42로 고정합니다.
+2026-02-28 08:14:19,601 - INFO - ==================================================
+2026-02-28 08:14:19,601 - INFO - config.yaml:
+2026-02-28 08:14:19,601 - INFO - 
+run:
+  global_seed: 42
+  cuda: true
+  mode: train
+  pth_best_name: best_model.pth
+  only_inference: false
+  show_log: true
+  dataset:
+    name: Sewer_ML
+    type: csv
+    train_split_ratio: 0.8
+    paths:
+      train_img_dir: /home/tai/workspace/ssd1/data/Sewer/Sewer-ML/train
+      valid_img_dir: /home/tai/workspace/ssd1/data/Sewer/Sewer-ML/valid
+      test_img_dir: /home/tai/workspace/ssd1/data/Sewer/Sewer-ML/valid
+      train_csv: /home/tai/workspace/ssd1/data/Sewer/Sewer-ML/SewerML_Train.csv
+      valid_csv: /home/tai/workspace/ssd1/data/Sewer/Sewer-ML/SewerML_Val.csv
+      test_csv: /home/tai/workspace/ssd1/data/Sewer/Sewer-ML/SewerML_Val.csv
+      img_folder: /home/tai/workspace/ssd1/data/Sewer/Sewer-TAPNEW
+  random_sampling_ratio:
+    train: 1.0
+    valid: 1.0
+    test: 1.0
+  num_workers: 16
+model:
+  img_size: 224
+  num_patches_per_side: 7
+  num_decoder_patches: 1
+  num_decoder_layers: 6
+  num_heads: 4
+  cnn_feature_extractor:
+    name: custom32
+  encoder_dim: 32
+  emb_dim: 32
+  adaptive_initial_query: false
+  decoder_ff_ratio: 2
+  dropout: 0.1
+  positional_encoding: true
+  drop_path_ratio: 0.2
+  visualize_attention: true
+  num_plot_attention: 1500
+training_main:
+  epochs: 90
+  batch_size: 256
+  pre_trained: false
+  optimizer: adamw
+  lr: 0.001
+  weight_decay: 0.0001
+  loss_function: CrossEntropyLoss
+  label_smoothing: 0.1
+  scheduler: cosineannealinglr
+  scheduler_params:
+    T_max: 90
+    eta_min: 0.0001
+  best_model_criterion: val_loss
+training_baseline:
+  model_name: mobilenet_v4_s
+  epochs: 10
+  batch_size: 16
+  pre_trained: false
+  optimizer: adamw
+  lr: 0.001
+  weight_decay: 0.0001
+  loss_function: CrossEntropyLoss
+  label_smoothing: 0.1
+  scheduler: cosineannealinglr
+  scheduler_params:
+    T_max: 10
+    eta_min: 0.0001
+  best_model_criterion: val_loss
+finetuning_pruned:
+  epochs: 80
+  batch_size: 16
+  optimizer: adamw
+  lr: 0.001
+  weight_decay: 0.0001
+  loss_function: CrossEntropyLoss
+  label_smoothing: 0.1
+  scheduler: cosineannealinglr
+  scheduler_params:
+    T_max: 80
+    eta_min: 0.0001
+  best_model_criterion: val_loss
+  exclude_attention_qkv_pruning: true
+  exclude_embedding_bridge_pruning: true
+  exclude_learnable_queries_pruning: true
+
+2026-02-28 08:14:19,601 - INFO - ==================================================
+2026-02-28 08:14:19,737 - INFO - CUDA 사용 가능. GPU 사용을 시작합니다. (Device: NVIDIA GeForce RTX 5090)
+2026-02-28 08:14:19,737 - INFO - 'Sewer_ML' 데이터 로드를 시작합니다 (Type: csv).
+2026-02-28 08:14:20,302 - INFO - 데이터셋 클래스: ['Normal', 'Defect'] (총 2개)
+2026-02-28 08:14:20,302 - INFO - 훈련 데이터: 1040129개, 검증 데이터: 130046개, 테스트 데이터: 130046개
+2026-02-28 08:14:20,302 - INFO - 이미지 크기: 224, 그리드 크기: 7x7 -> 인코더 패치 수: 49개
+2026-02-28 08:14:20,364 - INFO - ==================================================
+2026-02-28 08:14:20,364 - INFO - 모델 파라미터 수: 76,162 개
+2026-02-28 08:14:20,365 - INFO -   - Encoder (Encoder):         22,656 개
+2026-02-28 08:14:20,365 - INFO -     - conv_front (CNN Backbone):        22,592 개
+2026-02-28 08:14:20,365 - INFO -     - 1x1_conv (Channel Proj):          0 개
+2026-02-28 08:14:20,365 - INFO -     - norm (LayerNorm):                 64 개
+2026-02-28 08:14:20,365 - INFO -   - Decoder (Cross-Attention-based):    51,200 개
+2026-02-28 08:14:20,365 - INFO -     - Embedding Layer (feat_to_emb):   1,056 개
+2026-02-28 08:14:20,365 - INFO -     - Init Key Proj (W_K_init):         0 개
+2026-02-28 08:14:20,365 - INFO -     - Init Value Proj (W_V_init):       0 개
+2026-02-28 08:14:20,365 - INFO -     - Learnable Queries:                32 개
+2026-02-28 08:14:20,365 - INFO -     - Decoder Layers:                   50,112 개
+2026-02-28 08:14:20,365 - INFO -   - Classifier (Projection MLP):        2,306 개
+2026-02-28 08:14:20,365 - INFO - ================================================================================
+2026-02-28 08:14:20,365 - INFO - 단계 1/2: training_main 기반 사전 훈련(Pre-training)을 시작합니다.
+2026-02-28 08:14:20,365 - INFO - ================================================================================
+2026-02-28 08:14:20,365 - INFO - 옵티마이저: AdamW (lr=0.001, weight_decay=0.0001)
+2026-02-28 08:14:20,365 - INFO - 스케줄러: CosineAnnealingLR (T_max=90, eta_min=0.0001)
+2026-02-28 08:14:20,365 - INFO - ==================================================
+2026-02-28 08:14:20,365 - INFO - train 모드를 시작합니다.
+2026-02-28 08:14:20,365 - INFO - 손실 함수: CrossEntropyLoss (label_smoothing: 0.1)
+2026-02-28 08:14:20,365 - INFO - --------------------------------------------------
+2026-02-28 08:14:20,365 - INFO - [LR]    [1/90] | Learning Rate: 0.001000
