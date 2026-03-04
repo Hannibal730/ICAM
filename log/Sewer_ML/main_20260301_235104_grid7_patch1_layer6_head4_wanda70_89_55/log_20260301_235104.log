@@ -1,0 +1,762 @@
+2026-03-01 23:51:04,405 - INFO - 로그 파일이 'log/Sewer_ML/main_20260301_235104_grid7_patch1_layer6_head4/log_20260301_235104.log'에 저장됩니다.
+2026-03-01 23:51:04,406 - INFO - 전역 랜덤 시드를 42로 고정합니다.
+2026-03-01 23:51:04,407 - INFO - ==================================================
+2026-03-01 23:51:04,407 - INFO - config.yaml:
+2026-03-01 23:51:04,407 - INFO - 
+run:
+  global_seed: 42
+  cuda: true
+  mode: train
+  pth_best_name: best_model.pth
+  only_inference: false
+  show_log: true
+  dataset:
+    name: Sewer_ML
+    type: csv
+    train_split_ratio: 0.8
+    paths:
+      train_img_dir: /home/tai/workspace/ssd1/data/Sewer/Sewer-ML/train
+      valid_img_dir: /home/tai/workspace/ssd1/data/Sewer/Sewer-ML/valid
+      test_img_dir: /home/tai/workspace/ssd1/data/Sewer/Sewer-ML/valid
+      train_csv: /home/tai/workspace/ssd1/data/Sewer/Sewer-ML/SewerML_Train.csv
+      valid_csv: /home/tai/workspace/ssd1/data/Sewer/Sewer-ML/SewerML_Val.csv
+      test_csv: /home/tai/workspace/ssd1/data/Sewer/Sewer-ML/SewerML_Val.csv
+      img_folder: /home/tai/workspace/ssd1/data/Sewer/Sewer-TAPNEW
+  random_sampling_ratio:
+    train: 1.0
+    valid: 1.0
+    test: 1.0
+  num_workers: 16
+model:
+  img_size: 224
+  num_patches_per_side: 7
+  num_decoder_patches: 1
+  num_decoder_layers: 6
+  num_heads: 4
+  cnn_feature_extractor:
+    name: custom32
+  encoder_dim: 32
+  emb_dim: 32
+  adaptive_initial_query: true
+  decoder_ff_ratio: 2
+  dropout: 0.1
+  positional_encoding: true
+  drop_path_ratio: 0.2
+  visualize_attention: true
+  num_plot_attention: 1500
+training_main:
+  epochs: 10
+  batch_size: 256
+  pre_trained: false
+  optimizer: adamw
+  lr: 0.001
+  weight_decay: 0.0001
+  loss_function: CrossEntropyLoss
+  label_smoothing: 0.1
+  scheduler: cosineannealinglr
+  scheduler_params:
+    T_max: 10
+    eta_min: 0.0001
+  best_model_criterion: val_loss
+training_baseline:
+  model_name: mobilenet_v4_s
+  epochs: 10
+  batch_size: 256
+  pre_trained: false
+  optimizer: adamw
+  lr: 0.001
+  weight_decay: 0.0001
+  loss_function: CrossEntropyLoss
+  label_smoothing: 0.1
+  scheduler: cosineannealinglr
+  scheduler_params:
+    T_max: 10
+    eta_min: 0.0001
+  best_model_criterion: val_loss
+finetuning_pruned:
+  epochs: 80
+  batch_size: 256
+  optimizer: adamw
+  lr: 0.001
+  weight_decay: 0.0001
+  loss_function: CrossEntropyLoss
+  label_smoothing: 0.1
+  scheduler: cosineannealinglr
+  scheduler_params:
+    T_max: 80
+    eta_min: 0.0001
+  best_model_criterion: val_loss
+  use_wanda_pruning: true
+  num_wanda_calib_samples: 4096
+  pruning_sparsity: 0.7
+  exclude_attention_qkv_pruning: true
+  exclude_embedding_bridge_pruning: true
+  exclude_learnable_queries_pruning: true
+
+2026-03-01 23:51:04,407 - INFO - ==================================================
+2026-03-01 23:51:04,542 - INFO - CUDA 사용 가능. GPU 사용을 시작합니다. (Device: NVIDIA GeForce RTX 5090)
+2026-03-01 23:51:04,542 - INFO - 'Sewer_ML' 데이터 로드를 시작합니다 (Type: csv).
+2026-03-01 23:51:05,105 - INFO - 데이터셋 클래스: ['Normal', 'Defect'] (총 2개)
+2026-03-01 23:51:05,105 - INFO - 훈련 데이터: 1040129개, 검증 데이터: 130046개, 테스트 데이터: 130046개
+2026-03-01 23:51:05,105 - INFO - 이미지 크기: 224, 그리드 크기: 7x7 -> 인코더 패치 수: 49개
+2026-03-01 23:51:05,171 - INFO - ==================================================
+2026-03-01 23:51:05,171 - INFO - 모델 파라미터 수: 78,274 개
+2026-03-01 23:51:05,171 - INFO -   - Encoder (Encoder):         22,656 개
+2026-03-01 23:51:05,171 - INFO -     - conv_front (CNN Backbone):        22,592 개
+2026-03-01 23:51:05,171 - INFO -     - 1x1_conv (Channel Proj):          0 개
+2026-03-01 23:51:05,171 - INFO -     - norm (LayerNorm):                 64 개
+2026-03-01 23:51:05,171 - INFO -   - Decoder (Cross-Attention-based):    53,312 개
+2026-03-01 23:51:05,171 - INFO -     - Embedding Layer (feat_to_emb):   1,056 개
+2026-03-01 23:51:05,171 - INFO -     - Init Key Proj (W_K_init):         1,056 개
+2026-03-01 23:51:05,171 - INFO -     - Init Value Proj (W_V_init):       1,056 개
+2026-03-01 23:51:05,171 - INFO -     - Learnable Queries:                32 개
+2026-03-01 23:51:05,171 - INFO -     - Decoder Layers:                   50,112 개
+2026-03-01 23:51:05,171 - INFO -   - Classifier (Projection MLP):        2,306 개
+2026-03-01 23:51:05,171 - INFO - ================================================================================
+2026-03-01 23:51:05,172 - INFO - 단계 1/2: training_main 기반 사전 훈련(Pre-training)을 시작합니다.
+2026-03-01 23:51:05,172 - INFO - ================================================================================
+2026-03-01 23:51:05,172 - INFO - 옵티마이저: AdamW (lr=0.001, weight_decay=0.0001)
+2026-03-01 23:51:05,172 - INFO - 스케줄러: CosineAnnealingLR (T_max=10, eta_min=0.0001)
+2026-03-01 23:51:05,172 - INFO - ==================================================
+2026-03-01 23:51:05,172 - INFO - train 모드를 시작합니다.
+2026-03-01 23:51:05,172 - INFO - 손실 함수: CrossEntropyLoss (label_smoothing: 0.1)
+2026-03-01 23:51:05,172 - INFO - --------------------------------------------------
+2026-03-01 23:51:05,172 - INFO - [LR]    [1/10] | Learning Rate: 0.001000
+2026-03-01 23:58:25,968 - INFO - [Train] [1/10] | Loss: 0.4482 | Train Acc: 83.81%
+2026-03-01 23:59:05,101 - INFO - [Valid] [1/10] | Loss: 0.4100 | Val Acc: 86.44%
+2026-03-01 23:59:05,231 - INFO - [Metrics for 'Normal'] | Precision: 0.8842 | Recall: 0.8553 | F1: 0.8695
+2026-03-01 23:59:05,231 - INFO - [Metrics for 'Defect'] | Precision: 0.8438 | Recall: 0.8747 | F1: 0.8590
+2026-03-01 23:59:05,237 - INFO - [Best Model Saved] (val loss: 0.4100) -> 'log/Sewer_ML/main_20260301_235104_grid7_patch1_layer6_head4/best_model.pth'
+2026-03-01 23:59:05,237 - INFO - --------------------------------------------------
+2026-03-01 23:59:05,237 - INFO - [LR]    [2/10] | Learning Rate: 0.000978
+2026-03-02 00:06:27,010 - INFO - [Train] [2/10] | Loss: 0.4144 | Train Acc: 86.35%
+2026-03-02 00:07:05,953 - INFO - [Valid] [2/10] | Loss: 0.4444 | Val Acc: 84.09%
+2026-03-02 00:07:06,094 - INFO - [Metrics for 'Normal'] | Precision: 0.7918 | Recall: 0.9481 | F1: 0.8629
+2026-03-02 00:07:06,094 - INFO - [Metrics for 'Defect'] | Precision: 0.9255 | Recall: 0.7209 | F1: 0.8105
+2026-03-02 00:07:06,095 - INFO - --------------------------------------------------
+2026-03-02 00:07:06,095 - INFO - [LR]    [3/10] | Learning Rate: 0.000914
+2026-03-02 00:14:29,746 - INFO - [Train] [3/10] | Loss: 0.4022 | Train Acc: 87.20%
+2026-03-02 00:15:09,319 - INFO - [Valid] [3/10] | Loss: 0.3840 | Val Acc: 88.34%
+2026-03-02 00:15:09,492 - INFO - [Metrics for 'Normal'] | Precision: 0.8946 | Recall: 0.8832 | F1: 0.8889
+2026-03-02 00:15:09,492 - INFO - [Metrics for 'Defect'] | Precision: 0.8711 | Recall: 0.8836 | F1: 0.8773
+2026-03-02 00:15:09,500 - INFO - [Best Model Saved] (val loss: 0.3840) -> 'log/Sewer_ML/main_20260301_235104_grid7_patch1_layer6_head4/best_model.pth'
+2026-03-02 00:15:09,500 - INFO - --------------------------------------------------
+2026-03-02 00:15:09,500 - INFO - [LR]    [4/10] | Learning Rate: 0.000815
+2026-03-02 00:22:34,649 - INFO - [Train] [4/10] | Loss: 0.3939 | Train Acc: 87.76%
+2026-03-02 00:23:13,650 - INFO - [Valid] [4/10] | Loss: 0.3795 | Val Acc: 88.63%
+2026-03-02 00:23:13,791 - INFO - [Metrics for 'Normal'] | Precision: 0.8913 | Recall: 0.8936 | F1: 0.8925
+2026-03-02 00:23:13,791 - INFO - [Metrics for 'Defect'] | Precision: 0.8806 | Recall: 0.8780 | F1: 0.8793
+2026-03-02 00:23:13,796 - INFO - [Best Model Saved] (val loss: 0.3795) -> 'log/Sewer_ML/main_20260301_235104_grid7_patch1_layer6_head4/best_model.pth'
+2026-03-02 00:23:13,797 - INFO - --------------------------------------------------
+2026-03-02 00:23:13,797 - INFO - [LR]    [5/10] | Learning Rate: 0.000689
+2026-03-02 00:30:38,264 - INFO - [Train] [5/10] | Loss: 0.3875 | Train Acc: 88.24%
+2026-03-02 00:31:17,989 - INFO - [Valid] [5/10] | Loss: 0.3807 | Val Acc: 88.67%
+2026-03-02 00:31:18,131 - INFO - [Metrics for 'Normal'] | Precision: 0.8769 | Recall: 0.9137 | F1: 0.8949
+2026-03-02 00:31:18,131 - INFO - [Metrics for 'Defect'] | Precision: 0.8987 | Recall: 0.8564 | F1: 0.8771
+2026-03-02 00:31:18,132 - INFO - --------------------------------------------------
+2026-03-02 00:31:18,132 - INFO - [LR]    [6/10] | Learning Rate: 0.000550
+2026-03-02 00:38:44,032 - INFO - [Train] [6/10] | Loss: 0.3821 | Train Acc: 88.59%
+2026-03-02 00:39:23,513 - INFO - [Valid] [6/10] | Loss: 0.3725 | Val Acc: 89.22%
+2026-03-02 00:39:23,681 - INFO - [Metrics for 'Normal'] | Precision: 0.9031 | Recall: 0.8915 | F1: 0.8973
+2026-03-02 00:39:23,681 - INFO - [Metrics for 'Defect'] | Precision: 0.8803 | Recall: 0.8930 | F1: 0.8866
+2026-03-02 00:39:23,689 - INFO - [Best Model Saved] (val loss: 0.3725) -> 'log/Sewer_ML/main_20260301_235104_grid7_patch1_layer6_head4/best_model.pth'
+2026-03-02 00:39:23,689 - INFO - --------------------------------------------------
+2026-03-02 00:39:23,689 - INFO - [LR]    [7/10] | Learning Rate: 0.000411
+2026-03-02 00:46:51,046 - INFO - [Train] [7/10] | Loss: 0.3774 | Train Acc: 88.88%
+2026-03-02 00:47:30,529 - INFO - [Valid] [7/10] | Loss: 0.3676 | Val Acc: 89.37%
+2026-03-02 00:47:30,672 - INFO - [Metrics for 'Normal'] | Precision: 0.8966 | Recall: 0.9028 | F1: 0.8997
+2026-03-02 00:47:30,672 - INFO - [Metrics for 'Defect'] | Precision: 0.8904 | Recall: 0.8835 | F1: 0.8869
+2026-03-02 00:47:30,678 - INFO - [Best Model Saved] (val loss: 0.3676) -> 'log/Sewer_ML/main_20260301_235104_grid7_patch1_layer6_head4/best_model.pth'
+2026-03-02 00:47:30,678 - INFO - --------------------------------------------------
+2026-03-02 00:47:30,678 - INFO - [LR]    [8/10] | Learning Rate: 0.000285
+2026-03-02 00:54:58,036 - INFO - [Train] [8/10] | Loss: 0.3736 | Train Acc: 89.15%
+2026-03-02 00:55:37,459 - INFO - [Valid] [8/10] | Loss: 0.3651 | Val Acc: 89.65%
+2026-03-02 00:55:37,593 - INFO - [Metrics for 'Normal'] | Precision: 0.9159 | Recall: 0.8852 | F1: 0.9003
+2026-03-02 00:55:37,593 - INFO - [Metrics for 'Defect'] | Precision: 0.8762 | Recall: 0.9090 | F1: 0.8923
+2026-03-02 00:55:37,599 - INFO - [Best Model Saved] (val loss: 0.3651) -> 'log/Sewer_ML/main_20260301_235104_grid7_patch1_layer6_head4/best_model.pth'
+2026-03-02 00:55:37,599 - INFO - --------------------------------------------------
+2026-03-02 00:55:37,599 - INFO - [LR]    [9/10] | Learning Rate: 0.000186
+2026-03-02 01:03:05,144 - INFO - [Train] [9/10] | Loss: 0.3703 | Train Acc: 89.38%
+2026-03-02 01:03:44,880 - INFO - [Valid] [9/10] | Loss: 0.3602 | Val Acc: 89.98%
+2026-03-02 01:03:45,022 - INFO - [Metrics for 'Normal'] | Precision: 0.9107 | Recall: 0.8983 | F1: 0.9045
+2026-03-02 01:03:45,022 - INFO - [Metrics for 'Defect'] | Precision: 0.8879 | Recall: 0.9014 | F1: 0.8946
+2026-03-02 01:03:45,028 - INFO - [Best Model Saved] (val loss: 0.3602) -> 'log/Sewer_ML/main_20260301_235104_grid7_patch1_layer6_head4/best_model.pth'
+2026-03-02 01:03:45,028 - INFO - --------------------------------------------------
+2026-03-02 01:03:45,028 - INFO - [LR]    [10/10] | Learning Rate: 0.000122
+2026-03-02 01:11:12,145 - INFO - [Train] [10/10] | Loss: 0.3681 | Train Acc: 89.54%
+2026-03-02 01:11:51,425 - INFO - [Valid] [10/10] | Loss: 0.3596 | Val Acc: 89.98%
+2026-03-02 01:11:51,601 - INFO - [Metrics for 'Normal'] | Precision: 0.9135 | Recall: 0.8951 | F1: 0.9042
+2026-03-02 01:11:51,601 - INFO - [Metrics for 'Defect'] | Precision: 0.8851 | Recall: 0.9052 | F1: 0.8950
+2026-03-02 01:11:51,608 - INFO - [Best Model Saved] (val loss: 0.3596) -> 'log/Sewer_ML/main_20260301_235104_grid7_patch1_layer6_head4/best_model.pth'
+2026-03-02 01:11:51,610 - INFO - ================================================================================
+2026-03-02 01:11:51,610 - INFO - 단계 2/2: Pruning 및 finetuning_pruned 기반 미세 조정을 시작합니다.
+2026-03-02 01:11:51,610 - INFO - ================================================================================
+2026-03-02 01:11:51,622 - INFO - 사전 훈련된 모델 'log/Sewer_ML/main_20260301_235104_grid7_patch1_layer6_head4/best_model.pth'을(를) 불러왔습니다.
+2026-03-02 01:11:51,622 - INFO - ICAM Pruning 정책: full_model (encoder+decoder+classifier 대상, 마지막 분류층/attention qkv/embedding bridge/learnable queries 제외). ignored_layers=23
+2026-03-02 01:11:51,623 - INFO - Wanda Pruning을 시작합니다.
+2026-03-02 01:11:51,623 - INFO - Wanda 중요도 계산을 위해 Calibration을 수행합니다.
+2026-03-02 01:11:51,624 - INFO -   - Calibration Samples: 4096 (approx 16 batches)
+2026-03-02 01:11:55,483 - INFO - 분류 레이어 'Linear'을(를) Pruning 대상에서 제외합니다.
+2026-03-02 01:11:55,639 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.7)에 맞춰 변경되었습니다.
+2026-03-02 01:11:55,640 - INFO - ==================================================
+2026-03-02 01:11:55,651 - INFO - Pruning 정보(희소도: 0.7000)를 'log/Sewer_ML/main_20260301_235104_grid7_patch1_layer6_head4/pruning_info.yaml'에 저장했습니다.
+2026-03-02 01:11:55,651 - INFO - ==================================================
+2026-03-02 01:11:55,651 - INFO - 모델 파라미터 수: 38,980 개
+2026-03-02 01:11:55,651 - INFO -   - Encoder (Encoder):         2,953 개
+2026-03-02 01:11:55,651 - INFO -     - conv_front (CNN Backbone):        2,935 개
+2026-03-02 01:11:55,651 - INFO -     - 1x1_conv (Channel Proj):          0 개
+2026-03-02 01:11:55,651 - INFO -     - norm (LayerNorm):                 18 개
+2026-03-02 01:11:55,651 - INFO -   - Decoder (Cross-Attention-based):    35,296 개
+2026-03-02 01:11:55,652 - INFO -     - Embedding Layer (feat_to_emb):   320 개
+2026-03-02 01:11:55,652 - INFO -     - Init Key Proj (W_K_init):         1,056 개
+2026-03-02 01:11:55,652 - INFO -     - Init Value Proj (W_V_init):       1,056 개
+2026-03-02 01:11:55,652 - INFO -     - Learnable Queries:                32 개
+2026-03-02 01:11:55,652 - INFO -     - Decoder Layers:                   32,832 개
+2026-03-02 01:11:55,652 - INFO -   - Classifier (Projection MLP):        731 개
+2026-03-02 01:11:55,652 - INFO - Pruning 이후 finetuning_pruned 설정으로 미세 조정을 수행합니다.
+2026-03-02 01:11:55,652 - INFO - 옵티마이저: AdamW (lr=0.001, weight_decay=0.0001)
+2026-03-02 01:11:55,653 - INFO - 스케줄러: CosineAnnealingLR (T_max=80, eta_min=0.0001)
+2026-03-02 01:11:55,653 - INFO - ==================================================
+2026-03-02 01:11:55,653 - INFO - train 모드를 시작합니다.
+2026-03-02 01:11:55,653 - INFO - 손실 함수: CrossEntropyLoss (label_smoothing: 0.1)
+2026-03-02 01:11:55,653 - INFO - --------------------------------------------------
+2026-03-02 01:11:55,653 - INFO - [LR]    [1/80] | Learning Rate: 0.001000
+2026-03-02 01:19:19,719 - INFO - [Train] [1/80] | Loss: 0.4409 | Train Acc: 84.47%
+2026-03-02 01:19:58,407 - INFO - [Valid] [1/80] | Loss: 0.4119 | Val Acc: 86.45%
+2026-03-02 01:19:58,536 - INFO - [Metrics for 'Normal'] | Precision: 0.8722 | Recall: 0.8709 | F1: 0.8716
+2026-03-02 01:19:58,536 - INFO - [Metrics for 'Defect'] | Precision: 0.8558 | Recall: 0.8572 | F1: 0.8565
+2026-03-02 01:19:58,540 - INFO - [Best Model Saved] (val loss: 0.4119) -> 'log/Sewer_ML/main_20260301_235104_grid7_patch1_layer6_head4/best_model.pth'
+2026-03-02 01:19:58,541 - INFO - --------------------------------------------------
+2026-03-02 01:19:58,541 - INFO - [LR]    [2/80] | Learning Rate: 0.001000
+2026-03-02 01:27:18,817 - INFO - [Train] [2/80] | Loss: 0.4216 | Train Acc: 85.91%
+2026-03-02 01:27:57,646 - INFO - [Valid] [2/80] | Loss: 0.4083 | Val Acc: 86.71%
+2026-03-02 01:27:57,785 - INFO - [Metrics for 'Normal'] | Precision: 0.8757 | Recall: 0.8721 | F1: 0.8739
+2026-03-02 01:27:57,785 - INFO - [Metrics for 'Defect'] | Precision: 0.8575 | Recall: 0.8615 | F1: 0.8595
+2026-03-02 01:27:57,791 - INFO - [Best Model Saved] (val loss: 0.4083) -> 'log/Sewer_ML/main_20260301_235104_grid7_patch1_layer6_head4/best_model.pth'
+2026-03-02 01:27:57,791 - INFO - --------------------------------------------------
+2026-03-02 01:27:57,791 - INFO - [LR]    [3/80] | Learning Rate: 0.000999
+2026-03-02 01:35:17,249 - INFO - [Train] [3/80] | Loss: 0.4156 | Train Acc: 86.34%
+2026-03-02 01:35:55,778 - INFO - [Valid] [3/80] | Loss: 0.3988 | Val Acc: 87.33%
+2026-03-02 01:35:55,946 - INFO - [Metrics for 'Normal'] | Precision: 0.8711 | Recall: 0.8921 | F1: 0.8814
+2026-03-02 01:35:55,946 - INFO - [Metrics for 'Defect'] | Precision: 0.8758 | Recall: 0.8522 | F1: 0.8639
+2026-03-02 01:35:55,955 - INFO - [Best Model Saved] (val loss: 0.3988) -> 'log/Sewer_ML/main_20260301_235104_grid7_patch1_layer6_head4/best_model.pth'
+2026-03-02 01:35:55,955 - INFO - --------------------------------------------------
+2026-03-02 01:35:55,955 - INFO - [LR]    [4/80] | Learning Rate: 0.000997
+2026-03-02 01:43:21,995 - INFO - [Train] [4/80] | Loss: 0.4116 | Train Acc: 86.64%
+2026-03-02 01:44:00,735 - INFO - [Valid] [4/80] | Loss: 0.3946 | Val Acc: 87.64%
+2026-03-02 01:44:00,896 - INFO - [Metrics for 'Normal'] | Precision: 0.8870 | Recall: 0.8777 | F1: 0.8823
+2026-03-02 01:44:00,896 - INFO - [Metrics for 'Defect'] | Precision: 0.8647 | Recall: 0.8749 | F1: 0.8698
+2026-03-02 01:44:00,903 - INFO - [Best Model Saved] (val loss: 0.3946) -> 'log/Sewer_ML/main_20260301_235104_grid7_patch1_layer6_head4/best_model.pth'
+2026-03-02 01:44:00,904 - INFO - --------------------------------------------------
+2026-03-02 01:44:00,904 - INFO - [LR]    [5/80] | Learning Rate: 0.000994
+2026-03-02 01:51:20,757 - INFO - [Train] [5/80] | Loss: 0.4090 | Train Acc: 86.81%
+2026-03-02 01:51:59,509 - INFO - [Valid] [5/80] | Loss: 0.3932 | Val Acc: 87.65%
+2026-03-02 01:51:59,669 - INFO - [Metrics for 'Normal'] | Precision: 0.9033 | Recall: 0.8581 | F1: 0.8801
+2026-03-02 01:51:59,669 - INFO - [Metrics for 'Defect'] | Precision: 0.8496 | Recall: 0.8971 | F1: 0.8727
+2026-03-02 01:51:59,677 - INFO - [Best Model Saved] (val loss: 0.3932) -> 'log/Sewer_ML/main_20260301_235104_grid7_patch1_layer6_head4/best_model.pth'
+2026-03-02 01:51:59,677 - INFO - --------------------------------------------------
+2026-03-02 01:51:59,677 - INFO - [LR]    [6/80] | Learning Rate: 0.000991
+2026-03-02 01:59:19,890 - INFO - [Train] [6/80] | Loss: 0.4071 | Train Acc: 86.94%
+2026-03-02 01:59:58,787 - INFO - [Valid] [6/80] | Loss: 0.4148 | Val Acc: 86.09%
+2026-03-02 01:59:58,939 - INFO - [Metrics for 'Normal'] | Precision: 0.8309 | Recall: 0.9249 | F1: 0.8754
+2026-03-02 01:59:58,939 - INFO - [Metrics for 'Defect'] | Precision: 0.9037 | Recall: 0.7893 | F1: 0.8426
+2026-03-02 01:59:58,940 - INFO - --------------------------------------------------
+2026-03-02 01:59:58,940 - INFO - [LR]    [7/80] | Learning Rate: 0.000988
+2026-03-02 02:07:19,739 - INFO - [Train] [7/80] | Loss: 0.4055 | Train Acc: 87.06%
+2026-03-02 02:07:58,962 - INFO - [Valid] [7/80] | Loss: 0.3900 | Val Acc: 88.00%
+2026-03-02 02:07:59,102 - INFO - [Metrics for 'Normal'] | Precision: 0.8897 | Recall: 0.8820 | F1: 0.8859
+2026-03-02 02:07:59,102 - INFO - [Metrics for 'Defect'] | Precision: 0.8692 | Recall: 0.8777 | F1: 0.8734
+2026-03-02 02:07:59,108 - INFO - [Best Model Saved] (val loss: 0.3900) -> 'log/Sewer_ML/main_20260301_235104_grid7_patch1_layer6_head4/best_model.pth'
+2026-03-02 02:07:59,108 - INFO - --------------------------------------------------
+2026-03-02 02:07:59,108 - INFO - [LR]    [8/80] | Learning Rate: 0.000983
+2026-03-02 02:15:18,368 - INFO - [Train] [8/80] | Loss: 0.4039 | Train Acc: 87.15%
+2026-03-02 02:15:57,358 - INFO - [Valid] [8/80] | Loss: 0.3898 | Val Acc: 87.87%
+2026-03-02 02:15:57,519 - INFO - [Metrics for 'Normal'] | Precision: 0.8778 | Recall: 0.8949 | F1: 0.8863
+2026-03-02 02:15:57,520 - INFO - [Metrics for 'Defect'] | Precision: 0.8798 | Recall: 0.8606 | F1: 0.8701
+2026-03-02 02:15:57,528 - INFO - [Best Model Saved] (val loss: 0.3898) -> 'log/Sewer_ML/main_20260301_235104_grid7_patch1_layer6_head4/best_model.pth'
+2026-03-02 02:15:57,528 - INFO - --------------------------------------------------
+2026-03-02 02:15:57,528 - INFO - [LR]    [9/80] | Learning Rate: 0.000978
+2026-03-02 02:23:17,196 - INFO - [Train] [9/80] | Loss: 0.4026 | Train Acc: 87.27%
+2026-03-02 02:23:55,620 - INFO - [Valid] [9/80] | Loss: 0.3875 | Val Acc: 88.09%
+2026-03-02 02:23:55,748 - INFO - [Metrics for 'Normal'] | Precision: 0.8822 | Recall: 0.8939 | F1: 0.8880
+2026-03-02 02:23:55,748 - INFO - [Metrics for 'Defect'] | Precision: 0.8794 | Recall: 0.8664 | F1: 0.8729
+2026-03-02 02:23:55,753 - INFO - [Best Model Saved] (val loss: 0.3875) -> 'log/Sewer_ML/main_20260301_235104_grid7_patch1_layer6_head4/best_model.pth'
+2026-03-02 02:23:55,754 - INFO - --------------------------------------------------
+2026-03-02 02:23:55,754 - INFO - [LR]    [10/80] | Learning Rate: 0.000972
+2026-03-02 02:31:16,163 - INFO - [Train] [10/80] | Loss: 0.4012 | Train Acc: 87.34%
+2026-03-02 02:31:54,646 - INFO - [Valid] [10/80] | Loss: 0.3863 | Val Acc: 88.13%
+2026-03-02 02:31:54,787 - INFO - [Metrics for 'Normal'] | Precision: 0.8974 | Recall: 0.8752 | F1: 0.8862
+2026-03-02 02:31:54,787 - INFO - [Metrics for 'Defect'] | Precision: 0.8641 | Recall: 0.8880 | F1: 0.8759
+2026-03-02 02:31:54,793 - INFO - [Best Model Saved] (val loss: 0.3863) -> 'log/Sewer_ML/main_20260301_235104_grid7_patch1_layer6_head4/best_model.pth'
+2026-03-02 02:31:54,793 - INFO - --------------------------------------------------
+2026-03-02 02:31:54,793 - INFO - [LR]    [11/80] | Learning Rate: 0.000966
+2026-03-02 02:39:14,256 - INFO - [Train] [11/80] | Loss: 0.4002 | Train Acc: 87.42%
+2026-03-02 02:39:53,171 - INFO - [Valid] [11/80] | Loss: 0.3833 | Val Acc: 88.40%
+2026-03-02 02:39:53,341 - INFO - [Metrics for 'Normal'] | Precision: 0.8939 | Recall: 0.8854 | F1: 0.8896
+2026-03-02 02:39:53,341 - INFO - [Metrics for 'Defect'] | Precision: 0.8731 | Recall: 0.8823 | F1: 0.8777
+2026-03-02 02:39:53,349 - INFO - [Best Model Saved] (val loss: 0.3833) -> 'log/Sewer_ML/main_20260301_235104_grid7_patch1_layer6_head4/best_model.pth'
+2026-03-02 02:39:53,349 - INFO - --------------------------------------------------
+2026-03-02 02:39:53,349 - INFO - [LR]    [12/80] | Learning Rate: 0.000959
+2026-03-02 02:47:12,768 - INFO - [Train] [12/80] | Loss: 0.3988 | Train Acc: 87.53%
+2026-03-02 02:47:51,939 - INFO - [Valid] [12/80] | Loss: 0.3876 | Val Acc: 88.03%
+2026-03-02 02:47:52,079 - INFO - [Metrics for 'Normal'] | Precision: 0.8747 | Recall: 0.9027 | F1: 0.8885
+2026-03-02 02:47:52,079 - INFO - [Metrics for 'Defect'] | Precision: 0.8870 | Recall: 0.8552 | F1: 0.8708
+2026-03-02 02:47:52,081 - INFO - --------------------------------------------------
+2026-03-02 02:47:52,081 - INFO - [LR]    [13/80] | Learning Rate: 0.000951
+2026-03-02 02:55:12,967 - INFO - [Train] [13/80] | Loss: 0.3983 | Train Acc: 87.54%
+2026-03-02 02:55:51,746 - INFO - [Valid] [13/80] | Loss: 0.3842 | Val Acc: 88.33%
+2026-03-02 02:55:51,886 - INFO - [Metrics for 'Normal'] | Precision: 0.9060 | Recall: 0.8692 | F1: 0.8872
+2026-03-02 02:55:51,887 - INFO - [Metrics for 'Defect'] | Precision: 0.8599 | Recall: 0.8991 | F1: 0.8791
+2026-03-02 02:55:51,888 - INFO - --------------------------------------------------
+2026-03-02 02:55:51,888 - INFO - [LR]    [14/80] | Learning Rate: 0.000943
+2026-03-02 03:03:11,211 - INFO - [Train] [14/80] | Loss: 0.3974 | Train Acc: 87.61%
+2026-03-02 03:03:50,224 - INFO - [Valid] [14/80] | Loss: 0.3851 | Val Acc: 88.19%
+2026-03-02 03:03:50,386 - INFO - [Metrics for 'Normal'] | Precision: 0.8891 | Recall: 0.8871 | F1: 0.8881
+2026-03-02 03:03:50,386 - INFO - [Metrics for 'Defect'] | Precision: 0.8739 | Recall: 0.8761 | F1: 0.8750
+2026-03-02 03:03:50,389 - INFO - --------------------------------------------------
+2026-03-02 03:03:50,389 - INFO - [LR]    [15/80] | Learning Rate: 0.000934
+2026-03-02 03:11:10,400 - INFO - [Train] [15/80] | Loss: 0.3970 | Train Acc: 87.64%
+2026-03-02 03:11:49,225 - INFO - [Valid] [15/80] | Loss: 0.3834 | Val Acc: 88.32%
+2026-03-02 03:11:49,365 - INFO - [Metrics for 'Normal'] | Precision: 0.9114 | Recall: 0.8628 | F1: 0.8864
+2026-03-02 03:11:49,365 - INFO - [Metrics for 'Defect'] | Precision: 0.8551 | Recall: 0.9062 | F1: 0.8799
+2026-03-02 03:11:49,367 - INFO - --------------------------------------------------
+2026-03-02 03:11:49,367 - INFO - [LR]    [16/80] | Learning Rate: 0.000924
+2026-03-02 03:19:12,065 - INFO - [Train] [16/80] | Loss: 0.3962 | Train Acc: 87.71%
+2026-03-02 03:19:50,575 - INFO - [Valid] [16/80] | Loss: 0.3819 | Val Acc: 88.48%
+2026-03-02 03:19:50,743 - INFO - [Metrics for 'Normal'] | Precision: 0.9012 | Recall: 0.8781 | F1: 0.8895
+2026-03-02 03:19:50,744 - INFO - [Metrics for 'Defect'] | Precision: 0.8674 | Recall: 0.8923 | F1: 0.8797
+2026-03-02 03:19:50,750 - INFO - [Best Model Saved] (val loss: 0.3819) -> 'log/Sewer_ML/main_20260301_235104_grid7_patch1_layer6_head4/best_model.pth'
+2026-03-02 03:19:50,750 - INFO - --------------------------------------------------
+2026-03-02 03:19:50,750 - INFO - [LR]    [17/80] | Learning Rate: 0.000914
+2026-03-02 03:27:11,297 - INFO - [Train] [17/80] | Loss: 0.3956 | Train Acc: 87.73%
+2026-03-02 03:27:49,893 - INFO - [Valid] [17/80] | Loss: 0.3797 | Val Acc: 88.66%
+2026-03-02 03:27:50,064 - INFO - [Metrics for 'Normal'] | Precision: 0.8919 | Recall: 0.8935 | F1: 0.8927
+2026-03-02 03:27:50,065 - INFO - [Metrics for 'Defect'] | Precision: 0.8806 | Recall: 0.8789 | F1: 0.8797
+2026-03-02 03:27:50,073 - INFO - [Best Model Saved] (val loss: 0.3797) -> 'log/Sewer_ML/main_20260301_235104_grid7_patch1_layer6_head4/best_model.pth'
+2026-03-02 03:27:50,073 - INFO - --------------------------------------------------
+2026-03-02 03:27:50,073 - INFO - [LR]    [18/80] | Learning Rate: 0.000903
+2026-03-02 03:35:10,665 - INFO - [Train] [18/80] | Loss: 0.3949 | Train Acc: 87.78%
+2026-03-02 03:35:49,825 - INFO - [Valid] [18/80] | Loss: 0.3789 | Val Acc: 88.71%
+2026-03-02 03:35:49,965 - INFO - [Metrics for 'Normal'] | Precision: 0.9005 | Recall: 0.8839 | F1: 0.8921
+2026-03-02 03:35:49,966 - INFO - [Metrics for 'Defect'] | Precision: 0.8727 | Recall: 0.8907 | F1: 0.8816
+2026-03-02 03:35:49,972 - INFO - [Best Model Saved] (val loss: 0.3789) -> 'log/Sewer_ML/main_20260301_235104_grid7_patch1_layer6_head4/best_model.pth'
+2026-03-02 03:35:49,972 - INFO - --------------------------------------------------
+2026-03-02 03:35:49,972 - INFO - [LR]    [19/80] | Learning Rate: 0.000892
+2026-03-02 03:43:10,818 - INFO - [Train] [19/80] | Loss: 0.3943 | Train Acc: 87.85%
+2026-03-02 03:43:49,215 - INFO - [Valid] [19/80] | Loss: 0.3797 | Val Acc: 88.67%
+2026-03-02 03:43:49,345 - INFO - [Metrics for 'Normal'] | Precision: 0.9138 | Recall: 0.8674 | F1: 0.8900
+2026-03-02 03:43:49,345 - INFO - [Metrics for 'Defect'] | Precision: 0.8595 | Recall: 0.9084 | F1: 0.8833
+2026-03-02 03:43:49,347 - INFO - --------------------------------------------------
+2026-03-02 03:43:49,347 - INFO - [LR]    [20/80] | Learning Rate: 0.000880
+2026-03-02 03:51:09,179 - INFO - [Train] [20/80] | Loss: 0.3938 | Train Acc: 87.86%
+2026-03-02 03:51:47,510 - INFO - [Valid] [20/80] | Loss: 0.3826 | Val Acc: 88.30%
+2026-03-02 03:51:47,651 - INFO - [Metrics for 'Normal'] | Precision: 0.8835 | Recall: 0.8966 | F1: 0.8900
+2026-03-02 03:51:47,651 - INFO - [Metrics for 'Defect'] | Precision: 0.8823 | Recall: 0.8677 | F1: 0.8750
+2026-03-02 03:51:47,653 - INFO - --------------------------------------------------
+2026-03-02 03:51:47,653 - INFO - [LR]    [21/80] | Learning Rate: 0.000868
+2026-03-02 03:59:08,529 - INFO - [Train] [21/80] | Loss: 0.3930 | Train Acc: 87.90%
+2026-03-02 03:59:47,167 - INFO - [Valid] [21/80] | Loss: 0.3973 | Val Acc: 87.44%
+2026-03-02 03:59:47,296 - INFO - [Metrics for 'Normal'] | Precision: 0.8483 | Recall: 0.9280 | F1: 0.8864
+2026-03-02 03:59:47,296 - INFO - [Metrics for 'Defect'] | Precision: 0.9100 | Recall: 0.8143 | F1: 0.8595
+2026-03-02 03:59:47,298 - INFO - --------------------------------------------------
+2026-03-02 03:59:47,298 - INFO - [LR]    [22/80] | Learning Rate: 0.000855
+2026-03-02 04:07:06,235 - INFO - [Train] [22/80] | Loss: 0.3928 | Train Acc: 87.94%
+2026-03-02 04:07:45,036 - INFO - [Valid] [22/80] | Loss: 0.3783 | Val Acc: 88.68%
+2026-03-02 04:07:45,204 - INFO - [Metrics for 'Normal'] | Precision: 0.9082 | Recall: 0.8740 | F1: 0.8908
+2026-03-02 04:07:45,204 - INFO - [Metrics for 'Defect'] | Precision: 0.8647 | Recall: 0.9011 | F1: 0.8825
+2026-03-02 04:07:45,211 - INFO - [Best Model Saved] (val loss: 0.3783) -> 'log/Sewer_ML/main_20260301_235104_grid7_patch1_layer6_head4/best_model.pth'
+2026-03-02 04:07:45,211 - INFO - --------------------------------------------------
+2026-03-02 04:07:45,211 - INFO - [LR]    [23/80] | Learning Rate: 0.000842
+2026-03-02 04:15:04,584 - INFO - [Train] [23/80] | Loss: 0.3921 | Train Acc: 87.95%
+2026-03-02 04:15:42,951 - INFO - [Valid] [23/80] | Loss: 0.3767 | Val Acc: 88.85%
+2026-03-02 04:15:43,091 - INFO - [Metrics for 'Normal'] | Precision: 0.8993 | Recall: 0.8883 | F1: 0.8937
+2026-03-02 04:15:43,091 - INFO - [Metrics for 'Defect'] | Precision: 0.8766 | Recall: 0.8887 | F1: 0.8826
+2026-03-02 04:15:43,098 - INFO - [Best Model Saved] (val loss: 0.3767) -> 'log/Sewer_ML/main_20260301_235104_grid7_patch1_layer6_head4/best_model.pth'
+2026-03-02 04:15:43,098 - INFO - --------------------------------------------------
+2026-03-02 04:15:43,098 - INFO - [LR]    [24/80] | Learning Rate: 0.000829
+2026-03-02 04:23:03,469 - INFO - [Train] [24/80] | Loss: 0.3917 | Train Acc: 88.01%
+2026-03-02 04:23:41,843 - INFO - [Valid] [24/80] | Loss: 0.3798 | Val Acc: 88.57%
+2026-03-02 04:23:42,013 - INFO - [Metrics for 'Normal'] | Precision: 0.8946 | Recall: 0.8883 | F1: 0.8914
+2026-03-02 04:23:42,013 - INFO - [Metrics for 'Defect'] | Precision: 0.8759 | Recall: 0.8829 | F1: 0.8794
+2026-03-02 04:23:42,015 - INFO - --------------------------------------------------
+2026-03-02 04:23:42,015 - INFO - [LR]    [25/80] | Learning Rate: 0.000815
+2026-03-02 04:31:02,957 - INFO - [Train] [25/80] | Loss: 0.3913 | Train Acc: 88.03%
+2026-03-02 04:31:41,996 - INFO - [Valid] [25/80] | Loss: 0.3779 | Val Acc: 88.73%
+2026-03-02 04:31:42,167 - INFO - [Metrics for 'Normal'] | Precision: 0.8900 | Recall: 0.8977 | F1: 0.8938
+2026-03-02 04:31:42,167 - INFO - [Metrics for 'Defect'] | Precision: 0.8844 | Recall: 0.8758 | F1: 0.8800
+2026-03-02 04:31:42,170 - INFO - --------------------------------------------------
+2026-03-02 04:31:42,170 - INFO - [LR]    [26/80] | Learning Rate: 0.000800
+2026-03-02 04:39:01,391 - INFO - [Train] [26/80] | Loss: 0.3910 | Train Acc: 88.04%
+2026-03-02 04:39:40,421 - INFO - [Valid] [26/80] | Loss: 0.3792 | Val Acc: 88.65%
+2026-03-02 04:39:40,562 - INFO - [Metrics for 'Normal'] | Precision: 0.9073 | Recall: 0.8745 | F1: 0.8906
+2026-03-02 04:39:40,562 - INFO - [Metrics for 'Defect'] | Precision: 0.8650 | Recall: 0.9000 | F1: 0.8821
+2026-03-02 04:39:40,564 - INFO - --------------------------------------------------
+2026-03-02 04:39:40,564 - INFO - [LR]    [27/80] | Learning Rate: 0.000785
+2026-03-02 04:47:00,471 - INFO - [Train] [27/80] | Loss: 0.3905 | Train Acc: 88.08%
+2026-03-02 04:47:39,510 - INFO - [Valid] [27/80] | Loss: 0.3801 | Val Acc: 88.54%
+2026-03-02 04:47:39,672 - INFO - [Metrics for 'Normal'] | Precision: 0.8892 | Recall: 0.8944 | F1: 0.8918
+2026-03-02 04:47:39,672 - INFO - [Metrics for 'Defect'] | Precision: 0.8810 | Recall: 0.8753 | F1: 0.8781
+2026-03-02 04:47:39,675 - INFO - --------------------------------------------------
+2026-03-02 04:47:39,675 - INFO - [LR]    [28/80] | Learning Rate: 0.000770
+2026-03-02 04:54:58,892 - INFO - [Train] [28/80] | Loss: 0.3903 | Train Acc: 88.09%
+2026-03-02 04:55:37,701 - INFO - [Valid] [28/80] | Loss: 0.3758 | Val Acc: 88.92%
+2026-03-02 04:55:37,863 - INFO - [Metrics for 'Normal'] | Precision: 0.8982 | Recall: 0.8913 | F1: 0.8947
+2026-03-02 04:55:37,864 - INFO - [Metrics for 'Defect'] | Precision: 0.8794 | Recall: 0.8869 | F1: 0.8831
+2026-03-02 04:55:37,872 - INFO - [Best Model Saved] (val loss: 0.3758) -> 'log/Sewer_ML/main_20260301_235104_grid7_patch1_layer6_head4/best_model.pth'
+2026-03-02 04:55:37,872 - INFO - --------------------------------------------------
+2026-03-02 04:55:37,872 - INFO - [LR]    [29/80] | Learning Rate: 0.000754
+2026-03-02 05:02:57,116 - INFO - [Train] [29/80] | Loss: 0.3895 | Train Acc: 88.16%
+2026-03-02 05:03:35,908 - INFO - [Valid] [29/80] | Loss: 0.3766 | Val Acc: 88.80%
+2026-03-02 05:03:36,038 - INFO - [Metrics for 'Normal'] | Precision: 0.9071 | Recall: 0.8778 | F1: 0.8922
+2026-03-02 05:03:36,038 - INFO - [Metrics for 'Defect'] | Precision: 0.8680 | Recall: 0.8994 | F1: 0.8834
+2026-03-02 05:03:36,040 - INFO - --------------------------------------------------
+2026-03-02 05:03:36,040 - INFO - [LR]    [30/80] | Learning Rate: 0.000738
+2026-03-02 05:10:55,952 - INFO - [Train] [30/80] | Loss: 0.3893 | Train Acc: 88.16%
+2026-03-02 05:11:34,632 - INFO - [Valid] [30/80] | Loss: 0.3808 | Val Acc: 88.54%
+2026-03-02 05:11:34,762 - INFO - [Metrics for 'Normal'] | Precision: 0.9190 | Recall: 0.8587 | F1: 0.8878
+2026-03-02 05:11:34,762 - INFO - [Metrics for 'Defect'] | Precision: 0.8526 | Recall: 0.9153 | F1: 0.8829
+2026-03-02 05:11:34,764 - INFO - --------------------------------------------------
+2026-03-02 05:11:34,764 - INFO - [LR]    [31/80] | Learning Rate: 0.000722
+2026-03-02 05:18:53,954 - INFO - [Train] [31/80] | Loss: 0.3888 | Train Acc: 88.17%
+2026-03-02 05:19:33,005 - INFO - [Valid] [31/80] | Loss: 0.3769 | Val Acc: 88.84%
+2026-03-02 05:19:33,177 - INFO - [Metrics for 'Normal'] | Precision: 0.8947 | Recall: 0.8938 | F1: 0.8942
+2026-03-02 05:19:33,177 - INFO - [Metrics for 'Defect'] | Precision: 0.8813 | Recall: 0.8823 | F1: 0.8818
+2026-03-02 05:19:33,180 - INFO - --------------------------------------------------
+2026-03-02 05:19:33,180 - INFO - [LR]    [32/80] | Learning Rate: 0.000706
+2026-03-02 05:26:54,039 - INFO - [Train] [32/80] | Loss: 0.3885 | Train Acc: 88.23%
+2026-03-02 05:27:32,462 - INFO - [Valid] [32/80] | Loss: 0.3753 | Val Acc: 88.95%
+2026-03-02 05:27:32,635 - INFO - [Metrics for 'Normal'] | Precision: 0.9112 | Recall: 0.8762 | F1: 0.8933
+2026-03-02 05:27:32,636 - INFO - [Metrics for 'Defect'] | Precision: 0.8671 | Recall: 0.9045 | F1: 0.8854
+2026-03-02 05:27:32,644 - INFO - [Best Model Saved] (val loss: 0.3753) -> 'log/Sewer_ML/main_20260301_235104_grid7_patch1_layer6_head4/best_model.pth'
+2026-03-02 05:27:32,644 - INFO - --------------------------------------------------
+2026-03-02 05:27:32,644 - INFO - [LR]    [33/80] | Learning Rate: 0.000689
+2026-03-02 05:34:52,364 - INFO - [Train] [33/80] | Loss: 0.3883 | Train Acc: 88.24%
+2026-03-02 05:35:31,134 - INFO - [Valid] [33/80] | Loss: 0.3735 | Val Acc: 89.02%
+2026-03-02 05:35:31,297 - INFO - [Metrics for 'Normal'] | Precision: 0.9075 | Recall: 0.8820 | F1: 0.8946
+2026-03-02 05:35:31,297 - INFO - [Metrics for 'Defect'] | Precision: 0.8720 | Recall: 0.8994 | F1: 0.8855
+2026-03-02 05:35:31,306 - INFO - [Best Model Saved] (val loss: 0.3735) -> 'log/Sewer_ML/main_20260301_235104_grid7_patch1_layer6_head4/best_model.pth'
+2026-03-02 05:35:31,306 - INFO - --------------------------------------------------
+2026-03-02 05:35:31,306 - INFO - [LR]    [34/80] | Learning Rate: 0.000672
+2026-03-02 05:42:51,070 - INFO - [Train] [34/80] | Loss: 0.3880 | Train Acc: 88.24%
+2026-03-02 05:43:29,716 - INFO - [Valid] [34/80] | Loss: 0.3750 | Val Acc: 88.84%
+2026-03-02 05:43:29,859 - INFO - [Metrics for 'Normal'] | Precision: 0.9017 | Recall: 0.8852 | F1: 0.8934
+2026-03-02 05:43:29,859 - INFO - [Metrics for 'Defect'] | Precision: 0.8741 | Recall: 0.8920 | F1: 0.8829
+2026-03-02 05:43:29,861 - INFO - --------------------------------------------------
+2026-03-02 05:43:29,861 - INFO - [LR]    [35/80] | Learning Rate: 0.000655
+2026-03-02 05:50:49,904 - INFO - [Train] [35/80] | Loss: 0.3877 | Train Acc: 88.29%
+2026-03-02 05:51:28,675 - INFO - [Valid] [35/80] | Loss: 0.3794 | Val Acc: 88.54%
+2026-03-02 05:51:28,835 - INFO - [Metrics for 'Normal'] | Precision: 0.8837 | Recall: 0.9016 | F1: 0.8926
+2026-03-02 05:51:28,835 - INFO - [Metrics for 'Defect'] | Precision: 0.8873 | Recall: 0.8672 | F1: 0.8771
+2026-03-02 05:51:28,837 - INFO - --------------------------------------------------
+2026-03-02 05:51:28,837 - INFO - [LR]    [36/80] | Learning Rate: 0.000638
+2026-03-02 05:58:48,683 - INFO - [Train] [36/80] | Loss: 0.3872 | Train Acc: 88.31%
+2026-03-02 05:59:28,228 - INFO - [Valid] [36/80] | Loss: 0.3752 | Val Acc: 88.94%
+2026-03-02 05:59:28,393 - INFO - [Metrics for 'Normal'] | Precision: 0.9126 | Recall: 0.8744 | F1: 0.8931
+2026-03-02 05:59:28,393 - INFO - [Metrics for 'Defect'] | Precision: 0.8657 | Recall: 0.9062 | F1: 0.8855
+2026-03-02 05:59:28,396 - INFO - --------------------------------------------------
+2026-03-02 05:59:28,396 - INFO - [LR]    [37/80] | Learning Rate: 0.000620
+2026-03-02 06:06:47,276 - INFO - [Train] [37/80] | Loss: 0.3868 | Train Acc: 88.36%
+2026-03-02 06:07:26,323 - INFO - [Valid] [37/80] | Loss: 0.3737 | Val Acc: 89.00%
+2026-03-02 06:07:26,465 - INFO - [Metrics for 'Normal'] | Precision: 0.9107 | Recall: 0.8778 | F1: 0.8939
+2026-03-02 06:07:26,465 - INFO - [Metrics for 'Defect'] | Precision: 0.8685 | Recall: 0.9036 | F1: 0.8857
+2026-03-02 06:07:26,467 - INFO - --------------------------------------------------
+2026-03-02 06:07:26,467 - INFO - [LR]    [38/80] | Learning Rate: 0.000603
+2026-03-02 06:14:47,222 - INFO - [Train] [38/80] | Loss: 0.3865 | Train Acc: 88.36%
+2026-03-02 06:15:25,963 - INFO - [Valid] [38/80] | Loss: 0.3734 | Val Acc: 89.03%
+2026-03-02 06:15:26,106 - INFO - [Metrics for 'Normal'] | Precision: 0.9093 | Recall: 0.8802 | F1: 0.8945
+2026-03-02 06:15:26,106 - INFO - [Metrics for 'Defect'] | Precision: 0.8705 | Recall: 0.9017 | F1: 0.8858
+2026-03-02 06:15:26,112 - INFO - [Best Model Saved] (val loss: 0.3734) -> 'log/Sewer_ML/main_20260301_235104_grid7_patch1_layer6_head4/best_model.pth'
+2026-03-02 06:15:26,112 - INFO - --------------------------------------------------
+2026-03-02 06:15:26,112 - INFO - [LR]    [39/80] | Learning Rate: 0.000585
+2026-03-02 06:22:45,843 - INFO - [Train] [39/80] | Loss: 0.3863 | Train Acc: 88.37%
+2026-03-02 06:23:24,962 - INFO - [Valid] [39/80] | Loss: 0.3760 | Val Acc: 88.86%
+2026-03-02 06:23:25,105 - INFO - [Metrics for 'Normal'] | Precision: 0.9136 | Recall: 0.8715 | F1: 0.8921
+2026-03-02 06:23:25,105 - INFO - [Metrics for 'Defect'] | Precision: 0.8632 | Recall: 0.9078 | F1: 0.8849
+2026-03-02 06:23:25,108 - INFO - --------------------------------------------------
+2026-03-02 06:23:25,108 - INFO - [LR]    [40/80] | Learning Rate: 0.000568
+2026-03-02 06:30:45,976 - INFO - [Train] [40/80] | Loss: 0.3860 | Train Acc: 88.38%
+2026-03-02 06:31:25,253 - INFO - [Valid] [40/80] | Loss: 0.3829 | Val Acc: 88.44%
+2026-03-02 06:31:25,388 - INFO - [Metrics for 'Normal'] | Precision: 0.9274 | Recall: 0.8474 | F1: 0.8856
+2026-03-02 06:31:25,388 - INFO - [Metrics for 'Defect'] | Precision: 0.8443 | Recall: 0.9258 | F1: 0.8831
+2026-03-02 06:31:25,390 - INFO - --------------------------------------------------
+2026-03-02 06:31:25,390 - INFO - [LR]    [41/80] | Learning Rate: 0.000550
+2026-03-02 06:38:45,050 - INFO - [Train] [41/80] | Loss: 0.3859 | Train Acc: 88.40%
+2026-03-02 06:39:24,071 - INFO - [Valid] [41/80] | Loss: 0.3761 | Val Acc: 88.96%
+2026-03-02 06:39:24,215 - INFO - [Metrics for 'Normal'] | Precision: 0.8821 | Recall: 0.9129 | F1: 0.8972
+2026-03-02 06:39:24,215 - INFO - [Metrics for 'Defect'] | Precision: 0.8986 | Recall: 0.8634 | F1: 0.8806
+2026-03-02 06:39:24,217 - INFO - --------------------------------------------------
+2026-03-02 06:39:24,217 - INFO - [LR]    [42/80] | Learning Rate: 0.000532
+2026-03-02 06:46:44,353 - INFO - [Train] [42/80] | Loss: 0.3855 | Train Acc: 88.44%
+2026-03-02 06:47:23,344 - INFO - [Valid] [42/80] | Loss: 0.3722 | Val Acc: 89.13%
+2026-03-02 06:47:23,475 - INFO - [Metrics for 'Normal'] | Precision: 0.8934 | Recall: 0.9019 | F1: 0.8976
+2026-03-02 06:47:23,475 - INFO - [Metrics for 'Defect'] | Precision: 0.8890 | Recall: 0.8795 | F1: 0.8843
+2026-03-02 06:47:23,482 - INFO - [Best Model Saved] (val loss: 0.3722) -> 'log/Sewer_ML/main_20260301_235104_grid7_patch1_layer6_head4/best_model.pth'
+2026-03-02 06:47:23,482 - INFO - --------------------------------------------------
+2026-03-02 06:47:23,482 - INFO - [LR]    [43/80] | Learning Rate: 0.000515
+2026-03-02 06:54:43,514 - INFO - [Train] [43/80] | Loss: 0.3851 | Train Acc: 88.45%
+2026-03-02 06:55:22,700 - INFO - [Valid] [43/80] | Loss: 0.3704 | Val Acc: 89.24%
+2026-03-02 06:55:22,844 - INFO - [Metrics for 'Normal'] | Precision: 0.9082 | Recall: 0.8858 | F1: 0.8968
+2026-03-02 06:55:22,844 - INFO - [Metrics for 'Defect'] | Precision: 0.8756 | Recall: 0.8997 | F1: 0.8875
+2026-03-02 06:55:22,850 - INFO - [Best Model Saved] (val loss: 0.3704) -> 'log/Sewer_ML/main_20260301_235104_grid7_patch1_layer6_head4/best_model.pth'
+2026-03-02 06:55:22,850 - INFO - --------------------------------------------------
+2026-03-02 06:55:22,850 - INFO - [LR]    [44/80] | Learning Rate: 0.000497
+2026-03-02 07:02:42,358 - INFO - [Train] [44/80] | Loss: 0.3849 | Train Acc: 88.47%
+2026-03-02 07:03:21,613 - INFO - [Valid] [44/80] | Loss: 0.3713 | Val Acc: 89.20%
+2026-03-02 07:03:21,755 - INFO - [Metrics for 'Normal'] | Precision: 0.9071 | Recall: 0.8863 | F1: 0.8966
+2026-03-02 07:03:21,755 - INFO - [Metrics for 'Defect'] | Precision: 0.8759 | Recall: 0.8984 | F1: 0.8870
+2026-03-02 07:03:21,757 - INFO - --------------------------------------------------
+2026-03-02 07:03:21,757 - INFO - [LR]    [45/80] | Learning Rate: 0.000480
+2026-03-02 07:10:42,242 - INFO - [Train] [45/80] | Loss: 0.3846 | Train Acc: 88.52%
+2026-03-02 07:11:21,177 - INFO - [Valid] [45/80] | Loss: 0.3758 | Val Acc: 88.88%
+2026-03-02 07:11:21,321 - INFO - [Metrics for 'Normal'] | Precision: 0.8996 | Recall: 0.8886 | F1: 0.8941
+2026-03-02 07:11:21,321 - INFO - [Metrics for 'Defect'] | Precision: 0.8770 | Recall: 0.8890 | F1: 0.8830
+2026-03-02 07:11:21,323 - INFO - --------------------------------------------------
+2026-03-02 07:11:21,323 - INFO - [LR]    [46/80] | Learning Rate: 0.000462
+2026-03-02 07:18:41,215 - INFO - [Train] [46/80] | Loss: 0.3844 | Train Acc: 88.49%
+2026-03-02 07:19:19,905 - INFO - [Valid] [46/80] | Loss: 0.3724 | Val Acc: 89.12%
+2026-03-02 07:19:20,049 - INFO - [Metrics for 'Normal'] | Precision: 0.9011 | Recall: 0.8919 | F1: 0.8965
+2026-03-02 07:19:20,049 - INFO - [Metrics for 'Defect'] | Precision: 0.8804 | Recall: 0.8904 | F1: 0.8854
+2026-03-02 07:19:20,051 - INFO - --------------------------------------------------
+2026-03-02 07:19:20,051 - INFO - [LR]    [47/80] | Learning Rate: 0.000445
+2026-03-02 07:26:41,160 - INFO - [Train] [47/80] | Loss: 0.3842 | Train Acc: 88.53%
+2026-03-02 07:27:19,691 - INFO - [Valid] [47/80] | Loss: 0.3711 | Val Acc: 89.17%
+2026-03-02 07:27:19,835 - INFO - [Metrics for 'Normal'] | Precision: 0.9009 | Recall: 0.8931 | F1: 0.8970
+2026-03-02 07:27:19,835 - INFO - [Metrics for 'Defect'] | Precision: 0.8815 | Recall: 0.8901 | F1: 0.8858
+2026-03-02 07:27:19,837 - INFO - --------------------------------------------------
+2026-03-02 07:27:19,837 - INFO - [LR]    [48/80] | Learning Rate: 0.000428
+2026-03-02 07:34:39,025 - INFO - [Train] [48/80] | Loss: 0.3840 | Train Acc: 88.55%
+2026-03-02 07:35:17,687 - INFO - [Valid] [48/80] | Loss: 0.3721 | Val Acc: 89.09%
+2026-03-02 07:35:17,818 - INFO - [Metrics for 'Normal'] | Precision: 0.9105 | Recall: 0.8800 | F1: 0.8950
+2026-03-02 07:35:17,818 - INFO - [Metrics for 'Defect'] | Precision: 0.8705 | Recall: 0.9032 | F1: 0.8866
+2026-03-02 07:35:17,820 - INFO - --------------------------------------------------
+2026-03-02 07:35:17,820 - INFO - [LR]    [49/80] | Learning Rate: 0.000411
+2026-03-02 07:42:37,195 - INFO - [Train] [49/80] | Loss: 0.3837 | Train Acc: 88.55%
+2026-03-02 07:43:16,074 - INFO - [Valid] [49/80] | Loss: 0.3698 | Val Acc: 89.32%
+2026-03-02 07:43:16,217 - INFO - [Metrics for 'Normal'] | Precision: 0.9054 | Recall: 0.8909 | F1: 0.8981
+2026-03-02 07:43:16,217 - INFO - [Metrics for 'Defect'] | Precision: 0.8800 | Recall: 0.8959 | F1: 0.8879
+2026-03-02 07:43:16,224 - INFO - [Best Model Saved] (val loss: 0.3698) -> 'log/Sewer_ML/main_20260301_235104_grid7_patch1_layer6_head4/best_model.pth'
+2026-03-02 07:43:16,224 - INFO - --------------------------------------------------
+2026-03-02 07:43:16,224 - INFO - [LR]    [50/80] | Learning Rate: 0.000394
+2026-03-02 07:50:36,913 - INFO - [Train] [50/80] | Loss: 0.3835 | Train Acc: 88.54%
+2026-03-02 07:51:15,542 - INFO - [Valid] [50/80] | Loss: 0.3692 | Val Acc: 89.33%
+2026-03-02 07:51:15,705 - INFO - [Metrics for 'Normal'] | Precision: 0.9041 | Recall: 0.8927 | F1: 0.8984
+2026-03-02 07:51:15,705 - INFO - [Metrics for 'Defect'] | Precision: 0.8816 | Recall: 0.8940 | F1: 0.8877
+2026-03-02 07:51:15,714 - INFO - [Best Model Saved] (val loss: 0.3692) -> 'log/Sewer_ML/main_20260301_235104_grid7_patch1_layer6_head4/best_model.pth'
+2026-03-02 07:51:15,714 - INFO - --------------------------------------------------
+2026-03-02 07:51:15,715 - INFO - [LR]    [51/80] | Learning Rate: 0.000378
+2026-03-02 07:58:35,735 - INFO - [Train] [51/80] | Loss: 0.3832 | Train Acc: 88.55%
+2026-03-02 07:59:14,692 - INFO - [Valid] [51/80] | Loss: 0.3695 | Val Acc: 89.32%
+2026-03-02 07:59:14,836 - INFO - [Metrics for 'Normal'] | Precision: 0.9060 | Recall: 0.8901 | F1: 0.8980
+2026-03-02 07:59:14,836 - INFO - [Metrics for 'Defect'] | Precision: 0.8794 | Recall: 0.8966 | F1: 0.8879
+2026-03-02 07:59:14,838 - INFO - --------------------------------------------------
+2026-03-02 07:59:14,838 - INFO - [LR]    [52/80] | Learning Rate: 0.000362
+2026-03-02 08:06:34,646 - INFO - [Train] [52/80] | Loss: 0.3828 | Train Acc: 88.62%
+2026-03-02 08:07:13,032 - INFO - [Valid] [52/80] | Loss: 0.3694 | Val Acc: 89.24%
+2026-03-02 08:07:13,176 - INFO - [Metrics for 'Normal'] | Precision: 0.9051 | Recall: 0.8895 | F1: 0.8972
+2026-03-02 08:07:13,176 - INFO - [Metrics for 'Defect'] | Precision: 0.8787 | Recall: 0.8956 | F1: 0.8871
+2026-03-02 08:07:13,178 - INFO - --------------------------------------------------
+2026-03-02 08:07:13,178 - INFO - [LR]    [53/80] | Learning Rate: 0.000346
+2026-03-02 08:14:35,993 - INFO - [Train] [53/80] | Loss: 0.3827 | Train Acc: 88.60%
+2026-03-02 08:15:14,581 - INFO - [Valid] [53/80] | Loss: 0.3691 | Val Acc: 89.30%
+2026-03-02 08:15:14,712 - INFO - [Metrics for 'Normal'] | Precision: 0.9058 | Recall: 0.8899 | F1: 0.8978
+2026-03-02 08:15:14,712 - INFO - [Metrics for 'Defect'] | Precision: 0.8792 | Recall: 0.8964 | F1: 0.8877
+2026-03-02 08:15:14,719 - INFO - [Best Model Saved] (val loss: 0.3691) -> 'log/Sewer_ML/main_20260301_235104_grid7_patch1_layer6_head4/best_model.pth'
+2026-03-02 08:15:14,719 - INFO - --------------------------------------------------
+2026-03-02 08:15:14,719 - INFO - [LR]    [54/80] | Learning Rate: 0.000330
+2026-03-02 08:22:33,307 - INFO - [Train] [54/80] | Loss: 0.3824 | Train Acc: 88.62%
+2026-03-02 08:23:12,483 - INFO - [Valid] [54/80] | Loss: 0.3693 | Val Acc: 89.30%
+2026-03-02 08:23:12,615 - INFO - [Metrics for 'Normal'] | Precision: 0.9069 | Recall: 0.8887 | F1: 0.8977
+2026-03-02 08:23:12,615 - INFO - [Metrics for 'Defect'] | Precision: 0.8781 | Recall: 0.8979 | F1: 0.8879
+2026-03-02 08:23:12,617 - INFO - --------------------------------------------------
+2026-03-02 08:23:12,617 - INFO - [LR]    [55/80] | Learning Rate: 0.000315
+2026-03-02 08:30:33,485 - INFO - [Train] [55/80] | Loss: 0.3822 | Train Acc: 88.66%
+2026-03-02 08:31:12,021 - INFO - [Valid] [55/80] | Loss: 0.3705 | Val Acc: 89.24%
+2026-03-02 08:31:12,171 - INFO - [Metrics for 'Normal'] | Precision: 0.9170 | Recall: 0.8755 | F1: 0.8957
+2026-03-02 08:31:12,171 - INFO - [Metrics for 'Defect'] | Precision: 0.8673 | Recall: 0.9113 | F1: 0.8888
+2026-03-02 08:31:12,173 - INFO - --------------------------------------------------
+2026-03-02 08:31:12,173 - INFO - [LR]    [56/80] | Learning Rate: 0.000300
+2026-03-02 08:38:32,765 - INFO - [Train] [56/80] | Loss: 0.3823 | Train Acc: 88.63%
+2026-03-02 08:39:11,626 - INFO - [Valid] [56/80] | Loss: 0.3678 | Val Acc: 89.42%
+2026-03-02 08:39:11,770 - INFO - [Metrics for 'Normal'] | Precision: 0.9043 | Recall: 0.8943 | F1: 0.8993
+2026-03-02 08:39:11,771 - INFO - [Metrics for 'Defect'] | Precision: 0.8831 | Recall: 0.8941 | F1: 0.8886
+2026-03-02 08:39:11,777 - INFO - [Best Model Saved] (val loss: 0.3678) -> 'log/Sewer_ML/main_20260301_235104_grid7_patch1_layer6_head4/best_model.pth'
+2026-03-02 08:39:11,777 - INFO - --------------------------------------------------
+2026-03-02 08:39:11,777 - INFO - [LR]    [57/80] | Learning Rate: 0.000285
+2026-03-02 08:46:31,268 - INFO - [Train] [57/80] | Loss: 0.3818 | Train Acc: 88.68%
+2026-03-02 08:47:10,229 - INFO - [Valid] [57/80] | Loss: 0.3685 | Val Acc: 89.38%
+2026-03-02 08:47:10,393 - INFO - [Metrics for 'Normal'] | Precision: 0.9128 | Recall: 0.8832 | F1: 0.8978
+2026-03-02 08:47:10,393 - INFO - [Metrics for 'Defect'] | Precision: 0.8739 | Recall: 0.9056 | F1: 0.8894
+2026-03-02 08:47:10,397 - INFO - --------------------------------------------------
+2026-03-02 08:47:10,397 - INFO - [LR]    [58/80] | Learning Rate: 0.000271
+2026-03-02 08:54:29,429 - INFO - [Train] [58/80] | Loss: 0.3815 | Train Acc: 88.70%
+2026-03-02 08:55:08,483 - INFO - [Valid] [58/80] | Loss: 0.3690 | Val Acc: 89.34%
+2026-03-02 08:55:08,615 - INFO - [Metrics for 'Normal'] | Precision: 0.9150 | Recall: 0.8800 | F1: 0.8971
+2026-03-02 08:55:08,615 - INFO - [Metrics for 'Defect'] | Precision: 0.8712 | Recall: 0.9085 | F1: 0.8894
+2026-03-02 08:55:08,617 - INFO - --------------------------------------------------
+2026-03-02 08:55:08,617 - INFO - [LR]    [59/80] | Learning Rate: 0.000258
+2026-03-02 09:02:29,101 - INFO - [Train] [59/80] | Loss: 0.3815 | Train Acc: 88.68%
+2026-03-02 09:03:07,844 - INFO - [Valid] [59/80] | Loss: 0.3679 | Val Acc: 89.36%
+2026-03-02 09:03:08,019 - INFO - [Metrics for 'Normal'] | Precision: 0.9121 | Recall: 0.8838 | F1: 0.8977
+2026-03-02 09:03:08,019 - INFO - [Metrics for 'Defect'] | Precision: 0.8743 | Recall: 0.9046 | F1: 0.8892
+2026-03-02 09:03:08,023 - INFO - --------------------------------------------------
+2026-03-02 09:03:08,023 - INFO - [LR]    [60/80] | Learning Rate: 0.000245
+2026-03-02 09:10:26,507 - INFO - [Train] [60/80] | Loss: 0.3814 | Train Acc: 88.72%
+2026-03-02 09:11:05,350 - INFO - [Valid] [60/80] | Loss: 0.3673 | Val Acc: 89.44%
+2026-03-02 09:11:05,495 - INFO - [Metrics for 'Normal'] | Precision: 0.9057 | Recall: 0.8931 | F1: 0.8993
+2026-03-02 09:11:05,495 - INFO - [Metrics for 'Defect'] | Precision: 0.8822 | Recall: 0.8959 | F1: 0.8890
+2026-03-02 09:11:05,502 - INFO - [Best Model Saved] (val loss: 0.3673) -> 'log/Sewer_ML/main_20260301_235104_grid7_patch1_layer6_head4/best_model.pth'
+2026-03-02 09:11:05,502 - INFO - --------------------------------------------------
+2026-03-02 09:11:05,502 - INFO - [LR]    [61/80] | Learning Rate: 0.000232
+2026-03-02 09:18:25,532 - INFO - [Train] [61/80] | Loss: 0.3815 | Train Acc: 88.69%
+2026-03-02 09:19:04,393 - INFO - [Valid] [61/80] | Loss: 0.3681 | Val Acc: 89.36%
+2026-03-02 09:19:04,536 - INFO - [Metrics for 'Normal'] | Precision: 0.9134 | Recall: 0.8822 | F1: 0.8975
+2026-03-02 09:19:04,536 - INFO - [Metrics for 'Defect'] | Precision: 0.8730 | Recall: 0.9063 | F1: 0.8894
+2026-03-02 09:19:04,539 - INFO - --------------------------------------------------
+2026-03-02 09:19:04,539 - INFO - [LR]    [62/80] | Learning Rate: 0.000220
+2026-03-02 09:26:24,530 - INFO - [Train] [62/80] | Loss: 0.3808 | Train Acc: 88.74%
+2026-03-02 09:27:03,371 - INFO - [Valid] [62/80] | Loss: 0.3676 | Val Acc: 89.40%
+2026-03-02 09:27:03,545 - INFO - [Metrics for 'Normal'] | Precision: 0.9110 | Recall: 0.8858 | F1: 0.8982
+2026-03-02 09:27:03,546 - INFO - [Metrics for 'Defect'] | Precision: 0.8760 | Recall: 0.9031 | F1: 0.8894
+2026-03-02 09:27:03,549 - INFO - --------------------------------------------------
+2026-03-02 09:27:03,549 - INFO - [LR]    [63/80] | Learning Rate: 0.000208
+2026-03-02 09:34:22,564 - INFO - [Train] [63/80] | Loss: 0.3808 | Train Acc: 88.71%
+2026-03-02 09:35:01,365 - INFO - [Valid] [63/80] | Loss: 0.3668 | Val Acc: 89.47%
+2026-03-02 09:35:01,533 - INFO - [Metrics for 'Normal'] | Precision: 0.9038 | Recall: 0.8960 | F1: 0.8999
+2026-03-02 09:35:01,533 - INFO - [Metrics for 'Defect'] | Precision: 0.8847 | Recall: 0.8932 | F1: 0.8889
+2026-03-02 09:35:01,541 - INFO - [Best Model Saved] (val loss: 0.3668) -> 'log/Sewer_ML/main_20260301_235104_grid7_patch1_layer6_head4/best_model.pth'
+2026-03-02 09:35:01,542 - INFO - --------------------------------------------------
+2026-03-02 09:35:01,542 - INFO - [LR]    [64/80] | Learning Rate: 0.000197
+2026-03-02 09:42:21,586 - INFO - [Train] [64/80] | Loss: 0.3807 | Train Acc: 88.75%
+2026-03-02 09:43:00,489 - INFO - [Valid] [64/80] | Loss: 0.3668 | Val Acc: 89.48%
+2026-03-02 09:43:00,635 - INFO - [Metrics for 'Normal'] | Precision: 0.9071 | Recall: 0.8922 | F1: 0.8996
+2026-03-02 09:43:00,635 - INFO - [Metrics for 'Defect'] | Precision: 0.8815 | Recall: 0.8978 | F1: 0.8896
+2026-03-02 09:43:00,637 - INFO - --------------------------------------------------
+2026-03-02 09:43:00,637 - INFO - [LR]    [65/80] | Learning Rate: 0.000186
+2026-03-02 09:50:20,086 - INFO - [Train] [65/80] | Loss: 0.3803 | Train Acc: 88.79%
+2026-03-02 09:50:58,706 - INFO - [Valid] [65/80] | Loss: 0.3683 | Val Acc: 89.36%
+2026-03-02 09:50:58,836 - INFO - [Metrics for 'Normal'] | Precision: 0.9176 | Recall: 0.8772 | F1: 0.8970
+2026-03-02 09:50:58,836 - INFO - [Metrics for 'Defect'] | Precision: 0.8690 | Recall: 0.9119 | F1: 0.8899
+2026-03-02 09:50:58,839 - INFO - --------------------------------------------------
+2026-03-02 09:50:58,839 - INFO - [LR]    [66/80] | Learning Rate: 0.000176
+2026-03-02 09:58:18,603 - INFO - [Train] [66/80] | Loss: 0.3803 | Train Acc: 88.78%
+2026-03-02 09:58:57,493 - INFO - [Valid] [66/80] | Loss: 0.3667 | Val Acc: 89.47%
+2026-03-02 09:58:57,637 - INFO - [Metrics for 'Normal'] | Precision: 0.9074 | Recall: 0.8916 | F1: 0.8994
+2026-03-02 09:58:57,637 - INFO - [Metrics for 'Defect'] | Precision: 0.8810 | Recall: 0.8981 | F1: 0.8895
+2026-03-02 09:58:57,644 - INFO - [Best Model Saved] (val loss: 0.3667) -> 'log/Sewer_ML/main_20260301_235104_grid7_patch1_layer6_head4/best_model.pth'
+2026-03-02 09:58:57,644 - INFO - --------------------------------------------------
+2026-03-02 09:58:57,644 - INFO - [LR]    [67/80] | Learning Rate: 0.000166
+2026-03-02 10:06:16,695 - INFO - [Train] [67/80] | Loss: 0.3802 | Train Acc: 88.79%
+2026-03-02 10:06:56,035 - INFO - [Valid] [67/80] | Loss: 0.3671 | Val Acc: 89.49%
+2026-03-02 10:06:56,180 - INFO - [Metrics for 'Normal'] | Precision: 0.9072 | Recall: 0.8924 | F1: 0.8997
+2026-03-02 10:06:56,180 - INFO - [Metrics for 'Defect'] | Precision: 0.8817 | Recall: 0.8978 | F1: 0.8897
+2026-03-02 10:06:56,182 - INFO - --------------------------------------------------
+2026-03-02 10:06:56,182 - INFO - [LR]    [68/80] | Learning Rate: 0.000157
+2026-03-02 10:14:15,809 - INFO - [Train] [68/80] | Loss: 0.3800 | Train Acc: 88.80%
+2026-03-02 10:14:55,005 - INFO - [Valid] [68/80] | Loss: 0.3671 | Val Acc: 89.54%
+2026-03-02 10:14:55,149 - INFO - [Metrics for 'Normal'] | Precision: 0.9125 | Recall: 0.8869 | F1: 0.8995
+2026-03-02 10:14:55,149 - INFO - [Metrics for 'Defect'] | Precision: 0.8773 | Recall: 0.9048 | F1: 0.8908
+2026-03-02 10:14:55,152 - INFO - --------------------------------------------------
+2026-03-02 10:14:55,152 - INFO - [LR]    [69/80] | Learning Rate: 0.000149
+2026-03-02 10:22:14,526 - INFO - [Train] [69/80] | Loss: 0.3799 | Train Acc: 88.83%
+2026-03-02 10:22:53,071 - INFO - [Valid] [69/80] | Loss: 0.3665 | Val Acc: 89.50%
+2026-03-02 10:22:53,214 - INFO - [Metrics for 'Normal'] | Precision: 0.9113 | Recall: 0.8876 | F1: 0.8993
+2026-03-02 10:22:53,214 - INFO - [Metrics for 'Defect'] | Precision: 0.8778 | Recall: 0.9033 | F1: 0.8904
+2026-03-02 10:22:53,221 - INFO - [Best Model Saved] (val loss: 0.3665) -> 'log/Sewer_ML/main_20260301_235104_grid7_patch1_layer6_head4/best_model.pth'
+2026-03-02 10:22:53,221 - INFO - --------------------------------------------------
+2026-03-02 10:22:53,221 - INFO - [LR]    [70/80] | Learning Rate: 0.000141
+2026-03-02 10:30:11,974 - INFO - [Train] [70/80] | Loss: 0.3799 | Train Acc: 88.78%
+2026-03-02 10:30:50,942 - INFO - [Valid] [70/80] | Loss: 0.3667 | Val Acc: 89.51%
+2026-03-02 10:30:51,087 - INFO - [Metrics for 'Normal'] | Precision: 0.9139 | Recall: 0.8847 | F1: 0.8991
+2026-03-02 10:30:51,087 - INFO - [Metrics for 'Defect'] | Precision: 0.8755 | Recall: 0.9068 | F1: 0.8908
+2026-03-02 10:30:51,089 - INFO - --------------------------------------------------
+2026-03-02 10:30:51,089 - INFO - [LR]    [71/80] | Learning Rate: 0.000134
+2026-03-02 10:38:10,632 - INFO - [Train] [71/80] | Loss: 0.3798 | Train Acc: 88.82%
+2026-03-02 10:38:49,526 - INFO - [Valid] [71/80] | Loss: 0.3668 | Val Acc: 89.53%
+2026-03-02 10:38:49,660 - INFO - [Metrics for 'Normal'] | Precision: 0.9103 | Recall: 0.8893 | F1: 0.8997
+2026-03-02 10:38:49,660 - INFO - [Metrics for 'Defect'] | Precision: 0.8792 | Recall: 0.9019 | F1: 0.8904
+2026-03-02 10:38:49,663 - INFO - --------------------------------------------------
+2026-03-02 10:38:49,663 - INFO - [LR]    [72/80] | Learning Rate: 0.000128
+2026-03-02 10:46:08,872 - INFO - [Train] [72/80] | Loss: 0.3796 | Train Acc: 88.83%
+2026-03-02 10:46:47,520 - INFO - [Valid] [72/80] | Loss: 0.3663 | Val Acc: 89.54%
+2026-03-02 10:46:47,652 - INFO - [Metrics for 'Normal'] | Precision: 0.9086 | Recall: 0.8917 | F1: 0.9000
+2026-03-02 10:46:47,652 - INFO - [Metrics for 'Defect'] | Precision: 0.8812 | Recall: 0.8996 | F1: 0.8903
+2026-03-02 10:46:47,659 - INFO - [Best Model Saved] (val loss: 0.3663) -> 'log/Sewer_ML/main_20260301_235104_grid7_patch1_layer6_head4/best_model.pth'
+2026-03-02 10:46:47,659 - INFO - --------------------------------------------------
+2026-03-02 10:46:47,659 - INFO - [LR]    [73/80] | Learning Rate: 0.000122
+2026-03-02 10:54:06,249 - INFO - [Train] [73/80] | Loss: 0.3794 | Train Acc: 88.84%
+2026-03-02 10:54:45,300 - INFO - [Valid] [73/80] | Loss: 0.3669 | Val Acc: 89.48%
+2026-03-02 10:54:45,444 - INFO - [Metrics for 'Normal'] | Precision: 0.9150 | Recall: 0.8829 | F1: 0.8986
+2026-03-02 10:54:45,444 - INFO - [Metrics for 'Defect'] | Precision: 0.8739 | Recall: 0.9082 | F1: 0.8907
+2026-03-02 10:54:45,447 - INFO - --------------------------------------------------
+2026-03-02 10:54:45,447 - INFO - [LR]    [74/80] | Learning Rate: 0.000117
+2026-03-02 11:02:05,960 - INFO - [Train] [74/80] | Loss: 0.3797 | Train Acc: 88.81%
+2026-03-02 11:02:44,649 - INFO - [Valid] [74/80] | Loss: 0.3662 | Val Acc: 89.54%
+2026-03-02 11:02:44,782 - INFO - [Metrics for 'Normal'] | Precision: 0.9088 | Recall: 0.8915 | F1: 0.9000
+2026-03-02 11:02:44,782 - INFO - [Metrics for 'Defect'] | Precision: 0.8811 | Recall: 0.8998 | F1: 0.8903
+2026-03-02 11:02:44,789 - INFO - [Best Model Saved] (val loss: 0.3662) -> 'log/Sewer_ML/main_20260301_235104_grid7_patch1_layer6_head4/best_model.pth'
+2026-03-02 11:02:44,789 - INFO - --------------------------------------------------
+2026-03-02 11:02:44,789 - INFO - [LR]    [75/80] | Learning Rate: 0.000112
+2026-03-02 11:10:03,001 - INFO - [Train] [75/80] | Loss: 0.3795 | Train Acc: 88.85%
+2026-03-02 11:10:42,124 - INFO - [Valid] [75/80] | Loss: 0.3661 | Val Acc: 89.55%
+2026-03-02 11:10:42,299 - INFO - [Metrics for 'Normal'] | Precision: 0.9057 | Recall: 0.8954 | F1: 0.9005
+2026-03-02 11:10:42,299 - INFO - [Metrics for 'Defect'] | Precision: 0.8844 | Recall: 0.8957 | F1: 0.8900
+2026-03-02 11:10:42,308 - INFO - [Best Model Saved] (val loss: 0.3661) -> 'log/Sewer_ML/main_20260301_235104_grid7_patch1_layer6_head4/best_model.pth'
+2026-03-02 11:10:42,308 - INFO - --------------------------------------------------
+2026-03-02 11:10:42,308 - INFO - [LR]    [76/80] | Learning Rate: 0.000109
+2026-03-02 11:18:01,472 - INFO - [Train] [76/80] | Loss: 0.3794 | Train Acc: 88.84%
+2026-03-02 11:18:40,662 - INFO - [Valid] [76/80] | Loss: 0.3667 | Val Acc: 89.50%
+2026-03-02 11:18:40,836 - INFO - [Metrics for 'Normal'] | Precision: 0.9145 | Recall: 0.8838 | F1: 0.8989
+2026-03-02 11:18:40,836 - INFO - [Metrics for 'Defect'] | Precision: 0.8747 | Recall: 0.9075 | F1: 0.8908
+2026-03-02 11:18:40,840 - INFO - --------------------------------------------------
+2026-03-02 11:18:40,840 - INFO - [LR]    [77/80] | Learning Rate: 0.000106
+2026-03-02 11:26:00,321 - INFO - [Train] [77/80] | Loss: 0.3794 | Train Acc: 88.82%
+2026-03-02 11:26:38,661 - INFO - [Valid] [77/80] | Loss: 0.3663 | Val Acc: 89.51%
+2026-03-02 11:26:38,837 - INFO - [Metrics for 'Normal'] | Precision: 0.9133 | Recall: 0.8854 | F1: 0.8991
+2026-03-02 11:26:38,837 - INFO - [Metrics for 'Defect'] | Precision: 0.8760 | Recall: 0.9059 | F1: 0.8907
+2026-03-02 11:26:38,840 - INFO - --------------------------------------------------
+2026-03-02 11:26:38,841 - INFO - [LR]    [78/80] | Learning Rate: 0.000103
+2026-03-02 11:33:57,881 - INFO - [Train] [78/80] | Loss: 0.3792 | Train Acc: 88.89%
+2026-03-02 11:34:37,148 - INFO - [Valid] [78/80] | Loss: 0.3657 | Val Acc: 89.55%
+2026-03-02 11:34:37,293 - INFO - [Metrics for 'Normal'] | Precision: 0.9127 | Recall: 0.8869 | F1: 0.8996
+2026-03-02 11:34:37,293 - INFO - [Metrics for 'Defect'] | Precision: 0.8773 | Recall: 0.9051 | F1: 0.8910
+2026-03-02 11:34:37,300 - INFO - [Best Model Saved] (val loss: 0.3657) -> 'log/Sewer_ML/main_20260301_235104_grid7_patch1_layer6_head4/best_model.pth'
+2026-03-02 11:34:37,300 - INFO - --------------------------------------------------
+2026-03-02 11:34:37,300 - INFO - [LR]    [79/80] | Learning Rate: 0.000101
+2026-03-02 11:41:57,624 - INFO - [Train] [79/80] | Loss: 0.3790 | Train Acc: 88.85%
+2026-03-02 11:42:36,659 - INFO - [Valid] [79/80] | Loss: 0.3665 | Val Acc: 89.52%
+2026-03-02 11:42:36,804 - INFO - [Metrics for 'Normal'] | Precision: 0.9128 | Recall: 0.8864 | F1: 0.8994
+2026-03-02 11:42:36,804 - INFO - [Metrics for 'Defect'] | Precision: 0.8768 | Recall: 0.9052 | F1: 0.8908
+2026-03-02 11:42:36,806 - INFO - --------------------------------------------------
+2026-03-02 11:42:36,806 - INFO - [LR]    [80/80] | Learning Rate: 0.000100
+2026-03-02 11:49:56,317 - INFO - [Train] [80/80] | Loss: 0.3790 | Train Acc: 88.86%
+2026-03-02 11:50:34,671 - INFO - [Valid] [80/80] | Loss: 0.3658 | Val Acc: 89.56%
+2026-03-02 11:50:34,817 - INFO - [Metrics for 'Normal'] | Precision: 0.9153 | Recall: 0.8841 | F1: 0.8994
+2026-03-02 11:50:34,817 - INFO - [Metrics for 'Defect'] | Precision: 0.8750 | Recall: 0.9084 | F1: 0.8914
+2026-03-02 11:50:34,820 - INFO - 훈련 완료. 최고 성능 모델 'log/Sewer_ML/main_20260301_235104_grid7_patch1_layer6_head4/best_model.pth'을(를) 불러와 테스트 세트로 최종 평가합니다.
+2026-03-02 11:50:34,838 - INFO - ICAM Pruning 정책: full_model (encoder+decoder+classifier 대상, 마지막 분류층/attention qkv/embedding bridge/learnable queries 제외). ignored_layers=23
+2026-03-02 11:50:34,839 - INFO - Wanda Pruning을 시작합니다.
+2026-03-02 11:50:34,839 - INFO - 저장된 pruning_history가 있어 Wanda calibration을 건너뜁니다.
+2026-03-02 11:50:34,839 - INFO - 분류 레이어 'Linear'을(를) Pruning 대상에서 제외합니다.
+2026-03-02 11:50:34,868 - INFO - 저장된 pruning_history를 사용해 Pruning 구조를 재현했습니다.
+2026-03-02 11:50:34,868 - INFO - torch-pruning 완료. 모델 구조가 희소도(0.7)에 맞춰 변경되었습니다.
+2026-03-02 11:50:34,868 - INFO - ==================================================
+2026-03-02 11:50:34,877 - INFO - ==================================================
+2026-03-02 11:50:34,877 - INFO - Test 모드를 시작합니다.
+2026-03-02 11:50:34,886 - INFO - 'log/Sewer_ML/main_20260301_235104_grid7_patch1_layer6_head4/best_model.pth' 가중치 로드 완료.
+2026-03-02 11:50:34,886 - INFO - FLOPs 및 MACs 측정을 시작합니다...
+2026-03-02 11:50:34,887 - INFO - FLOPs 측정 전 런타임 텐서 캐시 6개를 정리했습니다.
+2026-03-02 11:50:34,899 - INFO - Model FLOPs: 0.0358 GFLOPs
+2026-03-02 11:50:34,899 - INFO - Model MACs: 0.0179 GMACs
+2026-03-02 11:51:15,115 - INFO - [Test] Loss: 0.2735 | Test Acc: 89.55%
+2026-03-02 11:51:15,258 - INFO - [Metrics for 'Normal'] | Precision: 0.9127 | Recall: 0.8869 | F1: 0.8996
+2026-03-02 11:51:15,258 - INFO - [Metrics for 'Defect'] | Precision: 0.8773 | Recall: 0.9051 | F1: 0.8910
+2026-03-02 11:51:15,410 - INFO - ==================================================
+2026-03-02 11:51:15,410 - INFO - 혼동 행렬 저장 완료. 'log/Sewer_ML/main_20260301_235104_grid7_patch1_layer6_head4/confusion_matrix_20260301_235104.png' and 'log/Sewer_ML/main_20260301_235104_grid7_patch1_layer6_head4/confusion_matrix_20260301_235104.pdf'
+2026-03-02 11:51:15,410 - INFO - 어텐션 맵 시각화를 시작합니다 (1500개 샘플, 저장 위치: 'log/Sewer_ML/main_20260301_235104_grid7_patch1_layer6_head4/attention_map_20260301_235104').
+2026-03-02 12:30:23,733 - INFO - 어텐션 맵 1500개 저장 완료.
+2026-03-02 12:30:23,836 - INFO - Val Acc 그래프 저장 완료: 'log/Sewer_ML/main_20260301_235104_grid7_patch1_layer6_head4/graph_20260301_235104/val_acc.png' and 'log/Sewer_ML/main_20260301_235104_grid7_patch1_layer6_head4/graph_20260301_235104/val_acc.pdf'
+2026-03-02 12:30:23,948 - INFO - Train/Val Acc 그래프 저장 완료: 'log/Sewer_ML/main_20260301_235104_grid7_patch1_layer6_head4/graph_20260301_235104/train_val_acc.png' and 'log/Sewer_ML/main_20260301_235104_grid7_patch1_layer6_head4/graph_20260301_235104/train_val_acc.pdf'
+2026-03-02 12:30:24,041 - INFO - F1 (Normal) 그래프 저장 완료: 'log/Sewer_ML/main_20260301_235104_grid7_patch1_layer6_head4/graph_20260301_235104/F1_normal.png' and 'log/Sewer_ML/main_20260301_235104_grid7_patch1_layer6_head4/graph_20260301_235104/F1_normal.pdf'
+2026-03-02 12:30:24,140 - INFO - Validation Loss 그래프 저장 완료: 'log/Sewer_ML/main_20260301_235104_grid7_patch1_layer6_head4/graph_20260301_235104/val_loss.png' and 'log/Sewer_ML/main_20260301_235104_grid7_patch1_layer6_head4/graph_20260301_235104/val_loss.pdf'
+2026-03-02 12:30:24,238 - INFO - Learning Rate 그래프 저장 완료: 'log/Sewer_ML/main_20260301_235104_grid7_patch1_layer6_head4/graph_20260301_235104/learning_rate.png' and 'log/Sewer_ML/main_20260301_235104_grid7_patch1_layer6_head4/graph_20260301_235104/learning_rate.pdf'
+2026-03-02 12:30:30,348 - INFO - 종합 그래프 저장 완료: 'log/Sewer_ML/main_20260301_235104_grid7_patch1_layer6_head4/graph_20260301_235104/compile.png' and 'log/Sewer_ML/main_20260301_235104_grid7_patch1_layer6_head4/graph_20260301_235104/compile.pdf'
