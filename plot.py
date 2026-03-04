@@ -21,6 +21,8 @@ def plot_and_save_val_accuracy_graph(log_file_path, save_dir, final_acc, timesta
     """
     epochs = []
     accuracies = []
+    epoch_offset = 0
+    last_epoch = -1
 
     # 그래프를 저장할 전용 폴더 생성
     graph_dir = os.path.join(save_dir, f'graph_{timestamp}')
@@ -35,7 +37,11 @@ def plot_and_save_val_accuracy_graph(log_file_path, save_dir, final_acc, timesta
             for line in f:
                 match = pattern.search(line)
                 if match:
-                    epochs.append(int(match.group(1)))
+                    current_epoch = int(match.group(1))
+                    if current_epoch < last_epoch:
+                        epoch_offset += last_epoch
+                    last_epoch = current_epoch
+                    epochs.append(current_epoch + epoch_offset)
                     accuracies.append(float(match.group(2)))
 
         if not epochs:
@@ -77,6 +83,8 @@ def plot_and_save_train_val_accuracy_graph(log_file_path, save_dir, final_acc, t
     """
     train_epochs, train_accuracies = [], []
     val_epochs, val_accuracies = [], []
+    train_offset, val_offset = 0, 0
+    last_train_epoch, last_val_epoch = -1, -1
 
     # 그래프를 저장할 전용 폴더 생성
     graph_dir = os.path.join(save_dir, f'graph_{timestamp}')
@@ -92,10 +100,18 @@ def plot_and_save_train_val_accuracy_graph(log_file_path, save_dir, final_acc, t
                 train_match = train_pattern.search(line)
                 val_match = val_pattern.search(line)
                 if train_match:
-                    train_epochs.append(int(train_match.group(1)))
+                    curr_train = int(train_match.group(1))
+                    if curr_train < last_train_epoch:
+                        train_offset += last_train_epoch
+                    last_train_epoch = curr_train
+                    train_epochs.append(curr_train + train_offset)
                     train_accuracies.append(float(train_match.group(2)))
                 if val_match:
-                    val_epochs.append(int(val_match.group(1)))
+                    curr_val = int(val_match.group(1))
+                    if curr_val < last_val_epoch:
+                        val_offset += last_val_epoch
+                    last_val_epoch = curr_val
+                    val_epochs.append(curr_val + val_offset)
                     val_accuracies.append(float(val_match.group(2)))
 
         if not val_epochs:
@@ -247,6 +263,8 @@ def plot_and_save_loss_graph(log_file_path, save_dir, timestamp):
     """
     epochs = []
     losses = []
+    epoch_offset = 0
+    last_epoch = -1
 
     graph_dir = os.path.join(save_dir, f'graph_{timestamp}')
     os.makedirs(graph_dir, exist_ok=True)
@@ -259,7 +277,11 @@ def plot_and_save_loss_graph(log_file_path, save_dir, timestamp):
             for line in f:
                 match = pattern.search(line)
                 if match:
-                    epochs.append(int(match.group(1)))
+                    current_epoch = int(match.group(1))
+                    if current_epoch < last_epoch:
+                        epoch_offset += last_epoch
+                    last_epoch = current_epoch
+                    epochs.append(current_epoch + epoch_offset)
                     losses.append(float(match.group(2)))
 
         if not epochs:
@@ -297,6 +319,8 @@ def plot_and_save_lr_graph(log_file_path, save_dir, timestamp):
     """
     epochs = []
     learning_rates = []
+    epoch_offset = 0
+    last_epoch = -1
 
     graph_dir = os.path.join(save_dir, f'graph_{timestamp}')
     os.makedirs(graph_dir, exist_ok=True)
@@ -309,7 +333,11 @@ def plot_and_save_lr_graph(log_file_path, save_dir, timestamp):
             for line in f:
                 match = pattern.search(line)
                 if match:
-                    epochs.append(int(match.group(1)))
+                    current_epoch = int(match.group(1))
+                    if current_epoch < last_epoch:
+                        epoch_offset += last_epoch
+                    last_epoch = current_epoch
+                    epochs.append(current_epoch + epoch_offset)
                     learning_rates.append(float(match.group(2)))
 
         if not epochs:
