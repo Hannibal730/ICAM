@@ -1,0 +1,683 @@
+2026-03-04 05:06:27,240 - INFO - 로그 파일이 'log/Sewer_TAPNEW/baseline_xie2019_20260304_050627/log_20260304_050627.log'에 저장됩니다.
+2026-03-04 05:06:27,260 - INFO - ==================================================
+2026-03-04 05:06:27,261 - INFO - config.yaml:
+2026-03-04 05:06:27,261 - INFO - 
+run:
+  global_seed: 42
+  cuda: true
+  mode: train
+  pth_best_name: best_model.pth
+  only_inference: false
+  show_log: true
+  dataset:
+    name: Sewer_TAPNEW
+    type: image_folder
+    train_split_ratio: 0.8
+    paths:
+      train_img_dir: /home/tai/workspace/ssd1/data/Sewer/Sewer-ML/train
+      valid_img_dir: /home/tai/workspace/ssd1/data/Sewer/Sewer-ML/valid
+      test_img_dir: /home/tai/workspace/ssd1/data/Sewer/Sewer-ML/valid
+      train_csv: /home/tai/workspace/ssd1/data/Sewer/Sewer-ML/SewerML_Train.csv
+      valid_csv: /home/tai/workspace/ssd1/data/Sewer/Sewer-ML/SewerML_Val.csv
+      test_csv: /home/tai/workspace/ssd1/data/Sewer/Sewer-ML/SewerML_Val.csv
+      img_folder: /home/cau/workspace/data/Sewer/Sewer-TAPNEW
+  random_sampling_ratio:
+    train: 1.0
+    valid: 1.0
+    test: 1.0
+  num_workers: 16
+model:
+  img_size: 224
+  num_patches_per_side: 7
+  num_decoder_patches: 1
+  num_decoder_layers: 6
+  num_heads: 4
+  cnn_feature_extractor:
+    name: custom32
+  encoder_dim: 32
+  emb_dim: 32
+  adaptive_initial_query: true
+  decoder_ff_ratio: 2
+  dropout: 0.1
+  positional_encoding: true
+  drop_path_ratio: 0.2
+  visualize_attention: false
+  num_plot_attention: 1500
+training_main:
+  epochs: 10
+  batch_size: 16
+  pre_trained: false
+  optimizer: adamw
+  lr: 0.001
+  weight_decay: 0.0001
+  loss_function: CrossEntropyLoss
+  label_smoothing: 0.1
+  scheduler: cosineannealinglr
+  scheduler_params:
+    T_max: 10
+    eta_min: 0.0001
+  best_model_criterion: val_loss
+training_baseline:
+  model_name: xie2019
+  epochs: 90
+  batch_size: 16
+  pre_trained: false
+  optimizer: adamw
+  lr: 0.001
+  weight_decay: 0.0001
+  loss_function: CrossEntropyLoss
+  label_smoothing: 0.1
+  scheduler: cosineannealinglr
+  scheduler_params:
+    T_max: 90
+    eta_min: 0.0001
+  best_model_criterion: val_loss
+finetuning_pruned:
+  epochs: 80
+  batch_size: 16
+  optimizer: adamw
+  lr: 0.001
+  weight_decay: 0.0001
+  loss_function: CrossEntropyLoss
+  label_smoothing: 0.1
+  scheduler: cosineannealinglr
+  scheduler_params:
+    T_max: 80
+    eta_min: 0.0001
+  best_model_criterion: val_loss
+  exclude_attention_qkv_pruning: true
+  exclude_embedding_bridge_pruning: true
+  exclude_learnable_queries_pruning: true
+
+2026-03-04 05:06:27,261 - INFO - ==================================================
+2026-03-04 05:06:27,400 - INFO - CUDA 사용 가능. GPU 사용을 시작합니다. (Device: NVIDIA RTX PRO 6000 Blackwell Server Edition)
+2026-03-04 05:06:27,401 - INFO - 'Sewer_TAPNEW' 데이터 로드를 시작합니다 (Type: image_folder).
+2026-03-04 05:06:27,402 - INFO - '/home/cau/workspace/data/Sewer/Sewer-TAPNEW' 경로의 데이터를 훈련/테스트셋으로 분할합니다.
+2026-03-04 05:06:27,431 - INFO - 총 1692개 데이터를 훈련용 1353개, 테스트용 339개로 분할합니다 (split_seed=42).
+2026-03-04 05:06:27,432 - INFO - 데이터셋 클래스: ['abnormal', 'normal'] (총 2개)
+2026-03-04 05:06:27,435 - INFO - 훈련 데이터: 1353개, 검증 데이터: 339개, 테스트 데이터: 339개
+2026-03-04 05:06:27,435 - INFO - Baseline 모델 'xie2019'을(를) 생성합니다 (사전 훈련 가중치: 미사용).
+2026-03-04 05:06:27,989 - INFO - ==================================================
+2026-03-04 05:06:27,990 - INFO - 모델 파라미터 수:
+2026-03-04 05:06:27,990 - INFO -   - 총 파라미터: 9,160,194 개
+2026-03-04 05:06:27,990 - INFO -   - 학습 가능한 파라미터: 9,160,194 개
+2026-03-04 05:06:27,990 - INFO - ================================================================================
+2026-03-04 05:06:27,990 - INFO - 단계 1/2: 사전 훈련(Pre-training)을 시작합니다.
+2026-03-04 05:06:27,990 - INFO - ================================================================================
+2026-03-04 05:06:27,991 - INFO - 옵티마이저: AdamW (lr=0.001, weight_decay=0.0001)
+2026-03-04 05:06:27,992 - INFO - 스케줄러: CosineAnnealingLR (T_max=90, eta_min=0.0001)
+2026-03-04 05:06:27,993 - INFO - ==================================================
+2026-03-04 05:06:27,993 - INFO - train 모드를 시작합니다.
+2026-03-04 05:06:27,994 - INFO - 손실 함수: CrossEntropyLoss (label_smoothing: 0.1)
+2026-03-04 05:06:27,994 - INFO - Best metric을 초기값(inf)으로 설정합니다.
+2026-03-04 05:06:27,994 - INFO - --------------------------------------------------
+2026-03-04 05:06:27,995 - INFO - [LR]    [1/90] | Learning Rate: 0.001000
+2026-03-04 05:06:41,524 - INFO - [Train] [1/90] | Loss: 0.6007 | Train Acc: 73.74%
+2026-03-04 05:06:46,520 - INFO - [Valid] [1/90] | Loss: 0.5682 | Val Acc: 74.63%
+2026-03-04 05:06:46,548 - INFO - [Metrics for 'abnormal'] | Precision: 0.8586 | Recall: 0.5414 | F1: 0.6641
+2026-03-04 05:06:46,548 - INFO - [Metrics for 'normal'] | Precision: 0.7000 | Recall: 0.9231 | F1: 0.7962
+2026-03-04 05:06:46,693 - INFO - [Best Model Saved] (val loss: 0.5682) -> 'log/Sewer_TAPNEW/baseline_xie2019_20260304_050627/best_model.pth'
+2026-03-04 05:06:46,694 - INFO - --------------------------------------------------
+2026-03-04 05:06:46,695 - INFO - [LR]    [2/90] | Learning Rate: 0.001000
+2026-03-04 05:06:58,789 - INFO - [Train] [2/90] | Loss: 0.5414 | Train Acc: 78.57%
+2026-03-04 05:07:02,404 - INFO - [Valid] [2/90] | Loss: 0.6411 | Val Acc: 70.80%
+2026-03-04 05:07:02,426 - INFO - [Metrics for 'abnormal'] | Precision: 0.6330 | Recall: 0.8790 | F1: 0.7360
+2026-03-04 05:07:02,426 - INFO - [Metrics for 'normal'] | Precision: 0.8430 | Recall: 0.5604 | F1: 0.6733
+2026-03-04 05:07:02,433 - INFO - --------------------------------------------------
+2026-03-04 05:07:02,433 - INFO - [LR]    [3/90] | Learning Rate: 0.000999
+2026-03-04 05:07:14,432 - INFO - [Train] [3/90] | Loss: 0.5208 | Train Acc: 78.87%
+2026-03-04 05:07:18,055 - INFO - [Valid] [3/90] | Loss: 0.5692 | Val Acc: 71.09%
+2026-03-04 05:07:18,086 - INFO - [Metrics for 'abnormal'] | Precision: 0.6513 | Recall: 0.8089 | F1: 0.7216
+2026-03-04 05:07:18,086 - INFO - [Metrics for 'normal'] | Precision: 0.7917 | Recall: 0.6264 | F1: 0.6994
+2026-03-04 05:07:18,093 - INFO - --------------------------------------------------
+2026-03-04 05:07:18,094 - INFO - [LR]    [4/90] | Learning Rate: 0.000998
+2026-03-04 05:07:29,664 - INFO - [Train] [4/90] | Loss: 0.5149 | Train Acc: 79.46%
+2026-03-04 05:07:33,416 - INFO - [Valid] [4/90] | Loss: 0.5632 | Val Acc: 75.52%
+2026-03-04 05:07:33,445 - INFO - [Metrics for 'abnormal'] | Precision: 0.7721 | Recall: 0.6688 | F1: 0.7167
+2026-03-04 05:07:33,446 - INFO - [Metrics for 'normal'] | Precision: 0.7438 | Recall: 0.8297 | F1: 0.7844
+2026-03-04 05:07:33,610 - INFO - [Best Model Saved] (val loss: 0.5632) -> 'log/Sewer_TAPNEW/baseline_xie2019_20260304_050627/best_model.pth'
+2026-03-04 05:07:33,611 - INFO - --------------------------------------------------
+2026-03-04 05:07:33,612 - INFO - [LR]    [5/90] | Learning Rate: 0.000996
+2026-03-04 05:07:45,318 - INFO - [Train] [5/90] | Loss: 0.4990 | Train Acc: 80.65%
+2026-03-04 05:07:49,458 - INFO - [Valid] [5/90] | Loss: 0.5378 | Val Acc: 77.29%
+2026-03-04 05:07:49,485 - INFO - [Metrics for 'abnormal'] | Precision: 0.7500 | Recall: 0.7643 | F1: 0.7571
+2026-03-04 05:07:49,486 - INFO - [Metrics for 'normal'] | Precision: 0.7933 | Recall: 0.7802 | F1: 0.7867
+2026-03-04 05:07:49,632 - INFO - [Best Model Saved] (val loss: 0.5378) -> 'log/Sewer_TAPNEW/baseline_xie2019_20260304_050627/best_model.pth'
+2026-03-04 05:07:49,632 - INFO - --------------------------------------------------
+2026-03-04 05:07:49,633 - INFO - [LR]    [6/90] | Learning Rate: 0.000993
+2026-03-04 05:08:01,206 - INFO - [Train] [6/90] | Loss: 0.5049 | Train Acc: 80.51%
+2026-03-04 05:08:04,816 - INFO - [Valid] [6/90] | Loss: 0.5168 | Val Acc: 78.76%
+2026-03-04 05:08:04,847 - INFO - [Metrics for 'abnormal'] | Precision: 0.7640 | Recall: 0.7834 | F1: 0.7736
+2026-03-04 05:08:04,847 - INFO - [Metrics for 'normal'] | Precision: 0.8090 | Recall: 0.7912 | F1: 0.8000
+2026-03-04 05:08:05,011 - INFO - [Best Model Saved] (val loss: 0.5168) -> 'log/Sewer_TAPNEW/baseline_xie2019_20260304_050627/best_model.pth'
+2026-03-04 05:08:05,012 - INFO - --------------------------------------------------
+2026-03-04 05:08:05,012 - INFO - [LR]    [7/90] | Learning Rate: 0.000990
+2026-03-04 05:08:16,463 - INFO - [Train] [7/90] | Loss: 0.4832 | Train Acc: 82.44%
+2026-03-04 05:08:20,237 - INFO - [Valid] [7/90] | Loss: 0.5165 | Val Acc: 80.24%
+2026-03-04 05:08:20,265 - INFO - [Metrics for 'abnormal'] | Precision: 0.8000 | Recall: 0.7643 | F1: 0.7818
+2026-03-04 05:08:20,265 - INFO - [Metrics for 'normal'] | Precision: 0.8042 | Recall: 0.8352 | F1: 0.8194
+2026-03-04 05:08:20,452 - INFO - [Best Model Saved] (val loss: 0.5165) -> 'log/Sewer_TAPNEW/baseline_xie2019_20260304_050627/best_model.pth'
+2026-03-04 05:08:20,452 - INFO - --------------------------------------------------
+2026-03-04 05:08:20,453 - INFO - [LR]    [8/90] | Learning Rate: 0.000987
+2026-03-04 05:08:31,675 - INFO - [Train] [8/90] | Loss: 0.4824 | Train Acc: 82.81%
+2026-03-04 05:08:35,531 - INFO - [Valid] [8/90] | Loss: 0.5096 | Val Acc: 80.83%
+2026-03-04 05:08:35,554 - INFO - [Metrics for 'abnormal'] | Precision: 0.8108 | Recall: 0.7643 | F1: 0.7869
+2026-03-04 05:08:35,555 - INFO - [Metrics for 'normal'] | Precision: 0.8063 | Recall: 0.8462 | F1: 0.8257
+2026-03-04 05:08:35,703 - INFO - [Best Model Saved] (val loss: 0.5096) -> 'log/Sewer_TAPNEW/baseline_xie2019_20260304_050627/best_model.pth'
+2026-03-04 05:08:35,704 - INFO - --------------------------------------------------
+2026-03-04 05:08:35,704 - INFO - [LR]    [9/90] | Learning Rate: 0.000983
+2026-03-04 05:08:47,324 - INFO - [Train] [9/90] | Loss: 0.4763 | Train Acc: 83.18%
+2026-03-04 05:08:51,343 - INFO - [Valid] [9/90] | Loss: 0.5215 | Val Acc: 76.40%
+2026-03-04 05:08:51,370 - INFO - [Metrics for 'abnormal'] | Precision: 0.7151 | Recall: 0.8153 | F1: 0.7619
+2026-03-04 05:08:51,371 - INFO - [Metrics for 'normal'] | Precision: 0.8187 | Recall: 0.7198 | F1: 0.7661
+2026-03-04 05:08:51,380 - INFO - --------------------------------------------------
+2026-03-04 05:08:51,381 - INFO - [LR]    [10/90] | Learning Rate: 0.000978
+2026-03-04 05:09:03,380 - INFO - [Train] [10/90] | Loss: 0.4720 | Train Acc: 82.44%
+2026-03-04 05:09:07,069 - INFO - [Valid] [10/90] | Loss: 0.5138 | Val Acc: 79.65%
+2026-03-04 05:09:07,096 - INFO - [Metrics for 'abnormal'] | Precision: 0.8014 | Recall: 0.7452 | F1: 0.7723
+2026-03-04 05:09:07,096 - INFO - [Metrics for 'normal'] | Precision: 0.7927 | Recall: 0.8407 | F1: 0.8160
+2026-03-04 05:09:07,106 - INFO - --------------------------------------------------
+2026-03-04 05:09:07,107 - INFO - [LR]    [11/90] | Learning Rate: 0.000973
+2026-03-04 05:09:18,730 - INFO - [Train] [11/90] | Loss: 0.4671 | Train Acc: 84.75%
+2026-03-04 05:09:22,369 - INFO - [Valid] [11/90] | Loss: 0.5324 | Val Acc: 76.70%
+2026-03-04 05:09:22,388 - INFO - [Metrics for 'abnormal'] | Precision: 0.7191 | Recall: 0.8153 | F1: 0.7642
+2026-03-04 05:09:22,388 - INFO - [Metrics for 'normal'] | Precision: 0.8199 | Recall: 0.7253 | F1: 0.7697
+2026-03-04 05:09:22,395 - INFO - --------------------------------------------------
+2026-03-04 05:09:22,395 - INFO - [LR]    [12/90] | Learning Rate: 0.000967
+2026-03-04 05:09:34,822 - INFO - [Train] [12/90] | Loss: 0.4535 | Train Acc: 83.48%
+2026-03-04 05:09:38,407 - INFO - [Valid] [12/90] | Loss: 0.6273 | Val Acc: 76.70%
+2026-03-04 05:09:38,434 - INFO - [Metrics for 'abnormal'] | Precision: 0.7532 | Recall: 0.7389 | F1: 0.7460
+2026-03-04 05:09:38,435 - INFO - [Metrics for 'normal'] | Precision: 0.7784 | Recall: 0.7912 | F1: 0.7847
+2026-03-04 05:09:38,444 - INFO - --------------------------------------------------
+2026-03-04 05:09:38,445 - INFO - [LR]    [13/90] | Learning Rate: 0.000961
+2026-03-04 05:09:49,867 - INFO - [Train] [13/90] | Loss: 0.4630 | Train Acc: 83.04%
+2026-03-04 05:09:53,547 - INFO - [Valid] [13/90] | Loss: 0.4827 | Val Acc: 82.01%
+2026-03-04 05:09:53,575 - INFO - [Metrics for 'abnormal'] | Precision: 0.7963 | Recall: 0.8217 | F1: 0.8088
+2026-03-04 05:09:53,575 - INFO - [Metrics for 'normal'] | Precision: 0.8418 | Recall: 0.8187 | F1: 0.8301
+2026-03-04 05:09:53,741 - INFO - [Best Model Saved] (val loss: 0.4827) -> 'log/Sewer_TAPNEW/baseline_xie2019_20260304_050627/best_model.pth'
+2026-03-04 05:09:53,741 - INFO - --------------------------------------------------
+2026-03-04 05:09:53,742 - INFO - [LR]    [14/90] | Learning Rate: 0.000954
+2026-03-04 05:10:05,474 - INFO - [Train] [14/90] | Loss: 0.4412 | Train Acc: 84.75%
+2026-03-04 05:10:09,113 - INFO - [Valid] [14/90] | Loss: 0.5035 | Val Acc: 80.53%
+2026-03-04 05:10:09,141 - INFO - [Metrics for 'abnormal'] | Precision: 0.8054 | Recall: 0.7643 | F1: 0.7843
+2026-03-04 05:10:09,141 - INFO - [Metrics for 'normal'] | Precision: 0.8053 | Recall: 0.8407 | F1: 0.8226
+2026-03-04 05:10:09,150 - INFO - --------------------------------------------------
+2026-03-04 05:10:09,151 - INFO - [LR]    [15/90] | Learning Rate: 0.000947
+2026-03-04 05:10:20,450 - INFO - [Train] [15/90] | Loss: 0.4427 | Train Acc: 85.04%
+2026-03-04 05:10:24,002 - INFO - [Valid] [15/90] | Loss: 0.4877 | Val Acc: 81.12%
+2026-03-04 05:10:24,029 - INFO - [Metrics for 'abnormal'] | Precision: 0.8039 | Recall: 0.7834 | F1: 0.7935
+2026-03-04 05:10:24,030 - INFO - [Metrics for 'normal'] | Precision: 0.8172 | Recall: 0.8352 | F1: 0.8261
+2026-03-04 05:10:24,040 - INFO - --------------------------------------------------
+2026-03-04 05:10:24,040 - INFO - [LR]    [16/90] | Learning Rate: 0.000940
+2026-03-04 05:10:35,643 - INFO - [Train] [16/90] | Loss: 0.4289 | Train Acc: 86.24%
+2026-03-04 05:10:39,663 - INFO - [Valid] [16/90] | Loss: 0.4967 | Val Acc: 80.24%
+2026-03-04 05:10:39,683 - INFO - [Metrics for 'abnormal'] | Precision: 0.7679 | Recall: 0.8217 | F1: 0.7938
+2026-03-04 05:10:39,683 - INFO - [Metrics for 'normal'] | Precision: 0.8363 | Recall: 0.7857 | F1: 0.8102
+2026-03-04 05:10:39,690 - INFO - --------------------------------------------------
+2026-03-04 05:10:39,690 - INFO - [LR]    [17/90] | Learning Rate: 0.000932
+2026-03-04 05:10:51,061 - INFO - [Train] [17/90] | Loss: 0.4275 | Train Acc: 85.49%
+2026-03-04 05:10:54,609 - INFO - [Valid] [17/90] | Loss: 0.4759 | Val Acc: 83.19%
+2026-03-04 05:10:54,637 - INFO - [Metrics for 'abnormal'] | Precision: 0.8125 | Recall: 0.8280 | F1: 0.8202
+2026-03-04 05:10:54,638 - INFO - [Metrics for 'normal'] | Precision: 0.8492 | Recall: 0.8352 | F1: 0.8421
+2026-03-04 05:10:54,823 - INFO - [Best Model Saved] (val loss: 0.4759) -> 'log/Sewer_TAPNEW/baseline_xie2019_20260304_050627/best_model.pth'
+2026-03-04 05:10:54,823 - INFO - --------------------------------------------------
+2026-03-04 05:10:54,824 - INFO - [LR]    [18/90] | Learning Rate: 0.000923
+2026-03-04 05:11:06,177 - INFO - [Train] [18/90] | Loss: 0.4333 | Train Acc: 84.52%
+2026-03-04 05:11:09,704 - INFO - [Valid] [18/90] | Loss: 0.5288 | Val Acc: 80.53%
+2026-03-04 05:11:09,732 - INFO - [Metrics for 'abnormal'] | Precision: 0.7758 | Recall: 0.8153 | F1: 0.7950
+2026-03-04 05:11:09,732 - INFO - [Metrics for 'normal'] | Precision: 0.8333 | Recall: 0.7967 | F1: 0.8146
+2026-03-04 05:11:09,742 - INFO - --------------------------------------------------
+2026-03-04 05:11:09,743 - INFO - [LR]    [19/90] | Learning Rate: 0.000914
+2026-03-04 05:11:21,500 - INFO - [Train] [19/90] | Loss: 0.4220 | Train Acc: 85.34%
+2026-03-04 05:11:25,175 - INFO - [Valid] [19/90] | Loss: 0.5093 | Val Acc: 79.94%
+2026-03-04 05:11:25,202 - INFO - [Metrics for 'abnormal'] | Precision: 0.7665 | Recall: 0.8153 | F1: 0.7901
+2026-03-04 05:11:25,203 - INFO - [Metrics for 'normal'] | Precision: 0.8314 | Recall: 0.7857 | F1: 0.8079
+2026-03-04 05:11:25,212 - INFO - --------------------------------------------------
+2026-03-04 05:11:25,213 - INFO - [LR]    [20/90] | Learning Rate: 0.000905
+2026-03-04 05:11:36,540 - INFO - [Train] [20/90] | Loss: 0.4053 | Train Acc: 87.20%
+2026-03-04 05:11:40,115 - INFO - [Valid] [20/90] | Loss: 0.4902 | Val Acc: 80.53%
+2026-03-04 05:11:40,144 - INFO - [Metrics for 'abnormal'] | Precision: 0.7862 | Recall: 0.7962 | F1: 0.7911
+2026-03-04 05:11:40,144 - INFO - [Metrics for 'normal'] | Precision: 0.8222 | Recall: 0.8132 | F1: 0.8177
+2026-03-04 05:11:40,154 - INFO - --------------------------------------------------
+2026-03-04 05:11:40,155 - INFO - [LR]    [21/90] | Learning Rate: 0.000895
+2026-03-04 05:11:51,166 - INFO - [Train] [21/90] | Loss: 0.4057 | Train Acc: 87.95%
+2026-03-04 05:11:54,713 - INFO - [Valid] [21/90] | Loss: 0.4829 | Val Acc: 80.53%
+2026-03-04 05:11:54,740 - INFO - [Metrics for 'abnormal'] | Precision: 0.7758 | Recall: 0.8153 | F1: 0.7950
+2026-03-04 05:11:54,740 - INFO - [Metrics for 'normal'] | Precision: 0.8333 | Recall: 0.7967 | F1: 0.8146
+2026-03-04 05:11:54,750 - INFO - --------------------------------------------------
+2026-03-04 05:11:54,750 - INFO - [LR]    [22/90] | Learning Rate: 0.000884
+2026-03-04 05:12:06,195 - INFO - [Train] [22/90] | Loss: 0.3915 | Train Acc: 88.17%
+2026-03-04 05:12:09,603 - INFO - [Valid] [22/90] | Loss: 0.5060 | Val Acc: 79.94%
+2026-03-04 05:12:09,631 - INFO - [Metrics for 'abnormal'] | Precision: 0.7602 | Recall: 0.8280 | F1: 0.7927
+2026-03-04 05:12:09,632 - INFO - [Metrics for 'normal'] | Precision: 0.8393 | Recall: 0.7747 | F1: 0.8057
+2026-03-04 05:12:09,640 - INFO - --------------------------------------------------
+2026-03-04 05:12:09,641 - INFO - [LR]    [23/90] | Learning Rate: 0.000874
+2026-03-04 05:12:21,244 - INFO - [Train] [23/90] | Loss: 0.3954 | Train Acc: 88.69%
+2026-03-04 05:12:24,645 - INFO - [Valid] [23/90] | Loss: 0.4839 | Val Acc: 80.53%
+2026-03-04 05:12:24,672 - INFO - [Metrics for 'abnormal'] | Precision: 0.7862 | Recall: 0.7962 | F1: 0.7911
+2026-03-04 05:12:24,672 - INFO - [Metrics for 'normal'] | Precision: 0.8222 | Recall: 0.8132 | F1: 0.8177
+2026-03-04 05:12:24,682 - INFO - --------------------------------------------------
+2026-03-04 05:12:24,683 - INFO - [LR]    [24/90] | Learning Rate: 0.000863
+2026-03-04 05:12:36,344 - INFO - [Train] [24/90] | Loss: 0.3815 | Train Acc: 88.99%
+2026-03-04 05:12:39,674 - INFO - [Valid] [24/90] | Loss: 0.4973 | Val Acc: 80.83%
+2026-03-04 05:12:39,700 - INFO - [Metrics for 'abnormal'] | Precision: 0.7584 | Recall: 0.8599 | F1: 0.8060
+2026-03-04 05:12:39,701 - INFO - [Metrics for 'normal'] | Precision: 0.8634 | Recall: 0.7637 | F1: 0.8105
+2026-03-04 05:12:39,710 - INFO - --------------------------------------------------
+2026-03-04 05:12:39,711 - INFO - [LR]    [25/90] | Learning Rate: 0.000851
+2026-03-04 05:12:51,919 - INFO - [Train] [25/90] | Loss: 0.3701 | Train Acc: 90.10%
+2026-03-04 05:12:55,359 - INFO - [Valid] [25/90] | Loss: 0.5228 | Val Acc: 80.53%
+2026-03-04 05:12:55,387 - INFO - [Metrics for 'abnormal'] | Precision: 0.7542 | Recall: 0.8599 | F1: 0.8036
+2026-03-04 05:12:55,388 - INFO - [Metrics for 'normal'] | Precision: 0.8625 | Recall: 0.7582 | F1: 0.8070
+2026-03-04 05:12:55,398 - INFO - --------------------------------------------------
+2026-03-04 05:12:55,399 - INFO - [LR]    [26/90] | Learning Rate: 0.000839
+2026-03-04 05:13:07,347 - INFO - [Train] [26/90] | Loss: 0.3606 | Train Acc: 90.77%
+2026-03-04 05:13:10,795 - INFO - [Valid] [26/90] | Loss: 0.4864 | Val Acc: 80.24%
+2026-03-04 05:13:10,822 - INFO - [Metrics for 'abnormal'] | Precision: 0.7711 | Recall: 0.8153 | F1: 0.7926
+2026-03-04 05:13:10,823 - INFO - [Metrics for 'normal'] | Precision: 0.8324 | Recall: 0.7912 | F1: 0.8113
+2026-03-04 05:13:10,832 - INFO - --------------------------------------------------
+2026-03-04 05:13:10,834 - INFO - [LR]    [27/90] | Learning Rate: 0.000827
+2026-03-04 05:13:22,813 - INFO - [Train] [27/90] | Loss: 0.3577 | Train Acc: 91.22%
+2026-03-04 05:13:26,010 - INFO - [Valid] [27/90] | Loss: 0.5015 | Val Acc: 82.30%
+2026-03-04 05:13:26,029 - INFO - [Metrics for 'abnormal'] | Precision: 0.8212 | Recall: 0.7898 | F1: 0.8052
+2026-03-04 05:13:26,029 - INFO - [Metrics for 'normal'] | Precision: 0.8245 | Recall: 0.8516 | F1: 0.8378
+2026-03-04 05:13:26,035 - INFO - --------------------------------------------------
+2026-03-04 05:13:26,036 - INFO - [LR]    [28/90] | Learning Rate: 0.000815
+2026-03-04 05:13:38,168 - INFO - [Train] [28/90] | Loss: 0.3437 | Train Acc: 91.89%
+2026-03-04 05:13:41,545 - INFO - [Valid] [28/90] | Loss: 0.5022 | Val Acc: 81.12%
+2026-03-04 05:13:41,570 - INFO - [Metrics for 'abnormal'] | Precision: 0.8000 | Recall: 0.7898 | F1: 0.7949
+2026-03-04 05:13:41,571 - INFO - [Metrics for 'normal'] | Precision: 0.8207 | Recall: 0.8297 | F1: 0.8251
+2026-03-04 05:13:41,580 - INFO - --------------------------------------------------
+2026-03-04 05:13:41,581 - INFO - [LR]    [29/90] | Learning Rate: 0.000802
+2026-03-04 05:13:53,833 - INFO - [Train] [29/90] | Loss: 0.3567 | Train Acc: 91.22%
+2026-03-04 05:13:57,196 - INFO - [Valid] [29/90] | Loss: 0.4517 | Val Acc: 84.96%
+2026-03-04 05:13:57,216 - INFO - [Metrics for 'abnormal'] | Precision: 0.8442 | Recall: 0.8280 | F1: 0.8360
+2026-03-04 05:13:57,216 - INFO - [Metrics for 'normal'] | Precision: 0.8541 | Recall: 0.8681 | F1: 0.8610
+2026-03-04 05:13:57,376 - INFO - [Best Model Saved] (val loss: 0.4517) -> 'log/Sewer_TAPNEW/baseline_xie2019_20260304_050627/best_model.pth'
+2026-03-04 05:13:57,376 - INFO - --------------------------------------------------
+2026-03-04 05:13:57,377 - INFO - [LR]    [30/90] | Learning Rate: 0.000788
+2026-03-04 05:14:09,516 - INFO - [Train] [30/90] | Loss: 0.3383 | Train Acc: 93.15%
+2026-03-04 05:14:13,070 - INFO - [Valid] [30/90] | Loss: 0.4758 | Val Acc: 81.42%
+2026-03-04 05:14:13,098 - INFO - [Metrics for 'abnormal'] | Precision: 0.8013 | Recall: 0.7962 | F1: 0.7987
+2026-03-04 05:14:13,099 - INFO - [Metrics for 'normal'] | Precision: 0.8251 | Recall: 0.8297 | F1: 0.8274
+2026-03-04 05:14:13,108 - INFO - --------------------------------------------------
+2026-03-04 05:14:13,109 - INFO - [LR]    [31/90] | Learning Rate: 0.000775
+2026-03-04 05:14:25,080 - INFO - [Train] [31/90] | Loss: 0.3243 | Train Acc: 93.08%
+2026-03-04 05:14:28,457 - INFO - [Valid] [31/90] | Loss: 0.4874 | Val Acc: 82.60%
+2026-03-04 05:14:28,485 - INFO - [Metrics for 'abnormal'] | Precision: 0.7784 | Recall: 0.8726 | F1: 0.8228
+2026-03-04 05:14:28,485 - INFO - [Metrics for 'normal'] | Precision: 0.8773 | Recall: 0.7857 | F1: 0.8290
+2026-03-04 05:14:28,494 - INFO - --------------------------------------------------
+2026-03-04 05:14:28,495 - INFO - [LR]    [32/90] | Learning Rate: 0.000761
+2026-03-04 05:14:40,495 - INFO - [Train] [32/90] | Loss: 0.3195 | Train Acc: 93.82%
+2026-03-04 05:14:43,657 - INFO - [Valid] [32/90] | Loss: 0.4914 | Val Acc: 82.01%
+2026-03-04 05:14:43,684 - INFO - [Metrics for 'abnormal'] | Precision: 0.8000 | Recall: 0.8153 | F1: 0.8076
+2026-03-04 05:14:43,684 - INFO - [Metrics for 'normal'] | Precision: 0.8380 | Recall: 0.8242 | F1: 0.8310
+2026-03-04 05:14:43,693 - INFO - --------------------------------------------------
+2026-03-04 05:14:43,694 - INFO - [LR]    [33/90] | Learning Rate: 0.000747
+2026-03-04 05:14:55,840 - INFO - [Train] [33/90] | Loss: 0.3085 | Train Acc: 94.42%
+2026-03-04 05:14:59,016 - INFO - [Valid] [33/90] | Loss: 0.4999 | Val Acc: 79.35%
+2026-03-04 05:14:59,034 - INFO - [Metrics for 'abnormal'] | Precision: 0.7326 | Recall: 0.8726 | F1: 0.7965
+2026-03-04 05:14:59,034 - INFO - [Metrics for 'normal'] | Precision: 0.8684 | Recall: 0.7253 | F1: 0.7904
+2026-03-04 05:14:59,041 - INFO - --------------------------------------------------
+2026-03-04 05:14:59,041 - INFO - [LR]    [34/90] | Learning Rate: 0.000733
+2026-03-04 05:15:11,472 - INFO - [Train] [34/90] | Loss: 0.3098 | Train Acc: 94.27%
+2026-03-04 05:15:14,651 - INFO - [Valid] [34/90] | Loss: 0.4931 | Val Acc: 82.01%
+2026-03-04 05:15:14,678 - INFO - [Metrics for 'abnormal'] | Precision: 0.7824 | Recall: 0.8471 | F1: 0.8135
+2026-03-04 05:15:14,679 - INFO - [Metrics for 'normal'] | Precision: 0.8580 | Recall: 0.7967 | F1: 0.8262
+2026-03-04 05:15:14,688 - INFO - --------------------------------------------------
+2026-03-04 05:15:14,689 - INFO - [LR]    [35/90] | Learning Rate: 0.000719
+2026-03-04 05:15:26,709 - INFO - [Train] [35/90] | Loss: 0.2972 | Train Acc: 95.09%
+2026-03-04 05:15:29,867 - INFO - [Valid] [35/90] | Loss: 0.4770 | Val Acc: 82.60%
+2026-03-04 05:15:29,891 - INFO - [Metrics for 'abnormal'] | Precision: 0.7882 | Recall: 0.8535 | F1: 0.8196
+2026-03-04 05:15:29,892 - INFO - [Metrics for 'normal'] | Precision: 0.8639 | Recall: 0.8022 | F1: 0.8319
+2026-03-04 05:15:29,898 - INFO - --------------------------------------------------
+2026-03-04 05:15:29,899 - INFO - [LR]    [36/90] | Learning Rate: 0.000704
+2026-03-04 05:15:42,108 - INFO - [Train] [36/90] | Loss: 0.2898 | Train Acc: 95.61%
+2026-03-04 05:15:45,523 - INFO - [Valid] [36/90] | Loss: 0.5085 | Val Acc: 82.30%
+2026-03-04 05:15:45,550 - INFO - [Metrics for 'abnormal'] | Precision: 0.8129 | Recall: 0.8025 | F1: 0.8077
+2026-03-04 05:15:45,551 - INFO - [Metrics for 'normal'] | Precision: 0.8315 | Recall: 0.8407 | F1: 0.8361
+2026-03-04 05:15:45,557 - INFO - --------------------------------------------------
+2026-03-04 05:15:45,558 - INFO - [LR]    [37/90] | Learning Rate: 0.000689
+2026-03-04 05:15:57,575 - INFO - [Train] [37/90] | Loss: 0.2918 | Train Acc: 95.16%
+2026-03-04 05:16:00,896 - INFO - [Valid] [37/90] | Loss: 0.4849 | Val Acc: 82.60%
+2026-03-04 05:16:00,914 - INFO - [Metrics for 'abnormal'] | Precision: 0.7917 | Recall: 0.8471 | F1: 0.8185
+2026-03-04 05:16:00,915 - INFO - [Metrics for 'normal'] | Precision: 0.8596 | Recall: 0.8077 | F1: 0.8329
+2026-03-04 05:16:00,921 - INFO - --------------------------------------------------
+2026-03-04 05:16:00,922 - INFO - [LR]    [38/90] | Learning Rate: 0.000674
+2026-03-04 05:16:13,405 - INFO - [Train] [38/90] | Loss: 0.2775 | Train Acc: 96.88%
+2026-03-04 05:16:16,751 - INFO - [Valid] [38/90] | Loss: 0.5542 | Val Acc: 80.53%
+2026-03-04 05:16:16,769 - INFO - [Metrics for 'abnormal'] | Precision: 0.7692 | Recall: 0.8280 | F1: 0.7975
+2026-03-04 05:16:16,770 - INFO - [Metrics for 'normal'] | Precision: 0.8412 | Recall: 0.7857 | F1: 0.8125
+2026-03-04 05:16:16,776 - INFO - --------------------------------------------------
+2026-03-04 05:16:16,777 - INFO - [LR]    [39/90] | Learning Rate: 0.000659
+2026-03-04 05:16:28,800 - INFO - [Train] [39/90] | Loss: 0.2825 | Train Acc: 96.28%
+2026-03-04 05:16:32,212 - INFO - [Valid] [39/90] | Loss: 0.5524 | Val Acc: 78.76%
+2026-03-04 05:16:32,232 - INFO - [Metrics for 'abnormal'] | Precision: 0.7297 | Recall: 0.8599 | F1: 0.7895
+2026-03-04 05:16:32,232 - INFO - [Metrics for 'normal'] | Precision: 0.8571 | Recall: 0.7253 | F1: 0.7857
+2026-03-04 05:16:32,238 - INFO - --------------------------------------------------
+2026-03-04 05:16:32,239 - INFO - [LR]    [40/90] | Learning Rate: 0.000644
+2026-03-04 05:16:44,278 - INFO - [Train] [40/90] | Loss: 0.2730 | Train Acc: 96.80%
+2026-03-04 05:16:47,624 - INFO - [Valid] [40/90] | Loss: 0.5275 | Val Acc: 82.01%
+2026-03-04 05:16:47,650 - INFO - [Metrics for 'abnormal'] | Precision: 0.8288 | Recall: 0.7707 | F1: 0.7987
+2026-03-04 05:16:47,651 - INFO - [Metrics for 'normal'] | Precision: 0.8135 | Recall: 0.8626 | F1: 0.8373
+2026-03-04 05:16:47,660 - INFO - --------------------------------------------------
+2026-03-04 05:16:47,661 - INFO - [LR]    [41/90] | Learning Rate: 0.000628
+2026-03-04 05:16:59,640 - INFO - [Train] [41/90] | Loss: 0.2632 | Train Acc: 97.40%
+2026-03-04 05:17:03,024 - INFO - [Valid] [41/90] | Loss: 0.5566 | Val Acc: 81.12%
+2026-03-04 05:17:03,050 - INFO - [Metrics for 'abnormal'] | Precision: 0.7719 | Recall: 0.8408 | F1: 0.8049
+2026-03-04 05:17:03,051 - INFO - [Metrics for 'normal'] | Precision: 0.8512 | Recall: 0.7857 | F1: 0.8171
+2026-03-04 05:17:03,060 - INFO - --------------------------------------------------
+2026-03-04 05:17:03,061 - INFO - [LR]    [42/90] | Learning Rate: 0.000613
+2026-03-04 05:17:14,841 - INFO - [Train] [42/90] | Loss: 0.2623 | Train Acc: 97.32%
+2026-03-04 05:17:18,030 - INFO - [Valid] [42/90] | Loss: 0.4935 | Val Acc: 81.71%
+2026-03-04 05:17:18,049 - INFO - [Metrics for 'abnormal'] | Precision: 0.7879 | Recall: 0.8280 | F1: 0.8075
+2026-03-04 05:17:18,049 - INFO - [Metrics for 'normal'] | Precision: 0.8448 | Recall: 0.8077 | F1: 0.8258
+2026-03-04 05:17:18,056 - INFO - --------------------------------------------------
+2026-03-04 05:17:18,056 - INFO - [LR]    [43/90] | Learning Rate: 0.000597
+2026-03-04 05:17:30,513 - INFO - [Train] [43/90] | Loss: 0.2605 | Train Acc: 97.77%
+2026-03-04 05:17:33,890 - INFO - [Valid] [43/90] | Loss: 0.5199 | Val Acc: 82.01%
+2026-03-04 05:17:33,916 - INFO - [Metrics for 'abnormal'] | Precision: 0.7892 | Recall: 0.8344 | F1: 0.8111
+2026-03-04 05:17:33,917 - INFO - [Metrics for 'normal'] | Precision: 0.8497 | Recall: 0.8077 | F1: 0.8282
+2026-03-04 05:17:33,927 - INFO - --------------------------------------------------
+2026-03-04 05:17:33,928 - INFO - [LR]    [44/90] | Learning Rate: 0.000581
+2026-03-04 05:17:46,114 - INFO - [Train] [44/90] | Loss: 0.2516 | Train Acc: 98.51%
+2026-03-04 05:17:49,341 - INFO - [Valid] [44/90] | Loss: 0.5068 | Val Acc: 81.71%
+2026-03-04 05:17:49,368 - INFO - [Metrics for 'abnormal'] | Precision: 0.7844 | Recall: 0.8344 | F1: 0.8086
+2026-03-04 05:17:49,368 - INFO - [Metrics for 'normal'] | Precision: 0.8488 | Recall: 0.8022 | F1: 0.8249
+2026-03-04 05:17:49,378 - INFO - --------------------------------------------------
+2026-03-04 05:17:49,379 - INFO - [LR]    [45/90] | Learning Rate: 0.000566
+2026-03-04 05:18:01,363 - INFO - [Train] [45/90] | Loss: 0.2537 | Train Acc: 97.77%
+2026-03-04 05:18:04,418 - INFO - [Valid] [45/90] | Loss: 0.5009 | Val Acc: 82.60%
+2026-03-04 05:18:04,445 - INFO - [Metrics for 'abnormal'] | Precision: 0.7988 | Recall: 0.8344 | F1: 0.8162
+2026-03-04 05:18:04,445 - INFO - [Metrics for 'normal'] | Precision: 0.8514 | Recall: 0.8187 | F1: 0.8347
+2026-03-04 05:18:04,455 - INFO - --------------------------------------------------
+2026-03-04 05:18:04,456 - INFO - [LR]    [46/90] | Learning Rate: 0.000550
+2026-03-04 05:18:16,508 - INFO - [Train] [46/90] | Loss: 0.2428 | Train Acc: 98.66%
+2026-03-04 05:18:19,536 - INFO - [Valid] [46/90] | Loss: 0.5680 | Val Acc: 80.24%
+2026-03-04 05:18:19,562 - INFO - [Metrics for 'abnormal'] | Precision: 0.7744 | Recall: 0.8089 | F1: 0.7913
+2026-03-04 05:18:19,562 - INFO - [Metrics for 'normal'] | Precision: 0.8286 | Recall: 0.7967 | F1: 0.8123
+2026-03-04 05:18:19,569 - INFO - --------------------------------------------------
+2026-03-04 05:18:19,570 - INFO - [LR]    [47/90] | Learning Rate: 0.000534
+2026-03-04 05:18:31,742 - INFO - [Train] [47/90] | Loss: 0.2400 | Train Acc: 98.88%
+2026-03-04 05:18:34,741 - INFO - [Valid] [47/90] | Loss: 0.5781 | Val Acc: 78.76%
+2026-03-04 05:18:34,767 - INFO - [Metrics for 'abnormal'] | Precision: 0.7273 | Recall: 0.8662 | F1: 0.7907
+2026-03-04 05:18:34,767 - INFO - [Metrics for 'normal'] | Precision: 0.8618 | Recall: 0.7198 | F1: 0.7844
+2026-03-04 05:18:34,777 - INFO - --------------------------------------------------
+2026-03-04 05:18:34,777 - INFO - [LR]    [48/90] | Learning Rate: 0.000519
+2026-03-04 05:18:46,963 - INFO - [Train] [48/90] | Loss: 0.2383 | Train Acc: 98.96%
+2026-03-04 05:18:50,156 - INFO - [Valid] [48/90] | Loss: 0.5575 | Val Acc: 81.42%
+2026-03-04 05:18:50,174 - INFO - [Metrics for 'abnormal'] | Precision: 0.7831 | Recall: 0.8280 | F1: 0.8050
+2026-03-04 05:18:50,174 - INFO - [Metrics for 'normal'] | Precision: 0.8439 | Recall: 0.8022 | F1: 0.8225
+2026-03-04 05:18:50,181 - INFO - --------------------------------------------------
+2026-03-04 05:18:50,181 - INFO - [LR]    [49/90] | Learning Rate: 0.000503
+2026-03-04 05:19:02,449 - INFO - [Train] [49/90] | Loss: 0.2338 | Train Acc: 99.03%
+2026-03-04 05:19:05,581 - INFO - [Valid] [49/90] | Loss: 0.5433 | Val Acc: 81.71%
+2026-03-04 05:19:05,602 - INFO - [Metrics for 'abnormal'] | Precision: 0.7684 | Recall: 0.8662 | F1: 0.8144
+2026-03-04 05:19:05,603 - INFO - [Metrics for 'normal'] | Precision: 0.8704 | Recall: 0.7747 | F1: 0.8198
+2026-03-04 05:19:05,612 - INFO - --------------------------------------------------
+2026-03-04 05:19:05,612 - INFO - [LR]    [50/90] | Learning Rate: 0.000487
+2026-03-04 05:19:17,313 - INFO - [Train] [50/90] | Loss: 0.2333 | Train Acc: 99.11%
+2026-03-04 05:19:20,618 - INFO - [Valid] [50/90] | Loss: 0.5364 | Val Acc: 82.01%
+2026-03-04 05:19:20,636 - INFO - [Metrics for 'abnormal'] | Precision: 0.8200 | Recall: 0.7834 | F1: 0.8013
+2026-03-04 05:19:20,636 - INFO - [Metrics for 'normal'] | Precision: 0.8201 | Recall: 0.8516 | F1: 0.8356
+2026-03-04 05:19:20,643 - INFO - --------------------------------------------------
+2026-03-04 05:19:20,643 - INFO - [LR]    [51/90] | Learning Rate: 0.000472
+2026-03-04 05:19:32,489 - INFO - [Train] [51/90] | Loss: 0.2401 | Train Acc: 98.51%
+2026-03-04 05:19:35,828 - INFO - [Valid] [51/90] | Loss: 0.5393 | Val Acc: 83.48%
+2026-03-04 05:19:35,850 - INFO - [Metrics for 'abnormal'] | Precision: 0.8137 | Recall: 0.8344 | F1: 0.8239
+2026-03-04 05:19:35,850 - INFO - [Metrics for 'normal'] | Precision: 0.8539 | Recall: 0.8352 | F1: 0.8444
+2026-03-04 05:19:35,857 - INFO - --------------------------------------------------
+2026-03-04 05:19:35,857 - INFO - [LR]    [52/90] | Learning Rate: 0.000456
+2026-03-04 05:19:47,840 - INFO - [Train] [52/90] | Loss: 0.2325 | Train Acc: 99.03%
+2026-03-04 05:19:51,133 - INFO - [Valid] [52/90] | Loss: 0.5263 | Val Acc: 82.89%
+2026-03-04 05:19:51,159 - INFO - [Metrics for 'abnormal'] | Precision: 0.8000 | Recall: 0.8408 | F1: 0.8199
+2026-03-04 05:19:51,160 - INFO - [Metrics for 'normal'] | Precision: 0.8563 | Recall: 0.8187 | F1: 0.8371
+2026-03-04 05:19:51,169 - INFO - --------------------------------------------------
+2026-03-04 05:19:51,170 - INFO - [LR]    [53/90] | Learning Rate: 0.000441
+2026-03-04 05:20:02,824 - INFO - [Train] [53/90] | Loss: 0.2307 | Train Acc: 98.96%
+2026-03-04 05:20:06,325 - INFO - [Valid] [53/90] | Loss: 0.5506 | Val Acc: 79.94%
+2026-03-04 05:20:06,352 - INFO - [Metrics for 'abnormal'] | Precision: 0.7602 | Recall: 0.8280 | F1: 0.7927
+2026-03-04 05:20:06,352 - INFO - [Metrics for 'normal'] | Precision: 0.8393 | Recall: 0.7747 | F1: 0.8057
+2026-03-04 05:20:06,361 - INFO - --------------------------------------------------
+2026-03-04 05:20:06,362 - INFO - [LR]    [54/90] | Learning Rate: 0.000426
+2026-03-04 05:20:18,542 - INFO - [Train] [54/90] | Loss: 0.2272 | Train Acc: 99.26%
+2026-03-04 05:20:21,912 - INFO - [Valid] [54/90] | Loss: 0.5733 | Val Acc: 78.76%
+2026-03-04 05:20:21,934 - INFO - [Metrics for 'abnormal'] | Precision: 0.7485 | Recall: 0.8153 | F1: 0.7805
+2026-03-04 05:20:21,934 - INFO - [Metrics for 'normal'] | Precision: 0.8274 | Recall: 0.7637 | F1: 0.7943
+2026-03-04 05:20:21,941 - INFO - --------------------------------------------------
+2026-03-04 05:20:21,941 - INFO - [LR]    [55/90] | Learning Rate: 0.000411
+2026-03-04 05:20:33,658 - INFO - [Train] [55/90] | Loss: 0.2255 | Train Acc: 99.55%
+2026-03-04 05:20:37,150 - INFO - [Valid] [55/90] | Loss: 0.5633 | Val Acc: 79.65%
+2026-03-04 05:20:37,176 - INFO - [Metrics for 'abnormal'] | Precision: 0.7529 | Recall: 0.8344 | F1: 0.7915
+2026-03-04 05:20:37,177 - INFO - [Metrics for 'normal'] | Precision: 0.8424 | Recall: 0.7637 | F1: 0.8012
+2026-03-04 05:20:37,186 - INFO - --------------------------------------------------
+2026-03-04 05:20:37,187 - INFO - [LR]    [56/90] | Learning Rate: 0.000396
+2026-03-04 05:20:48,811 - INFO - [Train] [56/90] | Loss: 0.2217 | Train Acc: 99.70%
+2026-03-04 05:20:52,219 - INFO - [Valid] [56/90] | Loss: 0.5533 | Val Acc: 79.35%
+2026-03-04 05:20:52,244 - INFO - [Metrics for 'abnormal'] | Precision: 0.7669 | Recall: 0.7962 | F1: 0.7812
+2026-03-04 05:20:52,245 - INFO - [Metrics for 'normal'] | Precision: 0.8182 | Recall: 0.7912 | F1: 0.8045
+2026-03-04 05:20:52,254 - INFO - --------------------------------------------------
+2026-03-04 05:20:52,254 - INFO - [LR]    [57/90] | Learning Rate: 0.000381
+2026-03-04 05:21:03,886 - INFO - [Train] [57/90] | Loss: 0.2257 | Train Acc: 99.40%
+2026-03-04 05:21:07,368 - INFO - [Valid] [57/90] | Loss: 0.5551 | Val Acc: 82.01%
+2026-03-04 05:21:07,392 - INFO - [Metrics for 'abnormal'] | Precision: 0.8077 | Recall: 0.8025 | F1: 0.8051
+2026-03-04 05:21:07,392 - INFO - [Metrics for 'normal'] | Precision: 0.8306 | Recall: 0.8352 | F1: 0.8329
+2026-03-04 05:21:07,399 - INFO - --------------------------------------------------
+2026-03-04 05:21:07,400 - INFO - [LR]    [58/90] | Learning Rate: 0.000367
+2026-03-04 05:21:18,927 - INFO - [Train] [58/90] | Loss: 0.2213 | Train Acc: 99.63%
+2026-03-04 05:21:22,542 - INFO - [Valid] [58/90] | Loss: 0.5448 | Val Acc: 80.24%
+2026-03-04 05:21:22,566 - INFO - [Metrics for 'abnormal'] | Precision: 0.7679 | Recall: 0.8217 | F1: 0.7938
+2026-03-04 05:21:22,566 - INFO - [Metrics for 'normal'] | Precision: 0.8363 | Recall: 0.7857 | F1: 0.8102
+2026-03-04 05:21:22,573 - INFO - --------------------------------------------------
+2026-03-04 05:21:22,574 - INFO - [LR]    [59/90] | Learning Rate: 0.000353
+2026-03-04 05:21:34,290 - INFO - [Train] [59/90] | Loss: 0.2175 | Train Acc: 99.70%
+2026-03-04 05:21:37,903 - INFO - [Valid] [59/90] | Loss: 0.5306 | Val Acc: 80.24%
+2026-03-04 05:21:37,929 - INFO - [Metrics for 'abnormal'] | Precision: 0.7647 | Recall: 0.8280 | F1: 0.7951
+2026-03-04 05:21:37,929 - INFO - [Metrics for 'normal'] | Precision: 0.8402 | Recall: 0.7802 | F1: 0.8091
+2026-03-04 05:21:37,939 - INFO - --------------------------------------------------
+2026-03-04 05:21:37,940 - INFO - [LR]    [60/90] | Learning Rate: 0.000339
+2026-03-04 05:21:49,524 - INFO - [Train] [60/90] | Loss: 0.2164 | Train Acc: 99.93%
+2026-03-04 05:21:53,323 - INFO - [Valid] [60/90] | Loss: 0.5468 | Val Acc: 79.65%
+2026-03-04 05:21:53,343 - INFO - [Metrics for 'abnormal'] | Precision: 0.7683 | Recall: 0.8025 | F1: 0.7850
+2026-03-04 05:21:53,343 - INFO - [Metrics for 'normal'] | Precision: 0.8229 | Recall: 0.7912 | F1: 0.8067
+2026-03-04 05:21:53,350 - INFO - --------------------------------------------------
+2026-03-04 05:21:53,351 - INFO - [LR]    [61/90] | Learning Rate: 0.000325
+2026-03-04 05:22:05,307 - INFO - [Train] [61/90] | Loss: 0.2209 | Train Acc: 99.40%
+2026-03-04 05:22:09,118 - INFO - [Valid] [61/90] | Loss: 0.5435 | Val Acc: 80.53%
+2026-03-04 05:22:09,137 - INFO - [Metrics for 'abnormal'] | Precision: 0.7862 | Recall: 0.7962 | F1: 0.7911
+2026-03-04 05:22:09,137 - INFO - [Metrics for 'normal'] | Precision: 0.8222 | Recall: 0.8132 | F1: 0.8177
+2026-03-04 05:22:09,143 - INFO - --------------------------------------------------
+2026-03-04 05:22:09,144 - INFO - [LR]    [62/90] | Learning Rate: 0.000312
+2026-03-04 05:22:20,979 - INFO - [Train] [62/90] | Loss: 0.2171 | Train Acc: 99.55%
+2026-03-04 05:22:24,473 - INFO - [Valid] [62/90] | Loss: 0.5640 | Val Acc: 79.35%
+2026-03-04 05:22:24,495 - INFO - [Metrics for 'abnormal'] | Precision: 0.7544 | Recall: 0.8217 | F1: 0.7866
+2026-03-04 05:22:24,496 - INFO - [Metrics for 'normal'] | Precision: 0.8333 | Recall: 0.7692 | F1: 0.8000
+2026-03-04 05:22:24,503 - INFO - --------------------------------------------------
+2026-03-04 05:22:24,504 - INFO - [LR]    [63/90] | Learning Rate: 0.000298
+2026-03-04 05:22:36,349 - INFO - [Train] [63/90] | Loss: 0.2190 | Train Acc: 99.63%
+2026-03-04 05:22:39,904 - INFO - [Valid] [63/90] | Loss: 0.5526 | Val Acc: 79.94%
+2026-03-04 05:22:39,930 - INFO - [Metrics for 'abnormal'] | Precision: 0.7602 | Recall: 0.8280 | F1: 0.7927
+2026-03-04 05:22:39,931 - INFO - [Metrics for 'normal'] | Precision: 0.8393 | Recall: 0.7747 | F1: 0.8057
+2026-03-04 05:22:39,940 - INFO - --------------------------------------------------
+2026-03-04 05:22:39,941 - INFO - [LR]    [64/90] | Learning Rate: 0.000285
+2026-03-04 05:22:51,404 - INFO - [Train] [64/90] | Loss: 0.2157 | Train Acc: 99.63%
+2026-03-04 05:22:55,019 - INFO - [Valid] [64/90] | Loss: 0.5575 | Val Acc: 79.94%
+2026-03-04 05:22:55,046 - INFO - [Metrics for 'abnormal'] | Precision: 0.7665 | Recall: 0.8153 | F1: 0.7901
+2026-03-04 05:22:55,046 - INFO - [Metrics for 'normal'] | Precision: 0.8314 | Recall: 0.7857 | F1: 0.8079
+2026-03-04 05:22:55,056 - INFO - --------------------------------------------------
+2026-03-04 05:22:55,056 - INFO - [LR]    [65/90] | Learning Rate: 0.000273
+2026-03-04 05:23:06,857 - INFO - [Train] [65/90] | Loss: 0.2150 | Train Acc: 99.78%
+2026-03-04 05:23:10,463 - INFO - [Valid] [65/90] | Loss: 0.5578 | Val Acc: 80.53%
+2026-03-04 05:23:10,483 - INFO - [Metrics for 'abnormal'] | Precision: 0.7661 | Recall: 0.8344 | F1: 0.7988
+2026-03-04 05:23:10,483 - INFO - [Metrics for 'normal'] | Precision: 0.8452 | Recall: 0.7802 | F1: 0.8114
+2026-03-04 05:23:10,490 - INFO - --------------------------------------------------
+2026-03-04 05:23:10,490 - INFO - [LR]    [66/90] | Learning Rate: 0.000261
+2026-03-04 05:23:22,413 - INFO - [Train] [66/90] | Loss: 0.2150 | Train Acc: 99.78%
+2026-03-04 05:23:26,043 - INFO - [Valid] [66/90] | Loss: 0.5364 | Val Acc: 80.83%
+2026-03-04 05:23:26,068 - INFO - [Metrics for 'abnormal'] | Precision: 0.7771 | Recall: 0.8217 | F1: 0.7988
+2026-03-04 05:23:26,068 - INFO - [Metrics for 'normal'] | Precision: 0.8382 | Recall: 0.7967 | F1: 0.8169
+2026-03-04 05:23:26,077 - INFO - --------------------------------------------------
+2026-03-04 05:23:26,078 - INFO - [LR]    [67/90] | Learning Rate: 0.000249
+2026-03-04 05:23:37,829 - INFO - [Train] [67/90] | Loss: 0.2138 | Train Acc: 99.93%
+2026-03-04 05:23:41,470 - INFO - [Valid] [67/90] | Loss: 0.5443 | Val Acc: 80.83%
+2026-03-04 05:23:41,497 - INFO - [Metrics for 'abnormal'] | Precision: 0.7771 | Recall: 0.8217 | F1: 0.7988
+2026-03-04 05:23:41,498 - INFO - [Metrics for 'normal'] | Precision: 0.8382 | Recall: 0.7967 | F1: 0.8169
+2026-03-04 05:23:41,506 - INFO - --------------------------------------------------
+2026-03-04 05:23:41,507 - INFO - [LR]    [68/90] | Learning Rate: 0.000237
+2026-03-04 05:23:53,380 - INFO - [Train] [68/90] | Loss: 0.2125 | Train Acc: 99.93%
+2026-03-04 05:23:56,812 - INFO - [Valid] [68/90] | Loss: 0.5463 | Val Acc: 80.24%
+2026-03-04 05:23:56,838 - INFO - [Metrics for 'abnormal'] | Precision: 0.7679 | Recall: 0.8217 | F1: 0.7938
+2026-03-04 05:23:56,839 - INFO - [Metrics for 'normal'] | Precision: 0.8363 | Recall: 0.7857 | F1: 0.8102
+2026-03-04 05:23:56,849 - INFO - --------------------------------------------------
+2026-03-04 05:23:56,850 - INFO - [LR]    [69/90] | Learning Rate: 0.000226
+2026-03-04 05:24:08,830 - INFO - [Train] [69/90] | Loss: 0.2119 | Train Acc: 99.93%
+2026-03-04 05:24:12,316 - INFO - [Valid] [69/90] | Loss: 0.5300 | Val Acc: 81.42%
+2026-03-04 05:24:12,342 - INFO - [Metrics for 'abnormal'] | Precision: 0.7866 | Recall: 0.8217 | F1: 0.8037
+2026-03-04 05:24:12,342 - INFO - [Metrics for 'normal'] | Precision: 0.8400 | Recall: 0.8077 | F1: 0.8235
+2026-03-04 05:24:12,352 - INFO - --------------------------------------------------
+2026-03-04 05:24:12,353 - INFO - [LR]    [70/90] | Learning Rate: 0.000216
+2026-03-04 05:24:24,286 - INFO - [Train] [70/90] | Loss: 0.2120 | Train Acc: 99.85%
+2026-03-04 05:24:27,752 - INFO - [Valid] [70/90] | Loss: 0.5436 | Val Acc: 80.53%
+2026-03-04 05:24:27,779 - INFO - [Metrics for 'abnormal'] | Precision: 0.7692 | Recall: 0.8280 | F1: 0.7975
+2026-03-04 05:24:27,779 - INFO - [Metrics for 'normal'] | Precision: 0.8412 | Recall: 0.7857 | F1: 0.8125
+2026-03-04 05:24:27,789 - INFO - --------------------------------------------------
+2026-03-04 05:24:27,789 - INFO - [LR]    [71/90] | Learning Rate: 0.000205
+2026-03-04 05:24:39,192 - INFO - [Train] [71/90] | Loss: 0.2110 | Train Acc: 99.85%
+2026-03-04 05:24:42,513 - INFO - [Valid] [71/90] | Loss: 0.5338 | Val Acc: 79.94%
+2026-03-04 05:24:42,539 - INFO - [Metrics for 'abnormal'] | Precision: 0.7697 | Recall: 0.8089 | F1: 0.7888
+2026-03-04 05:24:42,540 - INFO - [Metrics for 'normal'] | Precision: 0.8276 | Recall: 0.7912 | F1: 0.8090
+2026-03-04 05:24:42,549 - INFO - --------------------------------------------------
+2026-03-04 05:24:42,550 - INFO - [LR]    [72/90] | Learning Rate: 0.000195
+2026-03-04 05:24:54,107 - INFO - [Train] [72/90] | Loss: 0.2116 | Train Acc: 99.85%
+2026-03-04 05:24:57,544 - INFO - [Valid] [72/90] | Loss: 0.5422 | Val Acc: 80.24%
+2026-03-04 05:24:57,562 - INFO - [Metrics for 'abnormal'] | Precision: 0.7647 | Recall: 0.8280 | F1: 0.7951
+2026-03-04 05:24:57,563 - INFO - [Metrics for 'normal'] | Precision: 0.8402 | Recall: 0.7802 | F1: 0.8091
+2026-03-04 05:24:57,569 - INFO - --------------------------------------------------
+2026-03-04 05:24:57,570 - INFO - [LR]    [73/90] | Learning Rate: 0.000186
+2026-03-04 05:25:09,690 - INFO - [Train] [73/90] | Loss: 0.2112 | Train Acc: 99.85%
+2026-03-04 05:25:13,237 - INFO - [Valid] [73/90] | Loss: 0.5249 | Val Acc: 80.24%
+2026-03-04 05:25:13,255 - INFO - [Metrics for 'abnormal'] | Precision: 0.7711 | Recall: 0.8153 | F1: 0.7926
+2026-03-04 05:25:13,255 - INFO - [Metrics for 'normal'] | Precision: 0.8324 | Recall: 0.7912 | F1: 0.8113
+2026-03-04 05:25:13,262 - INFO - --------------------------------------------------
+2026-03-04 05:25:13,262 - INFO - [LR]    [74/90] | Learning Rate: 0.000177
+2026-03-04 05:25:25,270 - INFO - [Train] [74/90] | Loss: 0.2100 | Train Acc: 99.93%
+2026-03-04 05:25:28,685 - INFO - [Valid] [74/90] | Loss: 0.5203 | Val Acc: 79.94%
+2026-03-04 05:25:28,703 - INFO - [Metrics for 'abnormal'] | Precision: 0.7633 | Recall: 0.8217 | F1: 0.7914
+2026-03-04 05:25:28,703 - INFO - [Metrics for 'normal'] | Precision: 0.8353 | Recall: 0.7802 | F1: 0.8068
+2026-03-04 05:25:28,709 - INFO - --------------------------------------------------
+2026-03-04 05:25:28,710 - INFO - [LR]    [75/90] | Learning Rate: 0.000168
+2026-03-04 05:25:40,294 - INFO - [Train] [75/90] | Loss: 0.2095 | Train Acc: 99.93%
+2026-03-04 05:25:43,823 - INFO - [Valid] [75/90] | Loss: 0.5328 | Val Acc: 81.12%
+2026-03-04 05:25:43,849 - INFO - [Metrics for 'abnormal'] | Precision: 0.7925 | Recall: 0.8025 | F1: 0.7975
+2026-03-04 05:25:43,850 - INFO - [Metrics for 'normal'] | Precision: 0.8278 | Recall: 0.8187 | F1: 0.8232
+2026-03-04 05:25:43,859 - INFO - --------------------------------------------------
+2026-03-04 05:25:43,860 - INFO - [LR]    [76/90] | Learning Rate: 0.000160
+2026-03-04 05:25:55,593 - INFO - [Train] [76/90] | Loss: 0.2097 | Train Acc: 99.85%
+2026-03-04 05:25:59,106 - INFO - [Valid] [76/90] | Loss: 0.5417 | Val Acc: 80.53%
+2026-03-04 05:25:59,128 - INFO - [Metrics for 'abnormal'] | Precision: 0.7758 | Recall: 0.8153 | F1: 0.7950
+2026-03-04 05:25:59,128 - INFO - [Metrics for 'normal'] | Precision: 0.8333 | Recall: 0.7967 | F1: 0.8146
+2026-03-04 05:25:59,135 - INFO - --------------------------------------------------
+2026-03-04 05:25:59,136 - INFO - [LR]    [77/90] | Learning Rate: 0.000153
+2026-03-04 05:26:11,115 - INFO - [Train] [77/90] | Loss: 0.2092 | Train Acc: 99.85%
+2026-03-04 05:26:14,522 - INFO - [Valid] [77/90] | Loss: 0.5349 | Val Acc: 80.83%
+2026-03-04 05:26:14,548 - INFO - [Metrics for 'abnormal'] | Precision: 0.7805 | Recall: 0.8153 | F1: 0.7975
+2026-03-04 05:26:14,548 - INFO - [Metrics for 'normal'] | Precision: 0.8343 | Recall: 0.8022 | F1: 0.8179
+2026-03-04 05:26:14,557 - INFO - --------------------------------------------------
+2026-03-04 05:26:14,558 - INFO - [LR]    [78/90] | Learning Rate: 0.000146
+2026-03-04 05:26:26,148 - INFO - [Train] [78/90] | Loss: 0.2088 | Train Acc: 100.00%
+2026-03-04 05:26:29,404 - INFO - [Valid] [78/90] | Loss: 0.5413 | Val Acc: 79.94%
+2026-03-04 05:26:29,432 - INFO - [Metrics for 'abnormal'] | Precision: 0.7665 | Recall: 0.8153 | F1: 0.7901
+2026-03-04 05:26:29,432 - INFO - [Metrics for 'normal'] | Precision: 0.8314 | Recall: 0.7857 | F1: 0.8079
+2026-03-04 05:26:29,441 - INFO - --------------------------------------------------
+2026-03-04 05:26:29,442 - INFO - [LR]    [79/90] | Learning Rate: 0.000139
+2026-03-04 05:26:40,209 - INFO - [Train] [79/90] | Loss: 0.2086 | Train Acc: 99.93%
+2026-03-04 05:26:43,330 - INFO - [Valid] [79/90] | Loss: 0.5385 | Val Acc: 80.53%
+2026-03-04 05:26:43,349 - INFO - [Metrics for 'abnormal'] | Precision: 0.7791 | Recall: 0.8089 | F1: 0.7937
+2026-03-04 05:26:43,350 - INFO - [Metrics for 'normal'] | Precision: 0.8295 | Recall: 0.8022 | F1: 0.8156
+2026-03-04 05:26:43,356 - INFO - --------------------------------------------------
+2026-03-04 05:26:43,357 - INFO - [LR]    [80/90] | Learning Rate: 0.000133
+2026-03-04 05:26:54,610 - INFO - [Train] [80/90] | Loss: 0.2090 | Train Acc: 99.85%
+2026-03-04 05:26:57,664 - INFO - [Valid] [80/90] | Loss: 0.5411 | Val Acc: 81.12%
+2026-03-04 05:26:57,688 - INFO - [Metrics for 'abnormal'] | Precision: 0.7818 | Recall: 0.8217 | F1: 0.8012
+2026-03-04 05:26:57,689 - INFO - [Metrics for 'normal'] | Precision: 0.8391 | Recall: 0.8022 | F1: 0.8202
+2026-03-04 05:26:57,699 - INFO - --------------------------------------------------
+2026-03-04 05:26:57,700 - INFO - [LR]    [81/90] | Learning Rate: 0.000127
+2026-03-04 05:27:08,873 - INFO - [Train] [81/90] | Loss: 0.2082 | Train Acc: 99.93%
+2026-03-04 05:27:11,869 - INFO - [Valid] [81/90] | Loss: 0.5404 | Val Acc: 81.12%
+2026-03-04 05:27:11,887 - INFO - [Metrics for 'abnormal'] | Precision: 0.7818 | Recall: 0.8217 | F1: 0.8012
+2026-03-04 05:27:11,888 - INFO - [Metrics for 'normal'] | Precision: 0.8391 | Recall: 0.8022 | F1: 0.8202
+2026-03-04 05:27:11,894 - INFO - --------------------------------------------------
+2026-03-04 05:27:11,894 - INFO - [LR]    [82/90] | Learning Rate: 0.000122
+2026-03-04 05:27:23,235 - INFO - [Train] [82/90] | Loss: 0.2084 | Train Acc: 99.85%
+2026-03-04 05:27:26,271 - INFO - [Valid] [82/90] | Loss: 0.5415 | Val Acc: 80.24%
+2026-03-04 05:27:26,300 - INFO - [Metrics for 'abnormal'] | Precision: 0.7679 | Recall: 0.8217 | F1: 0.7938
+2026-03-04 05:27:26,300 - INFO - [Metrics for 'normal'] | Precision: 0.8363 | Recall: 0.7857 | F1: 0.8102
+2026-03-04 05:27:26,310 - INFO - --------------------------------------------------
+2026-03-04 05:27:26,311 - INFO - [LR]    [83/90] | Learning Rate: 0.000117
+2026-03-04 05:27:36,933 - INFO - [Train] [83/90] | Loss: 0.2088 | Train Acc: 99.93%
+2026-03-04 05:27:40,136 - INFO - [Valid] [83/90] | Loss: 0.5427 | Val Acc: 80.53%
+2026-03-04 05:27:40,154 - INFO - [Metrics for 'abnormal'] | Precision: 0.7725 | Recall: 0.8217 | F1: 0.7963
+2026-03-04 05:27:40,154 - INFO - [Metrics for 'normal'] | Precision: 0.8372 | Recall: 0.7912 | F1: 0.8136
+2026-03-04 05:27:40,161 - INFO - --------------------------------------------------
+2026-03-04 05:27:40,161 - INFO - [LR]    [84/90] | Learning Rate: 0.000113
+2026-03-04 05:27:51,008 - INFO - [Train] [84/90] | Loss: 0.2077 | Train Acc: 99.93%
+2026-03-04 05:27:54,138 - INFO - [Valid] [84/90] | Loss: 0.5421 | Val Acc: 80.53%
+2026-03-04 05:27:54,156 - INFO - [Metrics for 'abnormal'] | Precision: 0.7725 | Recall: 0.8217 | F1: 0.7963
+2026-03-04 05:27:54,157 - INFO - [Metrics for 'normal'] | Precision: 0.8372 | Recall: 0.7912 | F1: 0.8136
+2026-03-04 05:27:54,163 - INFO - --------------------------------------------------
+2026-03-04 05:27:54,163 - INFO - [LR]    [85/90] | Learning Rate: 0.000110
+2026-03-04 05:28:04,858 - INFO - [Train] [85/90] | Loss: 0.2086 | Train Acc: 99.85%
+2026-03-04 05:28:08,071 - INFO - [Valid] [85/90] | Loss: 0.5409 | Val Acc: 80.83%
+2026-03-04 05:28:08,099 - INFO - [Metrics for 'abnormal'] | Precision: 0.7771 | Recall: 0.8217 | F1: 0.7988
+2026-03-04 05:28:08,100 - INFO - [Metrics for 'normal'] | Precision: 0.8382 | Recall: 0.7967 | F1: 0.8169
+2026-03-04 05:28:08,107 - INFO - --------------------------------------------------
+2026-03-04 05:28:08,108 - INFO - [LR]    [86/90] | Learning Rate: 0.000107
+2026-03-04 05:28:18,862 - INFO - [Train] [86/90] | Loss: 0.2077 | Train Acc: 99.93%
+2026-03-04 05:28:22,097 - INFO - [Valid] [86/90] | Loss: 0.5280 | Val Acc: 81.12%
+2026-03-04 05:28:22,118 - INFO - [Metrics for 'abnormal'] | Precision: 0.7853 | Recall: 0.8153 | F1: 0.8000
+2026-03-04 05:28:22,118 - INFO - [Metrics for 'normal'] | Precision: 0.8352 | Recall: 0.8077 | F1: 0.8212
+2026-03-04 05:28:22,124 - INFO - --------------------------------------------------
+2026-03-04 05:28:22,125 - INFO - [LR]    [87/90] | Learning Rate: 0.000104
+2026-03-04 05:28:32,762 - INFO - [Train] [87/90] | Loss: 0.2076 | Train Acc: 99.93%
+2026-03-04 05:28:36,073 - INFO - [Valid] [87/90] | Loss: 0.5354 | Val Acc: 80.24%
+2026-03-04 05:28:36,091 - INFO - [Metrics for 'abnormal'] | Precision: 0.7679 | Recall: 0.8217 | F1: 0.7938
+2026-03-04 05:28:36,091 - INFO - [Metrics for 'normal'] | Precision: 0.8363 | Recall: 0.7857 | F1: 0.8102
+2026-03-04 05:28:36,098 - INFO - --------------------------------------------------
+2026-03-04 05:28:36,098 - INFO - [LR]    [88/90] | Learning Rate: 0.000102
+2026-03-04 05:28:45,785 - INFO - [Train] [88/90] | Loss: 0.2086 | Train Acc: 99.93%
+2026-03-04 05:28:48,776 - INFO - [Valid] [88/90] | Loss: 0.5360 | Val Acc: 81.12%
+2026-03-04 05:28:48,796 - INFO - [Metrics for 'abnormal'] | Precision: 0.7853 | Recall: 0.8153 | F1: 0.8000
+2026-03-04 05:28:48,797 - INFO - [Metrics for 'normal'] | Precision: 0.8352 | Recall: 0.8077 | F1: 0.8212
+2026-03-04 05:28:48,803 - INFO - --------------------------------------------------
+2026-03-04 05:28:48,804 - INFO - [LR]    [89/90] | Learning Rate: 0.000101
+2026-03-04 05:28:58,259 - INFO - [Train] [89/90] | Loss: 0.2080 | Train Acc: 99.93%
+2026-03-04 05:29:01,191 - INFO - [Valid] [89/90] | Loss: 0.5352 | Val Acc: 81.42%
+2026-03-04 05:29:01,214 - INFO - [Metrics for 'abnormal'] | Precision: 0.7866 | Recall: 0.8217 | F1: 0.8037
+2026-03-04 05:29:01,215 - INFO - [Metrics for 'normal'] | Precision: 0.8400 | Recall: 0.8077 | F1: 0.8235
+2026-03-04 05:29:01,222 - INFO - --------------------------------------------------
+2026-03-04 05:29:01,222 - INFO - [LR]    [90/90] | Learning Rate: 0.000100
+2026-03-04 05:29:10,584 - INFO - [Train] [90/90] | Loss: 0.2071 | Train Acc: 100.00%
+2026-03-04 05:29:13,290 - INFO - [Valid] [90/90] | Loss: 0.5300 | Val Acc: 81.42%
+2026-03-04 05:29:13,317 - INFO - [Metrics for 'abnormal'] | Precision: 0.7866 | Recall: 0.8217 | F1: 0.8037
+2026-03-04 05:29:13,318 - INFO - [Metrics for 'normal'] | Precision: 0.8400 | Recall: 0.8077 | F1: 0.8235
+2026-03-04 05:29:13,328 - INFO - ==================================================
+2026-03-04 05:29:13,328 - INFO - 훈련 완료. 최고 성능 모델을 불러와 테스트 세트로 최종 평가합니다.
+2026-03-04 05:29:13,329 - INFO - 최종 평가를 위해 새로운 모델 객체를 생성합니다.
+2026-03-04 05:29:13,329 - INFO - Baseline 모델 'xie2019'을(를) 생성합니다 (사전 훈련 가중치: 미사용).
+2026-03-04 05:29:13,610 - INFO - 최고 성능 모델 가중치를 새로 생성된 모델 객체에 로드 완료: 'log/Sewer_TAPNEW/baseline_xie2019_20260304_050627/best_model.pth'
+2026-03-04 05:29:13,610 - INFO - ==================================================
+2026-03-04 05:29:13,611 - INFO - Test 모드를 시작합니다.
+2026-03-04 05:29:13,611 - INFO - FLOPs 및 MACs 측정을 시작합니다...
+2026-03-04 05:29:13,713 - INFO - Model FLOPs: 2.8695 GFLOPs
+2026-03-04 05:29:13,714 - INFO - Model MACs: 1.4347 GMACs
+2026-03-04 05:29:15,477 - INFO - 테스트 데이터셋에 대한 추론을 시작합니다.
+2026-03-04 05:29:19,463 - INFO - [Test] Loss: 0.3714 | Test Acc: 84.96%
+2026-03-04 05:29:19,486 - INFO - [Metrics for 'abnormal'] | Precision: 0.8442 | Recall: 0.8280 | F1: 0.8360
+2026-03-04 05:29:19,487 - INFO - [Metrics for 'normal'] | Precision: 0.8541 | Recall: 0.8681 | F1: 0.8610
+2026-03-04 05:29:20,473 - INFO - ==================================================
+2026-03-04 05:29:20,473 - INFO - 혼동 행렬 저장 완료. 'log/Sewer_TAPNEW/baseline_xie2019_20260304_050627/confusion_matrix_20260304_050627.png' and 'log/Sewer_TAPNEW/baseline_xie2019_20260304_050627/confusion_matrix_20260304_050627.pdf'
+2026-03-04 05:29:21,251 - INFO - Val Acc 그래프 저장 완료: 'log/Sewer_TAPNEW/baseline_xie2019_20260304_050627/graph_20260304_050627/val_acc.png' and 'log/Sewer_TAPNEW/baseline_xie2019_20260304_050627/graph_20260304_050627/val_acc.pdf'
+2026-03-04 05:29:22,141 - INFO - Train/Val Acc 그래프 저장 완료: 'log/Sewer_TAPNEW/baseline_xie2019_20260304_050627/graph_20260304_050627/train_val_acc.png' and 'log/Sewer_TAPNEW/baseline_xie2019_20260304_050627/graph_20260304_050627/train_val_acc.pdf'
+2026-03-04 05:29:22,868 - INFO - F1 (normal) 그래프 저장 완료: 'log/Sewer_TAPNEW/baseline_xie2019_20260304_050627/graph_20260304_050627/F1_normal.png' and 'log/Sewer_TAPNEW/baseline_xie2019_20260304_050627/graph_20260304_050627/F1_normal.pdf'
+2026-03-04 05:29:23,721 - INFO - Validation Loss 그래프 저장 완료: 'log/Sewer_TAPNEW/baseline_xie2019_20260304_050627/graph_20260304_050627/val_loss.png' and 'log/Sewer_TAPNEW/baseline_xie2019_20260304_050627/graph_20260304_050627/val_loss.pdf'
+2026-03-04 05:29:24,459 - INFO - Learning Rate 그래프 저장 완료: 'log/Sewer_TAPNEW/baseline_xie2019_20260304_050627/graph_20260304_050627/learning_rate.png' and 'log/Sewer_TAPNEW/baseline_xie2019_20260304_050627/graph_20260304_050627/learning_rate.pdf'
+2026-03-04 05:29:31,894 - INFO - 종합 그래프 저장 완료: 'log/Sewer_TAPNEW/baseline_xie2019_20260304_050627/graph_20260304_050627/compile.png' and 'log/Sewer_TAPNEW/baseline_xie2019_20260304_050627/graph_20260304_050627/compile.pdf'
